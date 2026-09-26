@@ -68,18 +68,19 @@ def _embedding_encoding(name="atomic_numbers", start=0, embedding_dim=8):
     }
 
 
-def _model(mpnn_type="EGNN", atomistic=False, encodings=None, input_dim=1):
-    heads = update_multibranch_heads(
-        {
-            "node": {
-                "num_sharedlayers": 1,
-                "dim_sharedlayers": 8,
-                "num_headlayers": 1,
-                "dim_headlayers": [8],
-                "type": "mlp",
+def _model(mpnn_type="EGNN", atomistic=False, encodings=None, input_dim=1, heads=None):
+    if heads is None:
+        heads = update_multibranch_heads(
+            {
+                "node": {
+                    "num_sharedlayers": 1,
+                    "dim_sharedlayers": 8,
+                    "num_headlayers": 1,
+                    "dim_headlayers": [8],
+                    "type": "mlp",
+                }
             }
-        }
-    )
+        )
     return create_model(
         mpnn_type=mpnn_type,
         input_dim=input_dim,
@@ -110,10 +111,32 @@ def _model(mpnn_type="EGNN", atomistic=False, encodings=None, input_dim=1):
         out_emb_size=8,
         num_before_skip=1,
         num_after_skip=1,
-        enable_interatomic_potential=atomistic,
+        domain_loss_config=(
+            {
+                "enabled": True,
+                "provider": "interatomic_potential",
+                "supervised": {
+                    "default_metric": "mse",
+                    "terms": [
+                        {
+                            "variable": "energy",
+                            "weight": 0.1,
+                            "normalization": "per_structure",
+                        },
+                        {
+                            "variable": "forces",
+                            "weight": 1.0,
+                            "prediction": {"operator": "negative_gradient"},
+                        },
+                    ],
+                },
+                "constraints": [],
+                "constraint_optimizer": {"type": "fixed_penalty"},
+            }
+            if atomistic
+            else None
+        ),
         input_node_encodings=encodings,
-        energy_weight=0.1,
-        force_weight=1.0,
         use_gpu=False,
     )
 
@@ -250,6 +273,24 @@ def test_multibranch_examples_preserve_continuous_atomic_number_input():
             if variable["name"] == "atomic_numbers"
         )
         assert "encoding" not in atomic_numbers
+
+
+def test_physics_informed_multibranch_config_builds_one_scalar_energy_head():
+    config_path = (
+        Path(__file__).resolve().parents[1]
+        / "examples"
+        / "multibranch"
+        / "gfm_multibranch_physics-informed.json"
+    )
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    architecture = config["NeuralNetwork"]["Architecture"]
+    heads = architecture["output_heads"]
+
+    model = _model(mpnn_type="PNAEq", atomistic=True, heads=heads)
+
+    assert len(heads["node"]) == 2
+    assert model.num_heads == 1
+    assert model.head_dims == [1]
 
 
 @pytest.mark.parametrize("mpnn_type", CUSTOM_EMBEDDING_MPNN_TYPES)

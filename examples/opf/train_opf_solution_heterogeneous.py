@@ -133,6 +133,10 @@ from opf_solution_utils import (
     resolve_edge_feature_schema,
     resolve_node_target_type as _resolve_node_target_type,
 )
+from opf_svd_rpe import (
+    OPFStructuralEncodingProvider,
+    resolve_opf_positional_encoding_config,
+)
 
 from hydragnn.utils.datasets.hdf5dataset import HDF5Writer, HDF5Dataset
 
@@ -323,6 +327,7 @@ def _prepare_sample(
     to_homogeneous: bool = False,
     edge_dim=None,
     edge_feature_schema=None,
+    spectral_pe_preprocessor=None,
 ):
     data.y = _build_solution_target(data, node_target_type)
     _ensure_node_y_loc(data)
@@ -334,6 +339,8 @@ def _prepare_sample(
     data, _ = assemble_edge_attr(
         data, edge_dim=edge_dim, feature_schema=edge_feature_schema
     )
+    if spectral_pe_preprocessor is not None and spectral_pe_preprocessor.enabled:
+        spectral_pe_preprocessor(data, topology_id=case_name)
     if not to_homogeneous:
         return data
     _validate_node_stores_for_homogeneous(data)
@@ -541,6 +548,18 @@ if __name__ == "__main__":
     )
     parser.add_argument("--batch_size", type=int, default=None)
     parser.add_argument("--num_epoch", type=int, default=None)
+    parser.add_argument(
+        "--resume_from",
+        type=str,
+        default=None,
+        help="Load model and optimizer state from logs/<name>/<name>.pk.",
+    )
+    parser.add_argument(
+        "--epoch_start",
+        type=int,
+        default=None,
+        help="First epoch index to run when resuming from a checkpoint.",
+    )
     parser.add_argument("--modelname", type=str, default="OPF_Solution_Hetero")
     parser.add_argument("--mpnn_type", type=str, default=None)
     parser.add_argument("--hidden_dim", type=int, default=None)
@@ -559,69 +578,70 @@ if __name__ == "__main__":
         help="Disable OPF domain-informed auxiliary loss regardless of config default.",
     )
     parser.add_argument(
-        "--domain_loss_voltage_bound_weight",
+        "--constraint_voltage_scale",
         type=float,
         default=None,
-        help="Override DomainLoss.voltage_bound_weight.",
+        help="Override the voltage_limits constraint scale.",
     )
     parser.add_argument(
-        "--domain_loss_voltage_bound_feature_indices",
-        nargs=2,
-        type=int,
-        default=None,
-        metavar=("VMIN_IDX", "VMAX_IDX"),
-        help="Override DomainLoss.voltage_bound_feature_indices.",
-    )
-    parser.add_argument(
-        "--domain_loss_voltage_output_index",
-        type=int,
-        default=None,
-        help="Override DomainLoss.voltage_output_index (index of Vm in bus_pred; default 1).",
-    )
-    parser.add_argument(
-        "--domain_loss_va_output_index",
-        type=int,
-        default=None,
-        help="Override DomainLoss.va_output_index (index of Va in bus_pred; default 0).",
-    )
-    parser.add_argument(
-        "--domain_loss_angle_diff_weight",
+        "--constraint_angle_scale",
         type=float,
         default=None,
-        help="Override DomainLoss.angle_diff_weight (angle-difference-limit penalty).",
+        help="Override the angle_limits constraint scale.",
     )
     parser.add_argument(
-        "--domain_loss_line_flow_weight",
+        "--constraint_thermal_scale",
         type=float,
         default=None,
-        help="Override DomainLoss.line_flow_weight (DC thermal-limit penalty).",
+        help="Override the thermal_limits constraint scale.",
     )
     parser.add_argument(
-        "--domain_loss_line_flow_slack",
+        "--constraint_thermal_slack",
         type=float,
         default=None,
-        help=(
-            "Override DomainLoss.line_flow_slack: tolerance subtracted from rate_a before "
-            "penalising, absorbing DC-approximation linearisation error (default 1e-4)."
-        ),
+        help=("Override the thermal_limits tolerance subtracted from rate_a."),
     )
     parser.add_argument(
-        "--domain_loss_ema_momentum",
+        "--constraint_optimizer_rho",
         type=float,
         default=None,
-        help="Override DomainLoss.ema_momentum for per-term EMA normalization (default 0.1).",
+        help="Initial augmented-Lagrangian quadratic coefficient.",
     )
     parser.add_argument(
-        "--domain_loss_warmup_epochs",
+        "--constraint_optimizer_rho_growth",
+        type=float,
+        default=None,
+        help="Factor used to increase rho when feasibility stalls.",
+    )
+    parser.add_argument(
+        "--constraint_optimizer_rho_max",
+        type=float,
+        default=None,
+        help="Maximum augmented-Lagrangian quadratic coefficient.",
+    )
+    parser.add_argument(
+        "--constraint_optimizer_required_reduction",
+        type=float,
+        default=None,
+        help="Required epoch-to-epoch residual reduction before rho is increased.",
+    )
+    parser.add_argument(
+        "--constraint_optimizer_update_every",
         type=int,
         default=None,
-        help="Override DomainLoss.warmup_epochs: epochs with zero domain-loss weight (default 0).",
+        help="Completed training epochs between projected dual-ascent updates.",
     )
     parser.add_argument(
-        "--domain_loss_ramp_epochs",
+        "--constraint_optimizer_warmup_epochs",
         type=int,
         default=None,
-        help="Override DomainLoss.ramp_epochs: epochs to linearly ramp from 0 to full weight (default 0).",
+        help="Epochs with zero constraint loss.",
+    )
+    parser.add_argument(
+        "--constraint_optimizer_ramp_epochs",
+        type=int,
+        default=None,
+        help="Epochs over which constraint loss ramps to full scale.",
     )
     parser.add_argument(
         "--eval_domain_penalties_only",
@@ -652,6 +672,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    if (args.resume_from is None) != (args.epoch_start is None):
+        parser.error("--resume_from and --epoch_start must be provided together.")
+    if args.epoch_start is not None and args.epoch_start < 0:
+        parser.error("--epoch_start must be non-negative.")
+
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     datadir = os.path.join(dirpwd, args.data_root)
     input_filename = os.path.join(dirpwd, args.inputfile)
@@ -660,6 +685,16 @@ if __name__ == "__main__":
         config = json.load(f)
 
     arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
+    opf_pe_config = resolve_opf_positional_encoding_config(arch_config)
+    spectral_pe_preprocessor = OPFStructuralEncodingProvider(
+        arch_config,
+        cache_dir=os.path.join(datadir, "spectral_pe_cache"),
+    )
+    if opf_pe_config["precompute"] and args.format == "adios":
+        raise ValueError(
+            "OPF spectral positional encodings require HDF5 or pickle; ADIOS "
+            "homogeneous conversion cannot preserve bus-only PE tensors."
+        )
 
     # CLI overrides for HPO
     for param in ("mpnn_type", "hidden_dim", "num_conv_layers"):
@@ -676,36 +711,57 @@ if __name__ == "__main__":
         config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
 
     training_config = config.setdefault("NeuralNetwork", {}).setdefault("Training", {})
+    if args.resume_from is not None:
+        training_config["continue"] = 1
+        training_config["startfrom"] = args.resume_from
+        training_config["epoch_start"] = args.epoch_start
 
     # Apply CLI overrides for domain loss.  Any CLI flag takes precedence over
     # whatever is stored in the input config.
-    _domain_cli_overrides = {
-        "enabled": (
-            True
-            if args.enable_domain_loss
-            else (False if args.disable_domain_loss else None)
-        ),
-        "voltage_bound_weight": args.domain_loss_voltage_bound_weight,
-        "voltage_bound_feature_indices": (
-            list(args.domain_loss_voltage_bound_feature_indices)
-            if args.domain_loss_voltage_bound_feature_indices is not None
-            else None
-        ),
-        "voltage_output_index": args.domain_loss_voltage_output_index,
-        "va_output_index": args.domain_loss_va_output_index,
-        "angle_diff_weight": args.domain_loss_angle_diff_weight,
-        "line_flow_weight": args.domain_loss_line_flow_weight,
-        "line_flow_slack": args.domain_loss_line_flow_slack,
-        "ema_momentum": args.domain_loss_ema_momentum,
-        "warmup_epochs": args.domain_loss_warmup_epochs,
-        "ramp_epochs": args.domain_loss_ramp_epochs,
+    enabled_override = (
+        True
+        if args.enable_domain_loss
+        else (False if args.disable_domain_loss else None)
+    )
+    constraint_overrides = {
+        "voltage_limits": {"scale": args.constraint_voltage_scale},
+        "angle_limits": {"scale": args.constraint_angle_scale},
+        "thermal_limits": {
+            "scale": args.constraint_thermal_scale,
+            "slack": args.constraint_thermal_slack,
+        },
     }
-    if any(v is not None for v in _domain_cli_overrides.values()):
-        domain_loss_config = copy.deepcopy(training_config.get("DomainLoss", {}))
-        for key, val in _domain_cli_overrides.items():
-            if val is not None:
-                domain_loss_config[key] = val
-        training_config["DomainLoss"] = domain_loss_config
+    optimizer_overrides = {
+        "rho": args.constraint_optimizer_rho,
+        "rho_growth": args.constraint_optimizer_rho_growth,
+        "rho_max": args.constraint_optimizer_rho_max,
+        "required_reduction": args.constraint_optimizer_required_reduction,
+        "update_every": args.constraint_optimizer_update_every,
+        "warmup_epochs": args.constraint_optimizer_warmup_epochs,
+        "ramp_epochs": args.constraint_optimizer_ramp_epochs,
+    }
+    if (
+        enabled_override is not None
+        or any(
+            value is not None
+            for group in constraint_overrides.values()
+            for value in group.values()
+        )
+        or any(value is not None for value in optimizer_overrides.values())
+    ):
+        loss_config = copy.deepcopy(training_config.get("loss", {}))
+        if enabled_override is not None:
+            loss_config["enabled"] = enabled_override
+        by_name = {item["name"]: item for item in loss_config.get("constraints", [])}
+        for name, overrides in constraint_overrides.items():
+            for key, value in overrides.items():
+                if value is not None:
+                    by_name[name][key] = value
+        optimizer = loss_config.setdefault("constraint_optimizer", {})
+        for key, value in optimizer_overrides.items():
+            if value is not None:
+                optimizer[key] = value
+        training_config["loss"] = loss_config
 
     if arch_config.get("edge_types") is None:
         raise RuntimeError("Architecture.edge_types must be specified.")
@@ -902,6 +958,7 @@ if __name__ == "__main__":
                                 store_homogeneous,
                                 edge_dim=edge_dim,
                                 edge_feature_schema=edge_feature_schema,
+                                spectral_pe_preprocessor=spectral_pe_preprocessor,
                             )
                         )
                         local_count += 1
@@ -932,6 +989,7 @@ if __name__ == "__main__":
                                 store_homogeneous,
                                 edge_dim=edge_dim,
                                 edge_feature_schema=edge_feature_schema,
+                                spectral_pe_preprocessor=spectral_pe_preprocessor,
                             )
                         )
                         local_count += 1
@@ -1112,6 +1170,7 @@ if __name__ == "__main__":
                         store_homogeneous,
                         edge_dim=edge_dim,
                         edge_feature_schema=edge_feature_schema,
+                        spectral_pe_preprocessor=spectral_pe_preprocessor,
                     )
                 )
             if remaining_caps["train"] is not None:
@@ -1141,6 +1200,7 @@ if __name__ == "__main__":
                         store_homogeneous,
                         edge_dim=edge_dim,
                         edge_feature_schema=edge_feature_schema,
+                        spectral_pe_preprocessor=spectral_pe_preprocessor,
                     )
                 )
             if remaining_caps["val"] is not None:
@@ -1170,6 +1230,7 @@ if __name__ == "__main__":
                         store_homogeneous,
                         edge_dim=edge_dim,
                         edge_feature_schema=edge_feature_schema,
+                        spectral_pe_preprocessor=spectral_pe_preprocessor,
                     )
                 )
             if remaining_caps["test"] is not None:
@@ -1338,30 +1399,34 @@ if __name__ == "__main__":
             "Missing NeuralNetwork.Architecture.node_input_dims in config. "
             "Add node_input_dims to the config to initialize node embedders."
         )
+    model_config = hydragnn.domain_losses.defer_domain_loss(
+        config["NeuralNetwork"], "optimal_power_flow"
+    )
     model = hydragnn.models.create_model_config(
-        config=config["NeuralNetwork"],
+        config=model_config,
         verbosity=config["Verbosity"]["level"],
         metadata=metadata,
         node_input_dims=node_input_dims,
     )
 
-    domain_loss_config = config["NeuralNetwork"]["Training"].get("DomainLoss")
+    domain_loss_config = config["NeuralNetwork"]["Training"].get("loss")
     if domain_loss_config is not None:
         dl_enabled = domain_loss_config.get("enabled", False)
         if rank == 0:
             info(
-                f"[DomainLoss] config (enabled={dl_enabled}): "
+                f"[Training.loss] config (enabled={dl_enabled}): "
                 + ", ".join(
                     f"{k}={v}" for k, v in domain_loss_config.items() if k != "enabled"
                 )
             )
         if dl_enabled and rank == 0:
-            info("[DomainLoss] Wrapping model with OPFEnhancedModelWrapper.")
+            info("[Training.loss] Wrapping model with OPFEnhancedModelWrapper.")
         model = OPFEnhancedModelWrapper(
             model,
             OPFDomainLoss(
                 domain_loss_config,
                 node_target_type=args.node_target_type,
+                variables=config["Variables"],
             ),
         )
 
@@ -1393,7 +1458,7 @@ if __name__ == "__main__":
         target_model = model.module if hasattr(model, "module") else model
         if not isinstance(target_model, OPFEnhancedModelWrapper):
             raise RuntimeError(
-                "--eval_domain_penalties_only requires a DomainLoss section in the "
+                "--eval_domain_penalties_only requires a Training.loss section in the "
                 "config so the model is wrapped with OPFEnhancedModelWrapper."
             )
         domain_loss = target_model.domain_loss
@@ -1407,10 +1472,19 @@ if __name__ == "__main__":
                 setattr(domain_loss, attr, 1.0)
         os.environ["HYDRAGNN_EPOCH"] = "0"
         num_tasks = model.module.num_heads
-        hydragnn.train.validate(
+        validation_loss, _ = hydragnn.train.validate(
             val_loader, model, config["Verbosity"]["level"], num_tasks=num_tasks
         )
-        target_model._flush_epoch_log(target_model._last_seen_epoch, force=True)
+        print(
+            "0: "
+            + hydragnn.loss_reporting.format_loss_report(
+                0,
+                "validation",
+                validation_loss,
+                target_model.last_epoch_loss_report,
+            ),
+            flush=True,
+        )
         _diag("Exited eval_domain_penalties_only")
         if dist.is_initialized():
             dist.destroy_process_group()
@@ -1433,14 +1507,10 @@ if __name__ == "__main__":
     )
     _diag("Exited train_validate_test")
 
-    # Flush the final epoch's LossBreakdown line.  The wrapper only flushes on
-    # epoch *transitions* detected inside loss(), so the last epoch's stats would
-    # otherwise never be written (no subsequent epoch triggers the flush).
     if isinstance(model, OPFEnhancedModelWrapper):
-        model._flush_epoch_log(model._last_seen_epoch)
+        model.finalize_domain_state()
     elif hasattr(model, "module") and isinstance(model.module, OPFEnhancedModelWrapper):
-        # DDP wraps the model in model.module
-        model.module._flush_epoch_log(model.module._last_seen_epoch)
+        model.module.finalize_domain_state()
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.print_timers(config["Verbosity"]["level"])

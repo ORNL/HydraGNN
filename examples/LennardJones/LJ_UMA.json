@@ -1,72 +1,118 @@
 {
-  "Verbosity": {
-    "level": 2
-  },
-  "Dataset": {
-    "name": "LJdataset",
-    "format": "XYZ"
-  },
-  "NeuralNetwork": {
-    "Architecture": {
-      "periodic_boundary_conditions": true,
-      "mpnn_type": "UMA",
-      "equivariance": true,
-      "radius": 5.0,
-      "max_neighbours": 5,
-      "num_gaussians": 10,
-      "max_ell": 2,
-      "node_max_ell": 1,
-      "num_radial": 6,
-      "hidden_dim": 32,
-      "num_conv_layers": 2,
-      "uma_variant": "S",
-      "uma_mmax": 2,
-      "uma_grid_resolution": null,
-      "uma_edge_channels": 32,
-      "uma_hidden_channels": null,
-      "uma_norm_type": "rms_norm_sh",
-      "uma_ff_type": "grid",
-      "uma_use_chg_spin": false,
-      "uma_max_num_elements": 100,
-      "enable_interatomic_potential": true,
-      "energy_weight": 1.0,
-      "energy_peratom_weight": 1.0,
-      "force_weight": 1.0,
-      "output_heads": {
-        "node": {
-          "num_headlayers": 2,
-          "dim_headlayers": [60,20],
-          "type": "mlp"
-        }
-      },
-      "task_weights": [1]
+    "Verbosity": {
+        "level": 2
     },
-    "Training": {
-      "num_epoch": 25,
-      "batch_size": 64,
-      "perc_train": 0.7,
-      "patience": 20,
-      "early_stopping": true,
-      "Optimizer": {
-        "type": "Adam",
-        "learning_rate": 0.005
-      },
-      "conv_checkpointing": false
-    }
-  },
-  "Variables": {
+    "Dataset": {
+        "name": "LJdataset",
+        "format": "XYZ"
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "periodic_boundary_conditions": true,
+            "mpnn_type": "UMA",
+            "equivariance": true,
+            "radius": 5.0,
+            "max_neighbours": 5,
+            "num_gaussians": 10,
+            "max_ell": 2,
+            "node_max_ell": 1,
+            "num_radial": 6,
+            "hidden_dim": 32,
+            "num_conv_layers": 2,
+            "uma_variant": "S",
+            "uma_mmax": 2,
+            "uma_grid_resolution": null,
+            "uma_edge_channels": 32,
+            "uma_hidden_channels": null,
+            "uma_norm_type": "rms_norm_sh",
+            "uma_ff_type": "grid",
+            "uma_use_chg_spin": false,
+            "uma_max_num_elements": 100,
+            "output_heads": {
+                "node": {
+                    "num_headlayers": 2,
+                    "dim_headlayers": [
+                        60,
+                        20
+                    ],
+                    "type": "mlp"
+                }
+            },
+            "task_weights": [
+                1
+            ]
+        },
+        "Training": {
+            "num_epoch": 25,
+            "batch_size": 64,
+            "perc_train": 0.7,
+            "patience": 20,
+            "early_stopping": true,
+            "Optimizer": {
+                "type": "Adam",
+                "learning_rate": 0.005
+            },
+            "conv_checkpointing": false,
+            "loss": {
+                "enabled": true,
+                "provider": "interatomic_potential",
+                "supervised": {
+                    "default_metric": "mse",
+                    "terms": [
+                        {
+                            "variable": "energy",
+                            "weight": 1.0,
+                            "normalization": "per_structure"
+                        },
+                        {
+                            "variable": "energy_per_atom",
+                            "weight": 1.0,
+                            "normalization": "per_atom"
+                        },
+                        {
+                            "variable": "forces",
+                            "weight": 1.0,
+                            "prediction": {
+                                "operator": "negative_gradient",
+                                "of": "energy",
+                                "with_respect_to": "positions"
+                            }
+                        }
+                    ]
+                },
+                "constraints": [],
+                "constraint_optimizer": {
+                    "type": "fixed_penalty"
+                }
+            }
+        }
+    },
+    "Variables": {
         "graph_type": "homogeneous",
-    "inputs": [
-      {"name": "atomic_numbers", "level": "node", "dim": 1},
-      {"name": "pos", "level": "node", "dim": 3, "role": "position"}
-    ],
-    "outputs": [
-      {"name": "potential", "level": "node", "dim": 1}
-    ]
-  },
-  "Visualization": {
-    "plot_init_solution": true,
-    "plot_hist_solution": true,
-    "create_plots": true
- }
+        "inputs": [
+            {
+                "name": "atomic_numbers",
+                "level": "node",
+                "dim": 1
+            },
+            {
+                "name": "pos",
+                "level": "node",
+                "dim": 3,
+                "role": "position"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "potential",
+                "level": "node",
+                "dim": 1
+            }
+        ]
+    },
+    "Visualization": {
+        "plot_init_solution": true,
+        "plot_hist_solution": true,
+        "create_plots": true
+    }
 }

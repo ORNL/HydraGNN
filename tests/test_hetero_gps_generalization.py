@@ -1,7 +1,11 @@
 import torch
 from torch_geometric.nn import GATConv, HeteroConv
 
-from hydragnn.globalAtt.HeteroGPS import HeteroGPSConv
+from hydragnn.globalAtt.HeteroGPS import (
+    HeteroGPSConv,
+    StructuralCoordinatePerformerAttention,
+)
+from hydragnn.globalAtt.structural import StructuralAttentionContext
 
 
 class DummyEquivariantLocalConv(torch.nn.Module):
@@ -186,3 +190,114 @@ def test_hetero_gps_attention_isolation_across_graphs():
 
     assert torch.allclose(out_ref["a"][0], out_perturbed["a"][0], atol=1e-6, rtol=1e-6)
     assert torch.allclose(out_ref["b"][0], out_perturbed["b"][0], atol=1e-6, rtol=1e-6)
+
+
+def test_hetero_gps_attention_node_types_default_to_all_types():
+    metadata = (["a", "b"], [("a", "r", "a")])
+    conv = HeteroGPSConv(
+        channels=4,
+        metadata=metadata,
+        conv=None,
+        heads=1,
+        dropout=0.0,
+        attn_type="multihead",
+    )
+
+    assert conv.attn_node_types == ["a", "b"]
+
+
+def test_hetero_gps_attention_node_types_can_be_configured_independently():
+    metadata = (["a", "b"], [("a", "r", "a")])
+    conv = HeteroGPSConv(
+        channels=4,
+        metadata=metadata,
+        conv=None,
+        heads=1,
+        dropout=0.0,
+        attn_type="multihead",
+        attn_node_types=["b"],
+    )
+    x_dict = {
+        "a": torch.randn(2, 4),
+        "b": torch.randn(3, 4),
+    }
+    batch_dict = {
+        "a": torch.zeros(2, dtype=torch.long),
+        "b": torch.zeros(3, dtype=torch.long),
+    }
+
+    _, _, split_sizes, pack_node_types = conv._pack_x_dict(x_dict, batch_dict)
+
+    assert conv.attn_node_types == ["b"]
+    assert pack_node_types == ["b"]
+    assert split_sizes == [3]
+
+
+def test_hetero_gps_rejects_unknown_attention_node_types():
+    metadata = (["a", "b"], [("a", "r", "a")])
+
+    try:
+        HeteroGPSConv(
+            channels=4,
+            metadata=metadata,
+            conv=None,
+            heads=1,
+            dropout=0.0,
+            attn_type="multihead",
+            attn_node_types=["missing"],
+        )
+    except ValueError as exc:
+        assert "Unknown attention node types" in str(exc)
+    else:
+        raise AssertionError("Expected unknown attention node type to be rejected.")
+
+
+def test_pairwise_features_are_not_tied_to_an_opf_node_name():
+    metadata = (["a", "entity"], [("entity", "r", "entity")])
+    conv = HeteroGPSConv(
+        channels=4,
+        metadata=metadata,
+        conv=None,
+        heads=1,
+        dropout=0.0,
+        attn_type="multihead",
+        attn_node_types=["entity"],
+        pairwise_feature_dim=2,
+    )
+
+    assert conv.attn_node_types == ["entity"]
+    assert conv.pairwise_feature_dim == 2
+
+
+def test_structural_coordinate_performer_has_domain_neutral_api():
+    attention = StructuralCoordinatePerformerAttention(
+        channels=4,
+        heads=1,
+        coordinate_dim=3,
+        num_random_features=4,
+    )
+
+    assert attention.coordinate_dim == 3
+
+
+def test_attention_accepts_structural_context():
+    conv = HeteroGPSConv(
+        channels=4,
+        metadata=(["entity"], []),
+        conv=None,
+        heads=1,
+        dropout=0.0,
+        attn_type="multihead",
+        attn_node_types=["entity"],
+        pairwise_feature_dim=1,
+    )
+    context = StructuralAttentionContext(pairwise_features=[torch.zeros(3, 3, 1)])
+
+    output, _ = conv(
+        inv_node_feat_dict={"entity": torch.randn(3, 4)},
+        edge_index_dict={},
+        batch_dict={"entity": torch.zeros(3, dtype=torch.long)},
+        structural_context=context,
+    )
+
+    assert output["entity"].shape == (3, 4)

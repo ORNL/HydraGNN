@@ -17,6 +17,7 @@
             "global_attn_heads": 8,
             "hidden_dim": 64,
             "num_conv_layers": 3,
+            "graph_pooling": "add",
             "int_emb_size": 32,
             "out_emb_size": 16,
             "basis_emb_size": 8,
@@ -29,7 +30,6 @@
             "node_max_ell": 1,
             "num_radial": 5,
             "num_spherical": 2,
-            "enable_interatomic_potential": true,
             "output_heads": {
                 "node": {
                     "num_headlayers": 2,
@@ -54,6 +54,38 @@
             "Optimizer": {
                 "type": "AdamW",
                 "learning_rate": 0.001
+            },
+            "loss": {
+                "enabled": true,
+                "provider": "interatomic_potential",
+                "supervised": {
+                    "default_metric": "mse",
+                    "terms": [
+                        {
+                            "variable": "energy",
+                            "weight": 1.0,
+                            "normalization": "per_structure"
+                        },
+                        {
+                            "variable": "energy_per_atom",
+                            "weight": 1.0,
+                            "normalization": "per_atom"
+                        },
+                        {
+                            "variable": "forces",
+                            "weight": 1.0,
+                            "prediction": {
+                                "operator": "negative_gradient",
+                                "of": "energy",
+                                "with_respect_to": "positions"
+                            }
+                        }
+                    ]
+                },
+                "constraints": [],
+                "constraint_optimizer": {
+                    "type": "fixed_penalty"
+                }
             }
         }
     },

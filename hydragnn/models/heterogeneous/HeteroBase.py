@@ -10,7 +10,7 @@
 ##############################################################################
 
 import torch
-from torch.nn import Module, ModuleList, ModuleDict, Linear, Sequential
+from torch.nn import Module, ModuleList, ModuleDict, Linear, Parameter, Sequential
 from torch_geometric.nn import (
     BatchNorm,
     HeteroConv,
@@ -23,6 +23,8 @@ from hydragnn.utils.model import activation_function_selection, loss_function_se
 from hydragnn.utils.distributed import get_device
 from hydragnn.models.Base import MLPNode
 from hydragnn.globalAtt.HeteroGPS import HeteroGPSConv
+from hydragnn.globalAtt.structural import StructuralAttentionContext
+from hydragnn.loss_reporting import supervised_loss_report
 
 
 class HeteroBase(Module):
@@ -64,6 +66,8 @@ class HeteroBase(Module):
         node_input_dims: dict | None = None,
         metadata=None,
         attn_only: bool = False,
+        attn_node_types: list[str] | None = None,
+        structural_encoding: dict | None = None,
     ):
         super().__init__()
 
@@ -79,6 +83,21 @@ class HeteroBase(Module):
         self.node_embedders = ModuleDict()
         self._node_input_dims = node_input_dims
         self.node_target_type = node_target_type
+        self.attn_node_types = attn_node_types
+        self.structural_encoding = structural_encoding or {}
+        self.structural_node_type = self.structural_encoding.get(
+            "target_node_type",
+            (
+                attn_node_types[0]
+                if attn_node_types is not None and len(attn_node_types) == 1
+                else node_target_type
+            ),
+        )
+        if self.structural_encoding and self.structural_node_type is None:
+            raise ValueError(
+                "structural_encoding requires target_node_type when it cannot "
+                "be inferred from a single attention node type."
+            )
         self.share_relation_weights = share_relation_weights
         self._metadata = metadata
         self._initialized = False
@@ -108,6 +127,97 @@ class HeteroBase(Module):
         self.activation_function = activation_function_selection(
             activation_function_type
         )
+
+        self.structural_node_inputs = list(
+            self.structural_encoding.get("node_inputs", [])
+        )
+        for spec in self.structural_node_inputs:
+            if not spec.get("attribute") or int(spec.get("dim", 0)) <= 0:
+                raise ValueError(
+                    "Each structural node input requires an attribute and positive dim."
+                )
+
+        factorized_config = self.structural_encoding.get("factorized_pairwise")
+        pairwise_config = self.structural_encoding.get("pairwise")
+        qk_config = self.structural_encoding.get("qk_coordinates") or {}
+        active_attention_inputs = sum(
+            item is not None for item in (factorized_config, pairwise_config)
+        ) + int(bool(qk_config) and qk_config.get("placement", "qk") in {"qk", "both"})
+        if active_attention_inputs > 1:
+            raise ValueError("Only one structural attention input may be active.")
+
+        self.factorized_pairwise_config = factorized_config
+        self.factorized_pairwise_dim = (
+            int(factorized_config["dim"]) if factorized_config else 0
+        )
+        self.pairwise_config = pairwise_config
+        self.pairwise_feature_dim = (
+            int(pairwise_config["dim"]) if pairwise_config else 0
+        )
+        self.pairwise_hidden_dim = (
+            int(pairwise_config.get("hidden_dim", 8)) if pairwise_config else 0
+        )
+        self.pairwise_zero_diagonal = (
+            bool(pairwise_config.get("zero_diagonal", True))
+            if pairwise_config
+            else True
+        )
+        self._pairwise_device_cache = {}
+
+        self.qk_coordinate_dim = int(qk_config.get("dim", 0))
+        self.qk_attribute = qk_config.get("attribute")
+        self.qk_placement = str(qk_config.get("placement", "qk")).lower()
+        if self.qk_placement not in {"input", "qk", "both"}:
+            raise ValueError(
+                "qk_coordinates.placement must be 'input', 'qk', or 'both'."
+            )
+        self.qk_input_dim = (
+            self.qk_coordinate_dim if self.qk_placement in {"input", "both"} else 0
+        )
+        self.qk_attention_dim = (
+            self.qk_coordinate_dim if self.qk_placement in {"qk", "both"} else 0
+        )
+
+        if self.pairwise_config is not None:
+            if not self.use_global_attn or self.global_attn_type != "multihead":
+                raise ValueError(
+                    "Pairwise structural features require global multihead attention."
+                )
+            if self.attn_node_types != [self.structural_node_type]:
+                raise ValueError(
+                    "Direct pairwise features require the configured "
+                    "structural node type to be the sole attention node type."
+                )
+
+        self.qk_coefficient = None
+        if self.qk_attention_dim > 0:
+            if not self.use_global_attn or self.global_attn_type != "performer":
+                raise ValueError(
+                    "Structural Q/K augmentation requires global Performer attention."
+                )
+            if self.attn_node_types != [self.structural_node_type]:
+                raise ValueError(
+                    "Structural Q/K augmentation requires the configured "
+                    "structural node type to be the sole attention node type."
+                )
+            self.qk_coefficient = Parameter(
+                torch.tensor(
+                    float(qk_config.get("coefficient_init", 0.0)),
+                    dtype=torch.float32,
+                )
+            )
+
+        self.structural_input_dim = (
+            sum(int(spec["dim"]) for spec in self.structural_node_inputs)
+            + self.qk_input_dim
+        )
+        self.structural_input_fuser = None
+        if self.structural_input_dim > 0:
+            self.structural_input_fuser = Sequential(
+                Linear(self.hidden_dim + self.structural_input_dim, self.hidden_dim),
+                activation_function_selection(activation_function_type),
+                Linear(self.hidden_dim, self.hidden_dim),
+            )
 
         self.use_graph_attr_conditioning = use_graph_attr_conditioning
         self.graph_attr_dim = int(graph_attr_dim)
@@ -351,6 +461,12 @@ class HeteroBase(Module):
                 heads=self.global_attn_heads,
                 dropout=self.dropout,
                 attn_type=self.global_attn_type,
+                attn_node_types=self.attn_node_types,
+                factorized_feature_dim=self.factorized_pairwise_dim,
+                pairwise_feature_dim=self.pairwise_feature_dim,
+                rpe_hidden_dim=self.pairwise_hidden_dim,
+                rpe_zero_diagonal=self.pairwise_zero_diagonal,
+                qk_coordinate_dim=self.qk_attention_dim,
             )
         raise ValueError(f"Unsupported global_attn_engine: {self.global_attn_engine}")
 
@@ -574,6 +690,93 @@ class HeteroBase(Module):
             edge_attr_dict = None
         return edge_attr_dict
 
+    def _apply_random_sign_flip(self, values, batch):
+        """Flip each graph/feature once, never independently per node."""
+
+        if not self.training:
+            return values
+        num_graphs = int(batch.max().item()) + 1 if batch.numel() else 0
+        if num_graphs == 0:
+            return values
+        signs = torch.randint(
+            0,
+            2,
+            (num_graphs, values.size(1)),
+            device=values.device,
+        )
+        signs = signs.to(values.dtype).mul_(2.0).sub_(1.0)
+        return values * signs[batch]
+
+    @staticmethod
+    def _expand_graph_features(value, batch, num_nodes, width):
+        if value.dim() == 1:
+            value = value.view(-1, width)
+        if value.dim() != 2 or value.size(1) != width:
+            raise ValueError(
+                f"Expected graph-level structural feature with width {width}, got "
+                f"shape {tuple(value.shape)}."
+            )
+        if value.size(0) == num_nodes:
+            return value
+        num_graphs = int(batch.max().item()) + 1 if batch.numel() else 0
+        if value.size(0) == num_graphs:
+            return value[batch]
+        if value.size(0) == 1:
+            return value.expand(num_nodes, -1)
+        raise ValueError(
+            "Graph-level structural feature rows must be one per node or graph; "
+            f"got {value.size(0)} rows for {num_nodes} nodes and "
+            f"{num_graphs} graphs."
+        )
+
+    def _collect_structural_input(self, data, batch, device, dtype):
+        pieces = []
+        store = data[self.structural_node_type]
+        num_nodes = int(batch.numel())
+
+        for spec in self.structural_node_inputs:
+            attribute = spec["attribute"]
+            width = int(spec["dim"])
+            value = store[attribute] if attribute in store else None
+            if value is None:
+                raise ValueError(
+                    f"Structural input requires missing attribute "
+                    f"{self.structural_node_type}.{attribute}."
+                )
+            value = value.to(device=device, dtype=dtype)
+            if spec.get("broadcast") == "graph":
+                value = self._expand_graph_features(value, batch, num_nodes, width)
+            elif tuple(value.shape) != (num_nodes, width):
+                raise ValueError(
+                    f"Expected {self.structural_node_type}.{attribute} shape "
+                    f"({num_nodes}, {width}), got {tuple(value.shape)}."
+                )
+            if spec.get("random_sign_flip", False):
+                value = self._apply_random_sign_flip(value, batch)
+            pieces.append(value)
+
+        if self.qk_input_dim > 0:
+            coordinates = (
+                store[self.qk_attribute] if self.qk_attribute in store else None
+            )
+            if coordinates is None:
+                raise ValueError(
+                    "Structural coordinate input is enabled, but the batch is "
+                    f"missing {self.structural_node_type}.{self.qk_attribute}."
+                )
+            coordinates = coordinates.to(device=device, dtype=dtype)
+            expected = (num_nodes, self.qk_input_dim)
+            if tuple(coordinates.shape) != expected:
+                raise ValueError(
+                    f"Expected structural input coordinates {expected}, "
+                    f"got {tuple(coordinates.shape)}."
+                )
+            pieces.append(coordinates)
+
+        if not pieces:
+            return None
+        return torch.cat(pieces, dim=-1)
+
     def _prepare_node_features(self, data):
         """Prepare invariant node features and batch vectors for hetero forward.
 
@@ -597,6 +800,8 @@ class HeteroBase(Module):
                 "Expected one of: inv_node_feat_dict, x_dict."
             )
 
+        batch_dict = self._get_batch_dict(data, inv_node_feat_dict)
+
         # Ensure each node type uses the shared hidden width before message passing.
         self._ensure_node_embedders(inv_node_feat_dict)
         embedded_dict = {}
@@ -606,9 +811,22 @@ class HeteroBase(Module):
                 embedder = embedder.to(x.device)
                 self.node_embedders[node_type] = embedder
             x = x.to(dtype=embedder.weight.dtype)
-            embedded_dict[node_type] = embedder(x)
+            embedded = embedder(x)
+            if (
+                node_type == self.structural_node_type
+                and self.structural_input_fuser is not None
+            ):
+                structural_input = self._collect_structural_input(
+                    data,
+                    batch_dict[node_type],
+                    device=embedded.device,
+                    dtype=embedded.dtype,
+                )
+                embedded = self.structural_input_fuser(
+                    torch.cat((embedded, structural_input), dim=-1)
+                )
+            embedded_dict[node_type] = embedded
 
-        batch_dict = self._get_batch_dict(data, embedded_dict)
         return embedded_dict, batch_dict
 
     def _get_equiv_node_feat_dict(self, data):
@@ -621,6 +839,114 @@ class HeteroBase(Module):
             if equiv_dict is not None:
                 return equiv_dict
         return None
+
+    def _get_factorized_pairwise_features(self, data):
+        """Collect configured low-rank pairwise factors from node stores."""
+        if self.factorized_pairwise_config is None:
+            return None
+        result = {}
+        attributes = self.factorized_pairwise_config["attributes"]
+        for node_type in self.attn_node_types or data.node_types:
+            store = data[node_type]
+            values = {}
+            for factor_name, attr_name in attributes.items():
+                value = store[attr_name] if attr_name in store else None
+                if value is None:
+                    raise ValueError(
+                        f"Factorized pairwise input for node type '{node_type}' "
+                        f"is missing attribute '{attr_name}'."
+                    )
+                values[factor_name] = value
+            result[node_type] = values
+        return result
+
+    def _get_qk_coordinates(self, data, device, dtype):
+        """Return packed structural coordinates for Performer attention."""
+
+        if self.qk_coordinate_dim <= 0:
+            return None
+        store = data[self.structural_node_type]
+        coordinates = store[self.qk_attribute] if self.qk_attribute in store else None
+        if coordinates is None:
+            raise ValueError(
+                "Structural Q/K augmentation is enabled, but the batch is missing "
+                f"{self.structural_node_type}.{self.qk_attribute}."
+            )
+        expected = (int(store.x.size(0)), self.qk_coordinate_dim)
+        if tuple(coordinates.shape) != expected:
+            raise ValueError(
+                f"Expected structural coordinates shape {expected}, got "
+                f"{tuple(coordinates.shape)}."
+            )
+        return coordinates.to(device=device, dtype=dtype)
+
+    @staticmethod
+    def _load_pairwise_artifact(path, artifact_key):
+        try:
+            artifact = torch.load(path, map_location="cpu", weights_only=True)
+        except TypeError:
+            artifact = torch.load(path, map_location="cpu")
+        if not isinstance(artifact, dict) or artifact_key not in artifact:
+            raise ValueError(
+                f"Pairwise cache '{path}' does not contain '{artifact_key}'."
+            )
+        return artifact[artifact_key]
+
+    def _get_pairwise_features(self, data, batch, device, dtype):
+        """Load one topology-level pair tensor per graph in the batch."""
+
+        if self.pairwise_config is None:
+            return None
+        store = data[self.structural_node_type]
+        tensor_attr = self.pairwise_config["attribute"]
+        path_attr = self.pairwise_config.get("path_attribute", f"{tensor_attr}_path")
+        artifact_key = self.pairwise_config.get("artifact_key", tensor_attr)
+        embedded = store[tensor_attr] if tensor_attr in store else None
+        paths = store[path_attr] if path_attr in store else None
+
+        num_graphs = int(batch.max().item()) + 1 if batch.numel() else 0
+        counts = torch.bincount(batch, minlength=num_graphs).detach().cpu().tolist()
+        matrices = []
+        if paths is not None:
+            if isinstance(paths, str):
+                paths = [paths]
+            else:
+                paths = list(paths)
+            if len(paths) != num_graphs:
+                raise ValueError(
+                    f"Expected {num_graphs} pairwise cache paths, got " f"{len(paths)}."
+                )
+            for path in paths:
+                cache_key = (str(path), str(device), str(dtype))
+                matrix = self._pairwise_device_cache.get(cache_key)
+                if matrix is None:
+                    matrix = self._load_pairwise_artifact(path, artifact_key).to(
+                        device=device, dtype=dtype
+                    )
+                    self._pairwise_device_cache[cache_key] = matrix
+                matrices.append(matrix)
+        elif embedded is not None:
+            if num_graphs != 1 or embedded.dim() != 3:
+                raise ValueError(
+                    "In-memory pairwise features currently support one graph; use "
+                    "topology-level cache paths for batched graphs."
+                )
+            matrices = [embedded.to(device=device, dtype=dtype)]
+        else:
+            raise ValueError(
+                f"Pairwise structural input is enabled, but the batch has neither "
+                f"{self.structural_node_type}.{tensor_attr} nor "
+                f"{self.structural_node_type}.{path_attr}."
+            )
+
+        for graph_index, (matrix, count) in enumerate(zip(matrices, counts)):
+            expected = (count, count, self.pairwise_feature_dim)
+            if tuple(matrix.shape) != expected:
+                raise ValueError(
+                    f"Expected pairwise feature graph {graph_index} shape {expected}, "
+                    f"got {tuple(matrix.shape)}."
+                )
+        return matrices
 
     def _pool_hetero_graph_features(self, x_dict, batch_dict):
         num_graphs = max(
@@ -845,6 +1171,36 @@ class HeteroBase(Module):
 
         x_dict, batch_dict = self._prepare_node_features(data)
         equiv_node_feat_dict = self._get_equiv_node_feat_dict(data)
+        factorized_pairwise = (
+            self._get_factorized_pairwise_features(data)
+            if self.use_global_attn
+            else None
+        )
+        pairwise_features = (
+            self._get_pairwise_features(
+                data,
+                batch_dict[self.structural_node_type],
+                device=x_dict[self.structural_node_type].device,
+                dtype=x_dict[self.structural_node_type].dtype,
+            )
+            if self.use_global_attn and self.pairwise_config is not None
+            else None
+        )
+        qk_coordinates = (
+            self._get_qk_coordinates(
+                data,
+                device=x_dict[self.structural_node_type].device,
+                dtype=x_dict[self.structural_node_type].dtype,
+            )
+            if self.use_global_attn and self.qk_attention_dim > 0
+            else None
+        )
+        structural_context = StructuralAttentionContext(
+            factorized_pairwise_features=factorized_pairwise,
+            pairwise_features=pairwise_features,
+            qk_coordinates=qk_coordinates,
+            qk_coefficient=self.qk_coefficient,
+        )
 
         edge_attr_dict = self._get_edge_attr_dict(data)
 
@@ -856,6 +1212,7 @@ class HeteroBase(Module):
                     edge_index_dict=data.edge_index_dict,
                     batch_dict=batch_dict,
                     edge_attr_dict=edge_attr_dict,
+                    structural_context=structural_context,
                 )
             elif edge_attr_dict is None:
                 x_dict = conv(x_dict, data.edge_index_dict)
@@ -1036,4 +1393,7 @@ class HeteroBase(Module):
                 )
                 tasks_loss.append(self.loss_function(head_pre, head_val, head_var))
 
+        self.last_loss_components = supervised_loss_report(
+            self, pred, value, head_index, tasks_loss, var=var
+        )
         return tot_loss, tasks_loss

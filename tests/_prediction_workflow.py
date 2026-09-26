@@ -10,6 +10,7 @@
 ##############################################################################
 
 from hydragnn.utils.distributed import setup_ddp, get_distributed_model
+from hydragnn.domain_losses import uses_interatomic_potential
 from hydragnn.utils.model import load_existing_model
 from hydragnn.utils.input_config_parsing.config_utils import (
     get_log_name_config,
@@ -60,10 +61,12 @@ def load_checkpoint_and_test(config, test_loader, use_deepspeed=False):
     log_name = get_log_name_config(config)
     load_existing_model(model, log_name, use_deepspeed=use_deepspeed)
 
-    enable_interatomic_potential = config["NeuralNetwork"]["Architecture"].get(
-        "enable_interatomic_potential", False
+    enable_interatomic_potential = uses_interatomic_potential(config)
+    num_tasks = (
+        len(model.module.task_names)
+        if enable_interatomic_potential
+        else model.module.num_heads
     )
-    num_tasks = 3 if enable_interatomic_potential else model.module.num_heads
 
     (
         error,

@@ -5,7 +5,6 @@
     "NeuralNetwork": {
         "Architecture": {
             "mpnn_type": "UMA",
-            "enable_interatomic_potential": true,
             "equivariance": true,
             "periodic_boundary_conditions": false,
             "radius": 5,
@@ -57,8 +56,6 @@
             "task_weights": [
                 1.0
             ],
-            "energy_peratom_weight": 1.0,
-            "force_weight": 10.0,
             "input_dim": 1,
             "pna_deg": null,
             "avg_num_neighbors": 13.735293601560318,
@@ -85,7 +82,34 @@
             "Checkpoint": true,
             "checkpoint_warmup": 1,
             "epoch_start": 0,
-            "precision": "fp32"
+            "precision": "fp32",
+            "loss": {
+                "enabled": true,
+                "provider": "interatomic_potential",
+                "supervised": {
+                    "default_metric": "mae",
+                    "terms": [
+                        {
+                            "variable": "energy_per_atom",
+                            "weight": 1.0,
+                            "normalization": "per_atom"
+                        },
+                        {
+                            "variable": "forces",
+                            "weight": 10.0,
+                            "prediction": {
+                                "operator": "negative_gradient",
+                                "of": "energy",
+                                "with_respect_to": "positions"
+                            }
+                        }
+                    ]
+                },
+                "constraints": [],
+                "constraint_optimizer": {
+                    "type": "fixed_penalty"
+                }
+            }
         }
     },
     "Visualization": {

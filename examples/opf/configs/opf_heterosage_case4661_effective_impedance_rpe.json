@@ -1,0 +1,321 @@
+{
+    "Verbosity": {
+        "level": 1
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "mpnn_type": "HeteroSAGE",
+            "hidden_dim": 64,
+            "num_conv_layers": 4,
+            "pe_dim": 0,
+            "max_neighbours": 100,
+            "global_attn_engine": "GPS",
+            "global_attn_type": "multihead",
+            "global_attn_heads": 4,
+            "attn_only": false,
+            "attn_node_types": [
+                "bus"
+            ],
+            "hetero_attention_heads": 4,
+            "node_input_dims": {
+                "bus": 4,
+                "generator": 11,
+                "load": 2,
+                "shunt": 2
+            },
+            "output_heads": {
+                "node": {
+                    "num_headlayers": 2,
+                    "dim_headlayers": [
+                        32,
+                        16
+                    ],
+                    "type": "mlp"
+                }
+            },
+            "task_weights": [
+                1.0
+            ],
+            "hetero_pooling_mode": "sum",
+            "node_target_type": "bus",
+            "hetero_edge_type_emb_dim": 16,
+            "hetero_edge_attr_emb_dim": 16,
+            "activation_function": "relu",
+            "hetero_attention_negative_slope": 0.2,
+            "SyncBatchNorm": false,
+            "edge_types": [
+                {
+                    "source_type": "bus",
+                    "relation": "ac_line",
+                    "target_type": "bus",
+                    "dim": 9
+                },
+                {
+                    "source_type": "bus",
+                    "relation": "transformer",
+                    "target_type": "bus",
+                    "dim": 11
+                },
+                {
+                    "source_type": "generator",
+                    "relation": "generator_link",
+                    "target_type": "bus",
+                    "dim": 0
+                },
+                {
+                    "source_type": "bus",
+                    "relation": "generator_link",
+                    "target_type": "generator",
+                    "dim": 0
+                },
+                {
+                    "source_type": "load",
+                    "relation": "load_link",
+                    "target_type": "bus",
+                    "dim": 0
+                },
+                {
+                    "source_type": "bus",
+                    "relation": "load_link",
+                    "target_type": "load",
+                    "dim": 0
+                },
+                {
+                    "source_type": "shunt",
+                    "relation": "shunt_link",
+                    "target_type": "bus",
+                    "dim": 0
+                },
+                {
+                    "source_type": "bus",
+                    "relation": "shunt_link",
+                    "target_type": "shunt",
+                    "dim": 0
+                }
+            ],
+            "opf_preprocessing": {
+                "precompute": [
+                    "effective_resistance",
+                    "effective_impedance",
+                    "effective_resistance_rpe",
+                    "effective_impedance_rpe"
+                ],
+                "use": [
+                    "effective_impedance_rpe"
+                ],
+                "cache_by_case": true,
+                "compute_device": "cpu",
+                "effective_resistance": {
+                    "statistics": [
+                        "min",
+                        "max",
+                        "std",
+                        "median",
+                        "mean"
+                    ],
+                    "std_correction": 0,
+                    "exclude_diagonal": true
+                },
+                "effective_impedance": {
+                    "statistics": [
+                        "min",
+                        "max",
+                        "std",
+                        "median",
+                        "mean"
+                    ],
+                    "components": [
+                        "real",
+                        "imag"
+                    ],
+                    "std_correction": 0,
+                    "exclude_diagonal": true,
+                    "relative_tolerance": null
+                },
+                "effective_resistance_rpe": {
+                    "feature_dim": 1,
+                    "mlp_hidden_dim": 8,
+                    "zero_diagonal_bias": true
+                },
+                "effective_impedance_rpe": {
+                    "feature_dim": 2,
+                    "mlp_hidden_dim": 8,
+                    "zero_diagonal_bias": true,
+                    "relative_tolerance": null
+                },
+                "target_node_type": "bus"
+            },
+            "structural_encoding": {
+                "target_node_type": "bus",
+                "pairwise": {
+                    "attribute": "effective_impedance_rpe",
+                    "path_attribute": "effective_impedance_rpe_path",
+                    "artifact_key": "pairwise_rpe",
+                    "dim": 2,
+                    "hidden_dim": 8,
+                    "zero_diagonal": true
+                }
+            }
+        },
+        "Training": {
+            "num_epoch": 50,
+            "batch_size": 1,
+            "patience": 10,
+            "early_stopping": true,
+            "Checkpoint": true,
+            "checkpoint_warmup": 1,
+            "continue": 0,
+            "startfrom": "existing_model",
+            "Optimizer": {
+                "type": "AdamW",
+                "learning_rate": 0.001
+            },
+            "conv_checkpointing": false,
+            "loss_function_type": "mse",
+            "precision": "fp32"
+        }
+    },
+    "Visualization": {
+        "plot_init_solution": false,
+        "plot_hist_solution": false,
+        "create_plots": false
+    },
+    "Variables": {
+        "graph_type": "heterogeneous",
+        "node_types": [
+            "bus",
+            "generator",
+            "load",
+            "shunt"
+        ],
+        "inputs": [
+            {
+                "name": "context",
+                "level": "graph",
+                "dim": 1
+            },
+            {
+                "name": "bus_base_kv",
+                "level": "node",
+                "dim": 1,
+                "node_type": "bus"
+            },
+            {
+                "name": "bus_type",
+                "level": "node",
+                "dim": 1,
+                "node_type": "bus"
+            },
+            {
+                "name": "bus_vmin",
+                "level": "node",
+                "dim": 1,
+                "node_type": "bus"
+            },
+            {
+                "name": "bus_vmax",
+                "level": "node",
+                "dim": 1,
+                "node_type": "bus"
+            },
+            {
+                "name": "gen_mbase",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_pg_mid",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_pmin",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_pmax",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_qg_mid",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_qmin",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_qmax",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_vg_status",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_cost_c2",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_cost_c1",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_cost_c0",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "load_pd",
+                "level": "node",
+                "dim": 1,
+                "node_type": "load"
+            },
+            {
+                "name": "load_qd",
+                "level": "node",
+                "dim": 1,
+                "node_type": "load"
+            },
+            {
+                "name": "shunt_bs",
+                "level": "node",
+                "dim": 1,
+                "node_type": "shunt"
+            },
+            {
+                "name": "shunt_gs",
+                "level": "node",
+                "dim": 1,
+                "node_type": "shunt"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "bus_va_vm",
+                "level": "node",
+                "dim": 2,
+                "node_type": "bus"
+            }
+        ]
+    }
+}

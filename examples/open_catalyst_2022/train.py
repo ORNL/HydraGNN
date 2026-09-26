@@ -674,9 +674,7 @@ if __name__ == "__main__":
         log_name,
         verbosity,
         create_plots=False,
-        compute_grad_energy=config["NeuralNetwork"]["Architecture"].get(
-            "enable_interatomic_potential", False
-        ),
+        compute_grad_energy=hydragnn.domain_losses.uses_interatomic_potential(config),
         precision=precision,
     )
 

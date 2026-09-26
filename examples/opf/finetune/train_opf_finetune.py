@@ -493,19 +493,26 @@ if __name__ == "__main__":
     except Exception:
         metadata = None
 
+    model_config = hydragnn.domain_losses.defer_domain_loss(
+        config["NeuralNetwork"], "optimal_power_flow"
+    )
     model = hydragnn.models.create_model_config(
-        config=config["NeuralNetwork"],
+        config=model_config,
         verbosity=config["Verbosity"]["level"],
         metadata=metadata,
         node_input_dims=node_input_dims,
     )
 
     # ── Optionally wrap with domain-loss ───────────────────────────────────
-    domain_loss_config = config["NeuralNetwork"]["Training"].get("DomainLoss")
+    domain_loss_config = config["NeuralNetwork"]["Training"].get("loss")
     if domain_loss_config is not None and domain_loss_config.get("enabled", False):
         model = OPFEnhancedModelWrapper(
             model,
-            OPFDomainLoss(domain_loss_config, node_target_type=args.node_target_type),
+            OPFDomainLoss(
+                domain_loss_config,
+                node_target_type=args.node_target_type,
+                variables=config["Variables"],
+            ),
         )
 
     # ── Load pretrained weights (before freezing, before optimizer) ────────
@@ -582,10 +589,9 @@ if __name__ == "__main__":
         precision=precision,
     )
 
-    # ── Flush domain-loss log ──────────────────────────────────────────────
     _inner = model.module if hasattr(model, "module") else model
     if isinstance(_inner, OPFEnhancedModelWrapper):
-        _inner._flush_epoch_log(_inner._last_seen_epoch)
+        _inner.finalize_domain_state()
 
     # ── Save final checkpoint ──────────────────────────────────────────────
     model_utils.save_model(model, optimizer, log_name)

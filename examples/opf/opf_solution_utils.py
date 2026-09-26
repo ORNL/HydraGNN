@@ -10,14 +10,16 @@ import torch.nn.functional as F
 from torch_geometric.utils import degree
 
 from hydragnn.utils.input_config_parsing import get_variable_schema
+from hydragnn.domain_losses import create_constraint_optimizer
+from hydragnn.utils.model.model import loss_function_selection
 
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
-class OPFDomainLoss:
-    """Domain-informed regularization for OPF bus-level targets.
+class OPFDomainLoss(torch.nn.Module):
+    """Augmented-Lagrangian enforcement of OPF inequality constraints.
 
     Feasibility penalties (all zero on any strictly feasible OPF solution):
       - voltage_bound_weight           : Penalty for Vm (bus_pred[:, vm_output_index]) outside [v_min, v_max].
@@ -32,11 +34,10 @@ class OPFDomainLoss:
                                         introduces no linearisation bias, unlike the DC approximation it
                                         replaces). Default 1e-4.
 
-    Each raw penalty is normalized by a per-term exponential moving average (EMA)
-    before the weight is applied.  This keeps every term near unit scale and makes
-    the weights directly comparable to the task loss, regardless of the raw
-    physical magnitudes (radians, per-unit power, etc.).
-      - ema_momentum  (default 0.1): EMA decay.  Smaller = slower adaptation.
+    For each constraint family, the mean positive violation ``c >= 0`` contributes
+    ``lambda*c + rho/2*c**2``. After every training epoch the non-negative dual is
+    updated by projected ascent, ``lambda <- max(0, lambda + rho*c_bar)``. ``rho``
+    can grow when the aggregate residual is not decreasing sufficiently.
 
     Curriculum scheduling: domain-loss weights are ramped up gradually so the
     model first converges on the task loss before physics constraints are enforced.
@@ -56,27 +57,95 @@ class OPFDomainLoss:
        tm is the off-nominal turns ratio; transformers carry no shunt-susceptance term.)
     """
 
-    def __init__(self, config: dict | None = None, node_target_type: str = "bus"):
+    def __init__(self, config=None, node_target_type="bus", variables=None):
+        super().__init__()
         cfg = copy.deepcopy(config or {})
         self.enabled = bool(cfg.get("enabled", False))
+        self.last_loss_components = {}
         self.node_target_type = node_target_type
-        self.voltage_bound_weight = float(cfg.get("voltage_bound_weight", 0.0))
-        self.voltage_bound_feature_indices = cfg.get(
-            "voltage_bound_feature_indices", None
+        supervised = cfg.get("supervised", {})
+        self.supervised_default_metric = supervised.get("default_metric", "mse")
+        supervised_items = supervised.get("terms", [])
+        self.supervised_terms = {
+            item["variable"]: copy.deepcopy(item) for item in supervised_items
+        }
+        if len(self.supervised_terms) != len(supervised_items):
+            raise ValueError("Training.loss supervised variables must be unique.")
+        self.output_names = [
+            item["name"] for item in (variables or {}).get("outputs", [])
+        ]
+        if self.supervised_terms and variables:
+            unknown = set(self.supervised_terms) - set(self.output_names)
+            missing = set(self.output_names) - set(self.supervised_terms)
+            if unknown or missing:
+                raise ValueError(
+                    "Training.loss supervised terms must match Variables.outputs: "
+                    f"missing={sorted(missing)}, unknown={sorted(unknown)}."
+                )
+        constraint_items = cfg.get("constraints", [])
+        constraints = {item["name"]: item for item in constraint_items}
+        if len(constraints) != len(constraint_items):
+            raise ValueError("Training.loss constraint names must be unique.")
+        expected_operators = {
+            "voltage_limits": "bounded",
+            "angle_limits": "edge_difference_bounded",
+            "thermal_limits": "ac_thermal_limit",
+        }
+        unknown = set(constraints) - set(expected_operators)
+        if unknown:
+            raise ValueError(
+                f"Unknown optimal-power-flow constraints: {sorted(unknown)}"
+            )
+        for name, item in constraints.items():
+            if item.get("operator") != expected_operators[name]:
+                raise ValueError(
+                    f"Constraint {name!r} requires operator "
+                    f"{expected_operators[name]!r}."
+                )
+        voltage = constraints.get("voltage_limits", {})
+        angle = constraints.get("angle_limits", {})
+        flow = constraints.get("thermal_limits", {})
+        self.voltage_bound_weight = float(voltage.get("scale", 0.0))
+        bus_inputs = []
+        for item in (variables or {}).get("inputs", []):
+            if item.get("level") == "node" and item.get("node_type") == "bus":
+                components = item.get("components")
+                if components is not None and len(components) != int(item["dim"]):
+                    raise ValueError(
+                        f"Variables input {item['name']!r} has dim={item['dim']} "
+                        f"but {len(components)} named components."
+                    )
+                bus_inputs.extend(components or [item["name"]] * int(item["dim"]))
+        output_components = []
+        for item in (variables or {}).get("outputs", []):
+            if item.get("node_type") == "bus":
+                output_components.extend(item.get("components", [item["name"]]))
+        self.edge_attribute_indices = {
+            relation: {name: index for index, name in enumerate(names)}
+            for relation, names in (variables or {}).get("edge_attributes", {}).items()
+        }
+        self.voltage_bound_feature_indices = (
+            (bus_inputs.index(voltage["lower"]), bus_inputs.index(voltage["upper"]))
+            if voltage and variables
+            else None
         )
         # vm_output_index: index in bus_pred corresponding to voltage magnitude (Vm).
         # Default is 1 — bus targets are [Va, Vm] in the OPFDataset schema.
-        self.voltage_output_index = int(cfg.get("voltage_output_index", 1))
+        self.voltage_output_index = (
+            output_components.index(voltage["value"]) if voltage and variables else 1
+        )
         # va_output_index: index in bus_pred corresponding to voltage angle (Va).
-        self.va_output_index = int(cfg.get("va_output_index", 0))
-        self.angle_diff_weight = float(cfg.get("angle_diff_weight", 0.0))
-        self.line_flow_weight = float(cfg.get("line_flow_weight", 0.0))
+        self.va_output_index = (
+            output_components.index(angle["value"]) if angle and variables else 0
+        )
+        self.angle_diff_weight = float(angle.get("scale", 0.0))
+        self.line_flow_weight = float(flow.get("scale", 0.0))
         # line_flow_slack: a small numerical tolerance subtracted from rate_a before the
         # AC apparent-power thermal-limit penalty is evaluated. The full AC formula
         # (unlike the DC approximation it replaces) introduces no intrinsic linearisation
         # bias, but a small slack still absorbs floating-point noise and near-binding
         # constraints on ground-truth solutions. Default 1e-4.
-        self.line_flow_slack = float(cfg.get("line_flow_slack", 1e-4))
+        self.line_flow_slack = float(flow.get("slack", 1e-4))
         # line_flow_min_x: branches whose series-impedance magnitude |z| = sqrt(r^2+x^2)
         # falls below this floor are excluded from the thermal-limit penalty entirely
         # (rather than clamped). Some PGLib-OPF cases (e.g. case6470_rte, case4661_sdet,
@@ -87,22 +156,40 @@ class OPFDomainLoss:
         # the mean-of-squares statistic. Default 1e-3 p.u. sits below the smallest
         # impedance magnitude observed on well-behaved branches (~0.04 p.u. for ac_line,
         # ~0.21 p.u. for transformer on pglib_opf_case14_ieee).
-        self.line_flow_min_x = float(cfg.get("line_flow_min_x", 1e-3))
-        # EMA state for per-term scale normalization.
-        self._ema_momentum = float(cfg.get("ema_momentum", 0.1))
-        self._penalty_ema: dict[str, float] = {}
+        self.line_flow_min_x = float(flow.get("minimum_impedance", 1e-3))
+        self._constraint_names = (
+            "voltage_bound",
+            "ac_angle_diff",
+            "tr_angle_diff",
+            "ac_line_flow",
+            "tr_line_flow",
+        )
+        optimizer_config = cfg.get("constraint_optimizer", {})
+        self.constraint_optimizer = create_constraint_optimizer(
+            self._constraint_names, optimizer_config
+        )
         # Curriculum scheduling.
-        self.warmup_epochs = int(cfg.get("warmup_epochs", 0))
-        self.ramp_epochs = int(cfg.get("ramp_epochs", 0))
+        self.warmup_epochs = int(optimizer_config.get("warmup_epochs", 0))
+        self.ramp_epochs = int(optimizer_config.get("ramp_epochs", 0))
 
-        if self.voltage_bound_feature_indices is not None:
-            if len(self.voltage_bound_feature_indices) != 2:
-                raise RuntimeError(
-                    "DomainLoss.voltage_bound_feature_indices must be [vmin_idx, vmax_idx]."
-                )
-            self.voltage_bound_feature_indices = tuple(
-                int(v) for v in self.voltage_bound_feature_indices
-            )
+        if (angle or flow) and variables:
+            for relation in set(angle.get("relations", [])) | set(
+                flow.get("relations", [])
+            ):
+                required = set()
+                if relation in angle.get("relations", []):
+                    required.update((angle["lower"], angle["upper"]))
+                if relation in flow.get("relations", []):
+                    required.update(("resistance", "reactance", "rate_a"))
+                    if relation == "ac_line":
+                        required.update(("shunt_from", "shunt_to"))
+                    elif relation == "transformer":
+                        required.add("tap_ratio")
+                missing = required - set(self.edge_attribute_indices.get(relation, {}))
+                if missing:
+                    raise ValueError(
+                        f"Variables.edge_attributes[{relation!r}] is missing {sorted(missing)}."
+                    )
 
     def _curriculum_scale(self) -> float:
         """Return a [0, 1] multiplier for domain-loss weights based on current epoch.
@@ -126,27 +213,32 @@ class OPFDomainLoss:
         progress = (epoch - self.warmup_epochs) / self.ramp_epochs
         return float(min(progress, 1.0))
 
-    def _normalize(self, name: str, raw: torch.Tensor) -> torch.Tensor:
-        """Normalize *raw* by its EMA so that the effective scale ≈ 1.0 on average.
+    def _augmented_term(self, name, residual, scale, curriculum, update_state, metrics):
+        metrics[f"opf_{name}"] = residual.detach()
+        contribution = curriculum * self.constraint_optimizer.penalty(
+            name, residual, scale, update_state and curriculum > 0.0
+        )
+        report_name = {
+            "voltage_bound": "voltage_limits",
+            "ac_angle_diff": "angle_limits.ac_line",
+            "tr_angle_diff": "angle_limits.transformer",
+            "ac_line_flow": "thermal_limits.ac_line",
+            "tr_line_flow": "thermal_limits.transformer",
+        }[name]
+        self.last_loss_components[f"constraints.{report_name}"] = {
+            "raw": residual.detach(),
+            "weight": float(scale),
+            "weighted": contribution.detach(),
+        }
+        return contribution
 
-        On the first call the EMA is seeded with the raw value, returning 1.0
-        (or near-1.0 for non-zero values).  Subsequent calls use the smoothed
-        estimate so the normalization adapts gradually as training progresses.
-        """
-        val = float(raw.detach())
-        if name not in self._penalty_ema:
-            # Seed: ema = raw value, normalized output = 1.0 on first step.
-            self._penalty_ema[name] = max(val, 1e-8)
-        else:
-            m = self._ema_momentum
-            self._penalty_ema[name] = max(
-                m * val + (1.0 - m) * self._penalty_ema[name], 1e-8
-            )
-        # Floor at 1e-8 prevents division by zero when a penalty term is exactly zero
-        # (e.g. the constraint is already satisfied for all samples in a batch).
-        return raw / self._penalty_ema[name]
+    @torch.no_grad()
+    def update_multipliers(self, completed_epoch: int):
+        """Apply one projected dual-ascent update from accumulated training residuals."""
+        self.constraint_optimizer.update(completed_epoch)
 
-    def __call__(self, pred, value, head_index, data):
+    def forward(self, pred, value, head_index, data, update_state=False):
+        self.last_loss_components = {}
         if not self.enabled or data is None:
             return value.new_zeros(()), {}
 
@@ -170,10 +262,6 @@ class OPFDomainLoss:
         curriculum = self._curriculum_scale()
         metrics["opf_curriculum_scale"] = torch.tensor(curriculum)
 
-        if curriculum == 0.0:
-            metrics["opf_domain_total"] = total_penalty.detach()
-            return total_penalty, metrics
-
         if (
             self.voltage_bound_weight > 0.0
             and self.voltage_bound_feature_indices is not None
@@ -188,16 +276,17 @@ class OPFDomainLoss:
                 # F.relu zeros out values that already satisfy the bound, so the gradient
                 # is zero for feasible predictions and proportional to the violation otherwise.
                 # Squaring gives a smooth (C1) penalty with growing gradient for larger violations.
-                bound_penalty = torch.mean(
-                    F.relu(lower - voltage).pow(2) + F.relu(voltage - upper).pow(2)
+                bound_residual = torch.mean(
+                    F.relu(lower - voltage) + F.relu(voltage - upper)
                 )
-                total_penalty = (
-                    total_penalty
-                    + curriculum
-                    * self.voltage_bound_weight
-                    * self._normalize("voltage_bound", bound_penalty)
+                total_penalty = total_penalty + self._augmented_term(
+                    "voltage_bound",
+                    bound_residual,
+                    self.voltage_bound_weight,
+                    curriculum,
+                    update_state,
+                    metrics,
                 )
-                metrics["opf_voltage_bound"] = bound_penalty.detach()
 
         # ── Angle difference limit penalty ──────────────────────────────────
         # Penalise predicted Va angle-differences that violate per-line bounds.
@@ -205,35 +294,34 @@ class OPFDomainLoss:
         #   transformer edge_attr: [theta_min(0), theta_max(1), ...]
         if self.angle_diff_weight > 0.0 and bus_pred.shape[-1] > self.va_output_index:
             Va = bus_pred[:, self.va_output_index].reshape(-1)
-            for rel, rel_tag in [
-                (("bus", "ac_line", "bus"), "ac"),
-                (("bus", "transformer", "bus"), "tr"),
-            ]:
+            for relation, rel_tag in [("ac_line", "ac"), ("transformer", "tr")]:
+                rel = ("bus", relation, "bus")
                 if rel not in data.edge_types:
                     continue
                 ea = getattr(data[rel], "edge_attr", None)
                 ei = getattr(data[rel], "edge_index", None)
                 if ea is None or ei is None or ea.numel() == 0 or ea.shape[1] < 2:
                     continue
-                theta_min = ea[:, 0].to(Va.device)
-                theta_max = ea[:, 1].to(Va.device)
+                indices = self.edge_attribute_indices.get(relation, {})
+                theta_min = ea[:, indices.get("angle_minimum", 0)].to(Va.device)
+                theta_max = ea[:, indices.get("angle_maximum", 1)].to(Va.device)
                 src, dst = ei
                 delta_theta = Va[src] - Va[dst]
                 # Same relu-squared form as voltage_bound: zero gradient inside the
                 # feasible region [theta_min, theta_max], growing penalty outside it.
                 # No slack is needed here: verified empirically that this term is exactly
                 # zero on OPFDataset ground-truth solutions (Va and theta bounds share units).
-                angdiff_p = torch.mean(
-                    F.relu(delta_theta - theta_max).pow(2)
-                    + F.relu(theta_min - delta_theta).pow(2)
+                angdiff_residual = torch.mean(
+                    F.relu(delta_theta - theta_max) + F.relu(theta_min - delta_theta)
                 )
-                total_penalty = (
-                    total_penalty
-                    + curriculum
-                    * self.angle_diff_weight
-                    * self._normalize(f"{rel_tag}_angle_diff", angdiff_p)
+                total_penalty = total_penalty + self._augmented_term(
+                    f"{rel_tag}_angle_diff",
+                    angdiff_residual,
+                    self.angle_diff_weight,
+                    curriculum,
+                    update_state,
+                    metrics,
                 )
-                metrics[f"opf_{rel_tag}_angle_diff"] = angdiff_p.detach()
 
         # ── Full AC apparent-power thermal limit penalty ────────────────────
         # Reconstruct branch apparent power flow at both ends (S_ij, S_ji) from the
@@ -255,10 +343,15 @@ class OPFDomainLoss:
         ):
             Va = bus_pred[:, self.va_output_index].reshape(-1)
             Vm = bus_pred[:, self.voltage_output_index].reshape(-1)
-            for rel, r_idx, x_idx, ra_idx, b_fr_idx, b_to_idx, tm_idx, rel_tag in [
-                (("bus", "ac_line", "bus"), 4, 5, 6, 2, 3, None, "ac"),
-                (("bus", "transformer", "bus"), 2, 3, 4, None, None, 7, "tr"),
-            ]:
+            for relation, rel_tag in [("ac_line", "ac"), ("transformer", "tr")]:
+                rel = ("bus", relation, "bus")
+                indices = self.edge_attribute_indices.get(relation, {})
+                r_idx = indices.get("resistance", 4 if relation == "ac_line" else 2)
+                x_idx = indices.get("reactance", 5 if relation == "ac_line" else 3)
+                ra_idx = indices.get("rate_a", 6 if relation == "ac_line" else 4)
+                b_fr_idx = indices.get("shunt_from")
+                b_to_idx = indices.get("shunt_to")
+                tm_idx = indices.get("tap_ratio")
                 if rel not in data.edge_types:
                     continue
                 ea = getattr(data[rel], "edge_attr", None)
@@ -325,18 +418,21 @@ class OPFDomainLoss:
 
                 # line_flow_slack absorbs floating-point/near-binding-constraint noise;
                 # the full AC formula itself introduces no linearisation bias.
-                flow_p = torch.mean(
-                    F.relu(S_ij.abs() - rate_a - self.line_flow_slack).pow(2)
-                    + F.relu(S_ji.abs() - rate_a - self.line_flow_slack).pow(2)
+                flow_residual = torch.mean(
+                    F.relu(S_ij.abs() - rate_a - self.line_flow_slack)
+                    + F.relu(S_ji.abs() - rate_a - self.line_flow_slack)
                 )
-                total_penalty = (
-                    total_penalty
-                    + curriculum
-                    * self.line_flow_weight
-                    * self._normalize(f"{rel_tag}_line_flow", flow_p)
+                total_penalty = total_penalty + self._augmented_term(
+                    f"{rel_tag}_line_flow",
+                    flow_residual,
+                    self.line_flow_weight,
+                    curriculum,
+                    update_state,
+                    metrics,
                 )
-                metrics[f"opf_{rel_tag}_line_flow"] = flow_p.detach()
 
+        if hasattr(self.constraint_optimizer, "rho"):
+            metrics["opf_augmented_rho"] = self.constraint_optimizer.rho.detach()
         metrics["opf_domain_total"] = total_penalty.detach()
         return total_penalty, metrics
 
@@ -430,6 +526,7 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
         _key_labels = {
             "opf_domain_total": "physics_penalty_total",
             "opf_curriculum_scale": "curriculum_scale",
+            "opf_augmented_rho": "augmented_rho",
             "opf_voltage_bound": "raw_voltage_bound",
             "opf_ac_angle_diff": "raw_ac_angle_diff",
             "opf_tr_angle_diff": "raw_tr_angle_diff",
@@ -474,22 +571,60 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
         self._last_batch = data
         return self.model(data)
 
+    def _supervised_loss(self, pred, value, head_index):
+        """Evaluate the declarative supervised OPF objective."""
+        if not self.domain_loss.supervised_terms:
+            return self.model.loss(pred, value, head_index)
+        if len(pred) != len(self.domain_loss.output_names):
+            raise ValueError(
+                "The number of model heads must match the configured OPF outputs."
+            )
+
+        total = pred[0].new_zeros(())
+        task_losses = []
+        report = {}
+        for index, (prediction, variable) in enumerate(
+            zip(pred, self.domain_loss.output_names)
+        ):
+            term = self.domain_loss.supervised_terms[variable]
+            target = value[head_index[index]].to(prediction)
+            if target.shape != prediction.shape:
+                target = target.reshape_as(prediction)
+            metric_name = term.get("metric", self.domain_loss.supervised_default_metric)
+            metric = loss_function_selection(metric_name)
+            if metric is None:
+                raise ValueError(
+                    f"Unknown loss function {metric_name!r} for term {variable!r}."
+                )
+            raw = metric(prediction, target)
+            weight = float(term.get("weight", 1.0))
+            weighted = weight * raw
+            total = total + weighted
+            task_losses.append(raw)
+            report[f"supervised.{variable}"] = {
+                "raw": raw.detach(),
+                "weight": weight,
+                "weighted": weighted.detach(),
+            }
+        self.model.last_loss_components = report
+        return total, task_losses
+
+    def train(self, mode: bool = True):
+        """Finalize training residuals before entering validation mode."""
+        was_training = self.training
+        result = super().train(mode)
+        if was_training and not mode and self._last_seen_epoch >= 0:
+            self.domain_loss.update_multipliers(self._last_seen_epoch)
+        return result
+
     def loss(self, pred, value, head_index):
-        total_loss, tasks_loss = self.model.loss(pred, value, head_index)
+        total_loss, tasks_loss = self._supervised_loss(pred, value, head_index)
         if self._last_batch is None:
             info(
                 "[OPFEnhancedModelWrapper] loss() called before forward(); "
                 "domain penalty will be zero for this batch.",
                 logtype="warning",
             )
-        extra_loss, extra_metrics = self.domain_loss(
-            pred,
-            value,
-            head_index,
-            self._last_batch,
-        )
-        self.last_extra_loss_metrics = extra_metrics
-
         # ── Per-epoch accumulation ───────────────────────────────────────────
         # Detect epoch transitions using HYDRAGNN_EPOCH (set by the core training
         # loop).  On each new epoch, flush the previous epoch's accumulated stats
@@ -499,18 +634,27 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
         except (ValueError, TypeError):
             current_epoch = -1
 
-        if current_epoch != self._last_seen_epoch and self._last_seen_epoch >= 0:
-            # Epoch boundary: flush accumulated stats for the completed epoch.
-            self._flush_epoch_log(self._last_seen_epoch)
         self._last_seen_epoch = current_epoch
 
-        # Accumulate task loss (total_loss is the data-driven term before domain is added).
-        self._epoch_accum_task.append(float(total_loss.detach()))
-        # Accumulate each domain metric (raw, un-normalized values for interpretability).
-        for key, val in extra_metrics.items():
-            self._epoch_accum.setdefault(key, []).append(float(val))
+        extra_loss, extra_metrics = self.domain_loss(
+            pred,
+            value,
+            head_index,
+            self._last_batch,
+            update_state=self.training,
+        )
+        self.last_extra_loss_metrics = extra_metrics
+
+        self.last_loss_components = dict(
+            getattr(self.model, "last_loss_components", {})
+        )
+        self.last_loss_components.update(self.domain_loss.last_loss_components)
 
         return total_loss + extra_loss, tasks_loss
+
+    def finalize_domain_state(self):
+        """Commit the final epoch's dual update before checkpointing."""
+        self.domain_loss.update_multipliers(self._last_seen_epoch)
 
 
 def build_solution_target(data, node_target_type: str):
