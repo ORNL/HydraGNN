@@ -16,7 +16,7 @@ module load cpe/24.07 cce/18.0.0 rocm/7.2.0 amd-mixed/7.2.0 \
 
 ROOT="${HYDRAGNN_ROOT:-/lustre/orion/lrn070/world-shared/mlupopa/HydraGNN}"
 VENV="${HYDRAGNN_VENV:-/lustre/orion/lrn070/world-shared/mlupopa/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72}"
-DATASET="${PUBCHEM_DATASET:-/lustre/orion/lrn070/world-shared/kmehta/hydragnn/datasets/pubchem_gaussian.bp}"
+DATASET="${PUBCHEM_DATASET:-${ROOT}/examples/pubchem_gaussian/dataset/pubchem_gaussian.bp}"
 OUTPUT_DIR="${ROOT}/pubchem-mpnn-benchmark-${SLURM_JOB_ID}"
 MODELS="${PUBCHEM_MODELS:-PAINN,MACE,SchNet,DimeNet,UMA,AllScAIP}"
 TRAIN_SAMPLES="${PUBCHEM_TRAIN_SAMPLES:-64}"

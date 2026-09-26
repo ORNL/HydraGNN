@@ -93,9 +93,10 @@ srun -N1 -n1 python examples/pubchem_gaussian/train.py --preonly
 sbatch examples/pubchem_gaussian/job-hpo-frontier.sh
 ```
 
-The Frontier launcher defaults to the shared PubChem Gaussian ADIOS2 dataset.
-Override `PUBCHEM_DATASET` to select another cache, `HPO_MPNN_TYPES` to select
-model families, and `HPO_MAX_EVALS` to set the search budget. For example, a
+The Frontier launchers default to the local ADIOS2 copy at
+`examples/pubchem_gaussian/dataset/pubchem_gaussian.bp`. Override
+`PUBCHEM_DATASET` to select another cache, `HPO_MPNN_TYPES` to select model
+families, and `HPO_MAX_EVALS` to set the search budget. For example, a
 MACE/UMA-only search uses:
 
 ```bash
