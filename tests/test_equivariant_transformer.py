@@ -30,6 +30,7 @@ def _sample(dtype=torch.float64):
 def test_equivariant_rms_norm_is_rotation_equivariant():
     irreps, features, _, _ = _sample()
     norm = EquivariantRMSNorm(irreps).double()
+    assert norm.gain.shape == (1,)
     rotation = o3.rand_matrix(dtype=torch.float64)
     representation = irreps.D_from_matrix(rotation)
 

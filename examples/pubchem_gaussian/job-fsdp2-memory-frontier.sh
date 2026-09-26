@@ -31,6 +31,12 @@ export HYDRAGNN_GRAPH_PARALLEL_GROUP_SIZE=1
 export HYDRAGNN_USE_VARIABLE_GRAPH_SIZE=1
 export HYDRAGNN_VALTEST=1
 export OMP_NUM_THREADS=7
+RUN_DDP="${RUN_DDP:-1}"
+RUN_FSDP2="${RUN_FSDP2:-1}"
+if [[ "${RUN_DDP}" != "1" && "${RUN_FSDP2}" != "1" ]]; then
+    echo "At least one of RUN_DDP or RUN_FSDP2 must be 1" >&2
+    exit 2
+fi
 
 run_mode() {
     local mode="$1"
@@ -81,6 +87,10 @@ run_mode() {
 }
 
 : >"${RESULT_DIR}/summary.txt"
-run_mode ddp
-run_mode fsdp2
+if [[ "${RUN_DDP}" == "1" ]]; then
+    run_mode ddp
+fi
+if [[ "${RUN_FSDP2}" == "1" ]]; then
+    run_mode fsdp2
+fi
 cat "${RESULT_DIR}/summary.txt"

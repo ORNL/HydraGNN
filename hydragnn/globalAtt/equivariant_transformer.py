@@ -34,7 +34,7 @@ class EquivariantRMSNorm(torch.nn.Module):
         if epsilon <= 0.0:
             raise ValueError("epsilon must be positive")
         self.epsilon = epsilon
-        self.gain = torch.nn.Parameter(torch.ones(()))
+        self.gain = torch.nn.Parameter(torch.ones(1))
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         if features.ndim != 2 or features.shape[1] != self.irreps.dim:

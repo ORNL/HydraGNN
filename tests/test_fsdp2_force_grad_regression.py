@@ -97,7 +97,8 @@ def test_fsdp2_enhanced_wrapper_force_grad_regression(
         try:
             monkeypatch.setenv("HYDRAGNN_USE_FSDP", "1")
             monkeypatch.setenv("HYDRAGNN_FSDP_VERSION", "2")
-            monkeypatch.setenv("HYDRAGNN_FSDP_STRATEGY", "SHARD_GRAD_OP")
+            fsdp_strategy = "FULL_SHARD" if mpnn_type == "DimeNet" else "SHARD_GRAD_OP"
+            monkeypatch.setenv("HYDRAGNN_FSDP_STRATEGY", fsdp_strategy)
             monkeypatch.setenv("HYDRAGNN_VERIFY_FSDP2_SHARDING", "1")
             monkeypatch.setenv("HYDRAGNN_AGGR_BACKEND", "torch")
             monkeypatch.setenv("HYDRAGNN_USE_ddstore", "0")
@@ -124,7 +125,15 @@ def test_fsdp2_enhanced_wrapper_force_grad_regression(
                     num_radial=6,
                     num_spherical=7,
                     radius=5.0,
+                    equivariant_attn_num_hidden_layers=3,
+                    equivariant_attn_feedforward_multiplier=4,
+                    equivariant_attn_allow_scalar_only=True,
+                    equivariant_attn_require_tensor_coupling=False,
                 )
+
+            global_attn_engine = (
+                "EquivariantTransformer" if mpnn_type == "DimeNet" else ""
+            )
 
             model = create_model(
                 mpnn_type=mpnn_type,
@@ -132,9 +141,9 @@ def test_fsdp2_enhanced_wrapper_force_grad_regression(
                 hidden_dim=32,
                 output_dim=[1],
                 pe_dim=6,
-                global_attn_engine="",
+                global_attn_engine=global_attn_engine,
                 global_attn_type="",
-                global_attn_heads=1,
+                global_attn_heads=4 if mpnn_type == "DimeNet" else 1,
                 output_type=["node"],
                 output_heads=update_multibranch_heads(output_heads),
                 activation_function="relu",

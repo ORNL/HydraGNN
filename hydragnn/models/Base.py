@@ -613,12 +613,14 @@ class Base(Module):
                     raise ValueError(
                         "EquivariantTransformer requires invariant node features"
                     )
-                return self.node_emb(node_features.float()), data.pos, conv_args
+                node_features = node_features.to(self.node_emb.weight.dtype)
+                return self.node_emb(node_features), data.pos, conv_args
             # encode node positional embeddings
             x = self.pos_emb(data.pe)
             # if node features are available, generate mebeddings, concatenate with positional embeddings and map to hidden dim
             if self.input_dim:
-                x = torch.cat((self.node_emb(node_features.float()), x), 1)
+                node_features = node_features.to(self.node_emb.weight.dtype)
+                x = torch.cat((self.node_emb(node_features), x), 1)
                 x = self.node_lin(x)
             # repeat for edge features and relative edge encodings
             if self.is_edge_model:
