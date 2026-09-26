@@ -376,7 +376,7 @@ def parse_gaussian_log(path, text=None):
             raise ValueError(f"Force table in {path} has no preceding SCF energy")
 
         force_atomic_numbers, forces = _parse_gaussian_table(
-            lines, index, 3, header_dividers=1
+            lines, index, 3, header_dividers=2
         )
         if force_atomic_numbers != latest_atomic_numbers:
             raise ValueError(

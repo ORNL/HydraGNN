@@ -534,7 +534,9 @@ def test_pubchem_parsers_accept_preloaded_log_text(tmp_path):
         " -----\n header\n -----\n"
         " 1 1 0 0.000000 0.000000 0.000000\n -----\n"
         " SCF Done: E(RHF) = -1.125000D+00\n"
-        " Forces (Hartrees/Bohr)\n -----\n"
+        " Forces (Hartrees/Bohr)\n"
+        " -----\n Center Atomic Forces (Hartrees/Bohr)\n"
+        " Number Number X Y Z\n -----\n"
         " 1 1 -0.10 -0.20 -0.30\n -----\n"
     )
 
@@ -638,13 +640,17 @@ def test_pubchem_trajectory_selects_optimized_energy_force_and_hessian(
         " -----\n header\n -----\n"
         " 1 1 0 0.100000 0.000000 0.000000\n -----\n"
         " SCF Done: E(RHF) = -1.000000D+00\n"
-        " Forces (Hartrees/Bohr)\n -----\n"
+        " Forces (Hartrees/Bohr)\n"
+        " -----\n Center Atomic Forces (Hartrees/Bohr)\n"
+        " Number Number X Y Z\n -----\n"
         " 1 1 0.10 0.20 0.30\n -----\n"
         " Input orientation:\n"
         " -----\n header\n -----\n"
         " 1 1 0 0.000000 0.000000 0.000000\n -----\n"
         " SCF Done: E(RHF) = -1.125000D+00\n"
-        " Forces (Hartrees/Bohr)\n -----\n"
+        " Forces (Hartrees/Bohr)\n"
+        " -----\n Center Atomic Forces (Hartrees/Bohr)\n"
+        " Number Number X Y Z\n -----\n"
         " 1 1 -0.10 -0.20 -0.30\n -----\n"
     )
     identity_transform = lambda *args, **kwargs: lambda data: data

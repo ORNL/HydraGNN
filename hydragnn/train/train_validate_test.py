@@ -1163,7 +1163,6 @@ def test(
                             )
 
                         hessian_enabled = model.module.hessian_weight > 0
-                        forces_true = data.forces.float()
                         forces_pred = -torch.autograd.grad(
                             graph_energy_pred,
                             data.pos,
@@ -1187,8 +1186,12 @@ def test(
                         assert (
                             forces_pred is not None
                         ), "No gradients were found for data.pos. Does your model use positions for prediction?"
-                        forces_true = forces_true.flatten()
                         forces_pred = forces_pred.flatten()
+                        forces_true = (
+                            data.forces.float().flatten()
+                            if hasattr(data, "forces")
+                            else torch.full_like(forces_pred, torch.nan)
+                        )
                         true_values[0].append(graph_energy_true.reshape(-1, 1))
                         true_values[1].append(graph_energy_peratom_true.reshape(-1, 1))
                         true_values[2].append(forces_true.reshape(-1, 1))
