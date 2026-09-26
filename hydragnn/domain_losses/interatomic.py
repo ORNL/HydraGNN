@@ -65,6 +65,10 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
             raise ValueError(
                 "Interatomic training loss requires exactly one energy head."
             )
+        if list(self.model.head_dims) != [1]:
+            raise ValueError(
+                "Interatomic training loss requires a scalar energy head with dim=1."
+            )
         self.atomistic_mode_enabled = True
         self.task_names = list(self.active_terms)
         self.task_weights = [
@@ -139,12 +143,17 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
         if "forces" in self.active_terms:
             if data.forces is None:
                 raise ValueError("The enabled forces term requires data.forces.")
+            if not energy_pred.requires_grad:
+                raise ValueError(
+                    "Predicted energy is not differentiable with respect to positions."
+                )
             gradient = torch.autograd.grad(
                 energy_pred,
                 data.pos,
                 grad_outputs=torch.ones_like(energy_pred),
                 retain_graph=energy_pred.requires_grad,
                 create_graph=create_graph,
+                allow_unused=True,
             )[0]
             if gradient is None:
                 raise ValueError(
