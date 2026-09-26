@@ -128,6 +128,25 @@ On Frontier, each campaign requests 256 nodes for six hours from `LRN087`.
 Each trial uses eight nodes and all eight GPUs per node, allowing 32 trials to
 run concurrently. The default preliminary search budget is 100 evaluations.
 
+### FSDP2 Hessian memory diagnostic
+
+`job-fsdp2-memory-frontier.sh` replays the architecture from an OOMing primary
+DimeNet HPO trial: width 128, three message-passing layers, and equivariant
+attention. It runs DDP and FSDP2 `FULL_SHARD` sequentially on the same eight
+nodes and deterministic 64-sample subsets:
+
+```bash
+sbatch examples/pubchem_gaussian/job-fsdp2-memory-frontier.sh
+```
+
+Raw logs and `summary.txt` are written under
+`pubchem-fsdp2-memory-$SLURM_JOB_ID`. The summary records each exit status,
+detected OOM, and available peak-memory lines. FSDP2 shards parameters,
+gradients, and optimizer state, but it does not partition one molecule's dense
+Hessian or the retained second-derivative autograd graph. This experiment is
+therefore diagnostic, not a supported Hessian-training mode; ordinary FSDP
+requests remain rejected unless `--allow-experimental-fsdp2` is explicit.
+
 For the three-million-sample search, use the resumable successive-halving
 driver and its checked-in stage schedule:
 

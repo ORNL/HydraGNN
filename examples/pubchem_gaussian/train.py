@@ -755,6 +755,21 @@ def deterministic_subset(dataset, num_samples, seed):
     return Subset(dataset, indices.tolist())
 
 
+def validate_fsdp_mode(allow_experimental_fsdp2):
+    """Keep FSDP restricted to the explicit FSDP2 Hessian diagnostic."""
+    if not bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0"))):
+        return
+    if not allow_experimental_fsdp2:
+        raise ValueError(
+            "PubChem Hessian training does not support FSDP; use "
+            "--allow-experimental-fsdp2 only for controlled diagnostics"
+        )
+    if os.getenv("HYDRAGNN_FSDP_VERSION", "1") != "2":
+        raise ValueError("The PubChem Hessian diagnostic requires FSDP2")
+    if os.getenv("HYDRAGNN_FSDP_STRATEGY", "FULL_SHARD") != "FULL_SHARD":
+        raise ValueError("The PubChem Hessian diagnostic requires FULL_SHARD")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description=(
@@ -778,6 +793,11 @@ def main():
     parser.add_argument("--ddstore", action="store_true", help="use DDStore")
     parser.add_argument("--ddstore-width", type=int)
     parser.add_argument("--shmem", action="store_true", help="use shared memory")
+    parser.add_argument(
+        "--allow-experimental-fsdp2",
+        action="store_true",
+        help="allow the unsupported FSDP2 FULL_SHARD Hessian memory diagnostic",
+    )
     format_group = parser.add_mutually_exclusive_group()
     format_group.add_argument(
         "--adios", action="store_const", dest="dataset_format", const="adios"
@@ -796,8 +816,7 @@ def main():
         config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
     if config["NeuralNetwork"]["Training"]["batch_size"] != 1:
         raise ValueError("PubChem Hessian training currently requires --batch-size 1")
-    if bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0"))):
-        raise ValueError("PubChem Hessian training does not currently support FSDP")
+    validate_fsdp_mode(args.allow_experimental_fsdp2)
     if int(os.getenv("HYDRAGNN_GRAPH_PARALLEL_GROUP_SIZE", "1")) > 1:
         raise ValueError("PubChem Hessian training does not support graph parallelism")
 
@@ -858,12 +877,19 @@ def main():
     verbosity = config["Verbosity"]["level"]
     model = hydragnn.models.create_model_config(config["NeuralNetwork"], verbosity)
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=5, min_lr=1.0e-5
+    use_fsdp2 = bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0"))) and os.getenv(
+        "HYDRAGNN_FSDP_VERSION", "1"
+    ) == "2"
+    optimizer = None if use_fsdp2 else torch.optim.AdamW(
+        model.parameters(), lr=learning_rate
     )
     model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
         model, optimizer, verbosity, config=config
+    )
+    if use_fsdp2:
+        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.5, patience=5, min_lr=1.0e-5
     )
     hydragnn.utils.model.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer

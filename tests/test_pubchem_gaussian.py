@@ -333,6 +333,31 @@ def test_pubchem_deterministic_subset_is_nested():
     assert small.indices == large.indices[:10]
 
 
+def test_pubchem_fsdp2_diagnostic_requires_explicit_full_shard_opt_in(monkeypatch):
+    example = _load_example_module()
+
+    monkeypatch.setenv("HYDRAGNN_USE_FSDP", "0")
+    example.validate_fsdp_mode(False)
+
+    monkeypatch.setenv("HYDRAGNN_USE_FSDP", "1")
+    monkeypatch.setenv("HYDRAGNN_FSDP_VERSION", "2")
+    monkeypatch.setenv("HYDRAGNN_FSDP_STRATEGY", "FULL_SHARD")
+    with pytest.raises(ValueError, match="controlled diagnostics"):
+        example.validate_fsdp_mode(False)
+
+    example.validate_fsdp_mode(True)
+
+    for variable, value, message in (
+        ("HYDRAGNN_FSDP_VERSION", "1", "requires FSDP2"),
+        ("HYDRAGNN_FSDP_STRATEGY", "SHARD_GRAD_OP", "requires FULL_SHARD"),
+    ):
+        monkeypatch.setenv("HYDRAGNN_FSDP_VERSION", "2")
+        monkeypatch.setenv("HYDRAGNN_FSDP_STRATEGY", "FULL_SHARD")
+        monkeypatch.setenv(variable, value)
+        with pytest.raises(ValueError, match=message):
+            example.validate_fsdp_mode(True)
+
+
 def test_pubchem_archive_limits_preserve_global_order():
     example = _load_example_module()
 
