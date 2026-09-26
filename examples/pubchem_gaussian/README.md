@@ -28,8 +28,10 @@ training. Because the atomic reference depends only on composition, forces and
 Hessians are unchanged by this energy shift.
 
 The analytical Hessian is available only for the optimized structure used by
-the frequency calculation. Every retained graph therefore has a dense
-`data.hessian` attribute of shape $3N\times3N$ in Hartree/Bohr$^2$.
+the frequency calculation. Every retained graph therefore has a dense Hessian
+in Hartree/Bohr$^2$. It is serialized as a flat vector of length $(3N)^2$ so
+ADIOS has only one variable dimension across differently sized molecules; the
+loss reshapes it to $3N\times3N$ before comparison.
 
 For `pos` and forces shaped `(N, 3)`, PyTorch returns the force Jacobian with
 axes `(output_atom, output_xyz, input_atom, input_xyz)`. Its element

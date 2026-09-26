@@ -41,6 +41,7 @@ from hydragnn.utils.datasets.pickledataset import (
     SimplePickleDataset,
     SimplePickleWriter,
 )
+from hydragnn.utils.datasets.download import safe_extract_tar
 from hydragnn.utils.print.print_utils import log
 from hydragnn.utils.input_config_parsing import (
     parse_variable_schema,
@@ -130,7 +131,7 @@ def _parse_mulliken_charges(text, num_atoms):
     return charges
 
 
-def parse_gaussian_properties(path, num_atoms, text=None):
+def parse_gaussian_properties(path, num_atoms, text=None, requested_properties=None):
     """Parse final, hardware-independent labels from a Gaussian log.
 
     Vector/tensor observables use rotation-invariant magnitudes or sorted
@@ -138,70 +139,90 @@ def parse_gaussian_properties(path, num_atoms, text=None):
     """
     if text is None:
         text = path.read_text(errors="replace")
+    requested = (
+        MULTITASK_PROPERTY_NAMES
+        if requested_properties is None
+        else set(requested_properties) & MULTITASK_PROPERTY_NAMES
+    )
     number = r"([-+]?\d+(?:\.\d*)?(?:[DEde][-+]?\d+)?)"
     charge, multiplicity = _last_floats(
         rf"Charge\s*=\s*{number}\s+Multiplicity\s*=\s*{number}", text, 2
     )
 
-    charges = _parse_mulliken_charges(text, num_atoms)
-
-    dipole = _last_floats(
-        rf"X=\s*{number}\s+Y=\s*{number}\s+Z=\s*{number}\s+Tot=\s*{number}",
-        text,
-        4,
-    )
-    quadrupole = _last_floats(
-        rf"Traceless Quadrupole moment.*?\n\s*XX=\s*{number}\s+YY=\s*{number}\s+ZZ=\s*{number}\s*\n\s*XY=\s*{number}\s+XZ=\s*{number}\s+YZ=\s*{number}",
-        text,
-        6,
-    )
-    polarizability = _last_labeled_floats("Exact polarizability:", text, 6)
-    pxx, pyx, pyy, pzx, pzy, pzz = polarizability
-
-    homo = None
-    lumo = None
-    for line in text.splitlines():
-        occupied_match = re.search(r"Alpha\s+occ\. eigenvalues --\s*(.*)", line)
-        virtual_match = re.search(r"Alpha\s+virt\. eigenvalues --\s*(.*)", line)
-        if occupied_match:
-            homo = float(occupied_match.group(1).split()[-1].replace("D", "E"))
-            lumo = None
-        elif virtual_match and lumo is None:
-            lumo = float(virtual_match.group(1).split()[0].replace("D", "E"))
-    if homo is None or lumo is None:
-        raise ValueError("Final alpha occupied/virtual orbital energies not found")
-    rotational_constants = _last_floats(
-        rf"Rotational constants \(GHZ\):\s*{number}\s+{number}\s+{number}",
-        text,
-        3,
-    )
-    thermochemistry = _last_floats(
-        rf"Zero-point correction=\s*{number}.*?"
-        rf"Thermal correction to Energy=\s*{number}.*?"
-        rf"Thermal correction to Enthalpy=\s*{number}.*?"
-        rf"Thermal correction to Gibbs Free Energy=\s*{number}.*?"
-        rf"Sum of electronic and zero-point Energies=\s*{number}.*?"
-        rf"Sum of electronic and thermal Energies=\s*{number}.*?"
-        rf"Sum of electronic and thermal Enthalpies=\s*{number}.*?"
-        rf"Sum of electronic and thermal Free Energies=\s*{number}",
-        text,
-        8,
-    )
-    return {
+    properties = {
         "total_charge": torch.tensor([[charge]], dtype=torch.float32),
         "spin_multiplicity": torch.tensor([[multiplicity]], dtype=torch.float32),
-        "mulliken_charges": torch.tensor(charges, dtype=torch.float32).unsqueeze(1),
-        "dipole_magnitude": torch.tensor([[dipole[3]]], dtype=torch.float32),
-        "quadrupole_eigenvalues": _tensor_eigenvalues(*quadrupole),
-        "polarizability_eigenvalues": _tensor_eigenvalues(pxx, pyy, pzz, pyx, pzx, pzy),
-        "frontier_orbital_energies": torch.tensor(
-            [[homo, lumo, lumo - homo]], dtype=torch.float32
-        ),
-        "rotational_constants": torch.tensor(
-            [sorted(rotational_constants, reverse=True)], dtype=torch.float32
-        ),
-        "thermochemistry": torch.tensor([thermochemistry], dtype=torch.float32),
     }
+    if "mulliken_charges" in requested:
+        charges = _parse_mulliken_charges(text, num_atoms)
+        properties["mulliken_charges"] = torch.tensor(
+            charges, dtype=torch.float32
+        ).unsqueeze(1)
+    if "dipole_magnitude" in requested:
+        dipole = _last_floats(
+            rf"X=\s*{number}\s+Y=\s*{number}\s+Z=\s*{number}\s+Tot=\s*{number}",
+            text,
+            4,
+        )
+        properties["dipole_magnitude"] = torch.tensor(
+            [[dipole[3]]], dtype=torch.float32
+        )
+    if "quadrupole_eigenvalues" in requested:
+        quadrupole = _last_floats(
+            rf"Traceless Quadrupole moment.*?\n\s*XX=\s*{number}\s+YY=\s*{number}\s+ZZ=\s*{number}\s*\n\s*XY=\s*{number}\s+XZ=\s*{number}\s+YZ=\s*{number}",
+            text,
+            6,
+        )
+        properties["quadrupole_eigenvalues"] = _tensor_eigenvalues(*quadrupole)
+    if "polarizability_eigenvalues" in requested:
+        pxx, pyx, pyy, pzx, pzy, pzz = _last_labeled_floats(
+            "Exact polarizability:", text, 6
+        )
+        properties["polarizability_eigenvalues"] = _tensor_eigenvalues(
+            pxx, pyy, pzz, pyx, pzx, pzy
+        )
+    if "frontier_orbital_energies" in requested:
+        homo = None
+        lumo = None
+        for line in text.splitlines():
+            occupied_match = re.search(r"Alpha\s+occ\. eigenvalues --\s*(.*)", line)
+            virtual_match = re.search(r"Alpha\s+virt\. eigenvalues --\s*(.*)", line)
+            if occupied_match:
+                homo = float(occupied_match.group(1).split()[-1].replace("D", "E"))
+                lumo = None
+            elif virtual_match and lumo is None:
+                lumo = float(virtual_match.group(1).split()[0].replace("D", "E"))
+        if homo is None or lumo is None:
+            raise ValueError("Final alpha occupied/virtual orbital energies not found")
+        properties["frontier_orbital_energies"] = torch.tensor(
+            [[homo, lumo, lumo - homo]], dtype=torch.float32
+        )
+    if "rotational_constants" in requested:
+        rotational_constants = _last_floats(
+            rf"Rotational constants \(GHZ\):\s*{number}\s+{number}\s+{number}",
+            text,
+            3,
+        )
+        properties["rotational_constants"] = torch.tensor(
+            [sorted(rotational_constants, reverse=True)], dtype=torch.float32
+        )
+    if "thermochemistry" in requested:
+        thermochemistry = _last_floats(
+            rf"Zero-point correction=\s*{number}.*?"
+            rf"Thermal correction to Energy=\s*{number}.*?"
+            rf"Thermal correction to Enthalpy=\s*{number}.*?"
+            rf"Thermal correction to Gibbs Free Energy=\s*{number}.*?"
+            rf"Sum of electronic and zero-point Energies=\s*{number}.*?"
+            rf"Sum of electronic and thermal Energies=\s*{number}.*?"
+            rf"Sum of electronic and thermal Enthalpies=\s*{number}.*?"
+            rf"Sum of electronic and thermal Free Energies=\s*{number}",
+            text,
+            8,
+        )
+        properties["thermochemistry"] = torch.tensor(
+            [thermochemistry], dtype=torch.float32
+        )
+    return properties
 
 
 def parse_structure(path):
@@ -465,8 +486,7 @@ def extract_records(archive_dir, output_dir, limit, comm, rank, world_size):
                     continue
                 unpack_dir = Path(temporary_dir) / f"unpack-{nested_archive.stem}"
                 unpack_dir.mkdir()
-                with tarfile.open(nested_archive) as nested:
-                    nested.extractall(unpack_dir)
+                safe_extract_tar(nested_archive, unpack_dir)
                 source = unpack_dir / nested_archive.stem
                 if not source.is_dir():
                     raise RuntimeError(
@@ -528,7 +548,7 @@ class PubChemGaussianDataset(AbstractBaseDataset):
         configured_outputs = {
             output["name"] for output in config.get("Variables", {}).get("outputs", [])
         }
-        parse_multitask_properties = bool(configured_outputs & MULTITASK_PROPERTY_NAMES)
+        requested_properties = configured_outputs & MULTITASK_PROPERTY_NAMES
         if atomic_reference_energies is None:
             atomic_reference_energies = parse_atomic_reference_energies(
                 ATOMIC_REFERENCE_ARCHIVE
@@ -555,9 +575,12 @@ class PubChemGaussianDataset(AbstractBaseDataset):
                 records = parse_gaussian_log(log_path, text=log_text)
                 properties = (
                     parse_gaussian_properties(
-                        log_path, optimized_atomic_numbers.shape[0], text=log_text
+                        log_path,
+                        optimized_atomic_numbers.shape[0],
+                        text=log_text,
+                        requested_properties=requested_properties,
                     )
-                    if parse_multitask_properties
+                    if variable_schema is not None
                     else {}
                 )
                 matching_records = []
@@ -605,7 +628,9 @@ class PubChemGaussianDataset(AbstractBaseDataset):
                     # composition-only reference leaves force/Hessian derivatives unchanged.
                     energy=formation_energy,
                     forces=record["forces"],
-                    hessian=full_hessian,
+                    # Flatten the dense matrix so ADIOS sees only one varying
+                    # dimension across molecules. The loss restores (3N, 3N).
+                    hessian=full_hessian.reshape(-1),
                     **properties,
                     cell=torch.eye(3, dtype=torch.float32),
                     pbc=torch.zeros(3, dtype=torch.int32),

@@ -23,6 +23,7 @@ from examples.pubchem_gaussian.pubchem_gaussian_hpo import (
 )
 from examples.pubchem_gaussian.pubchem_gaussian_multistage_hpo import (
     _command,
+    _write_results,
     normalized_score,
     rank_with_auxiliary_tiebreakers,
     sample_candidates,
@@ -262,6 +263,31 @@ def test_pubchem_multistage_uses_auxiliaries_only_inside_primary_tolerance():
         "outside-great-aux",
     ]
     assert [entry["primary_comparable"] for entry in ranked] == [True, True, False]
+
+
+def test_pubchem_multistage_writes_ranking_fields(tmp_path):
+    path = tmp_path / "results.csv"
+    _write_results(
+        path,
+        [
+            {
+                "id": "trial-1",
+                "stage": "screen",
+                "score": 1.5,
+                "primary_score": 1.25,
+                "auxiliary_score": 0.5,
+                "primary_comparable": True,
+                "losses": {"Energy": 1.0, "Forces": 2.0, "Hessian": 3.0},
+                "parameters": {"hidden_dim": 64},
+            }
+        ],
+    )
+
+    header, row = path.read_text().splitlines()
+    fields = dict(zip(header.split(","), row.split(",")))
+    assert fields["primary_score"] == "1.25"
+    assert fields["auxiliary_score"] == "0.5"
+    assert fields["primary_comparable"] == "True"
 
 
 def test_pubchem_multistage_launches_each_slurm_trial_with_multinode_ddp(
@@ -517,6 +543,29 @@ def test_pubchem_parsers_accept_preloaded_log_text(tmp_path):
     assert records[0]["energy"].item() == pytest.approx(-1.125)
 
 
+def test_pubchem_parses_only_requested_auxiliary_properties(tmp_path):
+    example = _load_example_module()
+    text = (
+        " Charge = 0 Multiplicity = 1\n"
+        " Dipole moment (field-independent basis, Debye):\n"
+        " X= 1.0 Y= 2.0 Z= 3.0 Tot= 4.0\n"
+    )
+
+    properties = example.parse_gaussian_properties(
+        tmp_path / "unused.log",
+        num_atoms=2,
+        text=text,
+        requested_properties={"dipole_magnitude"},
+    )
+
+    assert set(properties) == {
+        "total_charge",
+        "spin_multiplicity",
+        "dipole_magnitude",
+    }
+    assert properties["dipole_magnitude"].item() == pytest.approx(4.0)
+
+
 @pytest.mark.mpi_skip()
 def test_force_and_hessian_autograd_identities_and_backpropagation():
     positions = torch.tensor([[0.2, -0.3, 0.5], [0.7, 0.1, -0.4]], requires_grad=True)
@@ -619,5 +668,7 @@ def test_pubchem_trajectory_selects_optimized_energy_force_and_hessian(
     assert dataset[0].atomization_energy.item() == pytest.approx(0.625)
     assert torch.equal(dataset[0].energy, dataset[0].formation_energy)
     assert dataset[0].forces.shape == (1, 3)
-    assert torch.isfinite(dataset[0].hessian).all()
-    assert torch.allclose(dataset[0].hessian, dataset[0].hessian.T)
+    assert dataset[0].hessian.shape == (9,)
+    hessian = dataset[0].hessian.reshape(3, 3)
+    assert torch.isfinite(hessian).all()
+    assert torch.allclose(hessian, hessian.T)

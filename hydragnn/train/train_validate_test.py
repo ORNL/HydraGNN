@@ -1146,11 +1146,21 @@ def test(
                                 "Force predictions are only supported for node or graph energy heads."
                             )
 
-                        graph_energy_true = data.energy.squeeze().float()
-
                         ncount = torch.bincount(data.batch)
                         graph_energy_peratom_pred = graph_energy_pred / ncount
-                        graph_energy_peratom_true = graph_energy_true / ncount
+                        if hasattr(data, "energy"):
+                            graph_energy_true = data.energy.squeeze().float()
+                            graph_energy_peratom_true = graph_energy_true / ncount
+                        else:
+                            # Force/Hessian-only configurations have no energy
+                            # labels. Preserve task alignment for callers that
+                            # request samples while marking those targets absent.
+                            graph_energy_true = torch.full_like(
+                                graph_energy_pred, torch.nan
+                            )
+                            graph_energy_peratom_true = torch.full_like(
+                                graph_energy_peratom_pred, torch.nan
+                            )
 
                         hessian_enabled = model.module.hessian_weight > 0
                         forces_true = data.forces.float()

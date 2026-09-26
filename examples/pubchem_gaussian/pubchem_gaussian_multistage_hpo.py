@@ -297,6 +297,9 @@ def _write_results(path, results):
                     "id": result["id"],
                     "stage": result["stage"],
                     "score": result["score"],
+                    "primary_score": result["primary_score"],
+                    "auxiliary_score": result["auxiliary_score"],
+                    "primary_comparable": result["primary_comparable"],
                     **{
                         name: losses.get(name)
                         for name in PRIMARY_METRICS + AUXILIARY_METRICS
