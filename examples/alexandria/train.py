@@ -461,9 +461,6 @@ if __name__ == "__main__":
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
     parser.add_argument(
-        "--compute_grad_energy", type=bool, help="compute_grad_energy", default=False
-    )
-    parser.add_argument(
         "--precision",
         type=str,
         choices=["fp32", "fp64", "bf16"],
