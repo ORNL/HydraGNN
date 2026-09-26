@@ -141,11 +141,14 @@ sbatch examples/pubchem_gaussian/job-fsdp2-memory-frontier.sh
 
 Raw logs and `summary.txt` are written under
 `pubchem-fsdp2-memory-$SLURM_JOB_ID`. The summary records each exit status,
-detected OOM, and available peak-memory lines. FSDP2 shards parameters,
-gradients, and optimizer state, but it does not partition one molecule's dense
-Hessian or the retained second-derivative autograd graph. This experiment is
-therefore diagnostic, not a supported Hessian-training mode; ordinary FSDP
-requests remain rejected unless `--allow-experimental-fsdp2` is explicit.
+detected OOM, available peak-memory lines, and the global and local element
+counts of sharded parameters and first-step gradients. The run fails if either
+parameters or gradients are not `DTensor` objects with a `Shard` placement.
+FSDP2 shards parameters, gradients, and optimizer state, but it does not
+partition one molecule's dense Hessian or the retained second-derivative
+autograd graph. This experiment is therefore diagnostic, not a supported
+Hessian-training mode; ordinary FSDP requests remain rejected unless
+`--allow-experimental-fsdp2` is explicit.
 
 For the three-million-sample search, use the resumable successive-halving
 driver and its checked-in stage schedule:

@@ -40,10 +40,12 @@ run_mode() {
         export HYDRAGNN_USE_FSDP=1
         export HYDRAGNN_FSDP_VERSION=2
         export HYDRAGNN_FSDP_STRATEGY=FULL_SHARD
+        export HYDRAGNN_VERIFY_FSDP2_SHARDING=1
         fsdp_args+=(--allow-experimental-fsdp2)
     else
         export HYDRAGNN_USE_FSDP=0
-        unset HYDRAGNN_FSDP_VERSION HYDRAGNN_FSDP_STRATEGY
+        unset HYDRAGNN_FSDP_VERSION HYDRAGNN_FSDP_STRATEGY \
+            HYDRAGNN_VERIFY_FSDP2_SHARDING
     fi
 
     set +e
@@ -73,7 +75,7 @@ run_mode() {
     fi
     printf '%s\texit_status=%d\toutcome=%s\n' "${mode}" "${status}" "${outcome}" \
         | tee -a "${RESULT_DIR}/summary.txt"
-    grep -E 'Max memory allocated after optimizer step|OutOfMemoryError|out of memory' \
+    grep -E 'fsdp2-sharding|Max memory allocated after optimizer step|OutOfMemoryError|out of memory' \
         "${log_path}" | tail -n 16 >>"${RESULT_DIR}/summary.txt" || true
 }
 

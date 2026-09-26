@@ -184,6 +184,45 @@ def _set_reshard_after_backward(model, enabled):
     return False
 
 
+def _verify_fsdp2_sharding(model, phase):
+    """Assert that FSDP2 parameters or gradients use sharded DTensors."""
+    from torch.distributed.tensor import DTensor, Shard
+
+    tensors = []
+    unsharded = []
+    for name, parameter in model.named_parameters():
+        tensor = parameter if phase == "parameters" else parameter.grad
+        if tensor is None:
+            continue
+        tensors.append(tensor)
+        if not isinstance(tensor, DTensor) or not any(
+            isinstance(placement, Shard) for placement in tensor.placements
+        ):
+            unsharded.append(name)
+
+    if not tensors:
+        raise RuntimeError(f"FSDP2 sharding verification found no {phase}")
+    if unsharded:
+        names = ", ".join(unsharded[:5])
+        raise RuntimeError(
+            f"FSDP2 sharding verification found unsharded {phase}: {names}"
+        )
+
+    global_numel = sum(tensor.numel() for tensor in tensors)
+    local_numel = sum(tensor.to_local().numel() for tensor in tensors)
+    if dist.get_world_size() > 1 and local_numel >= global_numel:
+        raise RuntimeError(
+            f"FSDP2 {phase} were not partitioned: "
+            f"local_numel={local_numel}, global_numel={global_numel}"
+        )
+    if dist.get_rank() == 0:
+        print(
+            f"[fsdp2-sharding] phase={phase} tensors={len(tensors)} "
+            f"local_numel={local_numel} global_numel={global_numel} "
+            "placement=Shard(0)"
+        )
+
+
 def get_nbatch(loader):
     """Calculate the number of batches produced by a loader."""
     nbatch = len(loader)
@@ -726,6 +765,15 @@ def train(
     )
     fsdp2_force_workaround = compute_grad_energy and _is_fsdp2_enabled()
     fsdp2_workaround_available = True
+    verify_fsdp2_sharding = bool(
+        int(os.getenv("HYDRAGNN_VERIFY_FSDP2_SHARDING", "0"))
+    )
+    if verify_fsdp2_sharding:
+        if not _is_fsdp2_enabled():
+            raise ValueError(
+                "HYDRAGNN_VERIFY_FSDP2_SHARDING requires FSDP2 to be enabled"
+            )
+        _verify_fsdp2_sharding(model, "parameters")
 
     local_nbatch = get_nbatch(loader)
     nbatch = MPI.COMM_WORLD.allreduce(local_nbatch, op=MPI.MIN)
@@ -815,6 +863,8 @@ def train(
                     loss.backward()
             if fsdp2_force_workaround and fsdp2_workaround_available:
                 _set_reshard_after_backward(model, True)
+            if verify_fsdp2_sharding and ibatch == 0:
+                _verify_fsdp2_sharding(model, "gradients")
             if trace_level > 0:
                 tr.start("backward_sync", **syncopt)
                 MPI.COMM_WORLD.Barrier()
