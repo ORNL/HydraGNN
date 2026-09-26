@@ -27,6 +27,8 @@ from opf_solution_utils import (
     HeteroFromHomogeneousDataset,
     NodeBatchAdapter,
     NodeTargetDatasetAdapter,
+    OPFDomainLoss,
+    OPFEnhancedModelWrapper,
     compute_pna_deg_for_hetero_dataset,
     validate_opf_variable_schema,
     info,
@@ -319,6 +321,19 @@ if __name__ == "__main__":
         metadata=metadata,
         node_input_dims=node_input_dims,
     )
+    loss_config = config["NeuralNetwork"]["Training"].get("loss")
+    if (
+        loss_config is not None
+        and loss_config.get("enabled", False)
+        and loss_config.get("provider") == "optimal_power_flow"
+    ):
+        domain_loss = OPFDomainLoss(
+            loss_config,
+            node_target_type=args.node_target_type,
+            variables=config["Variables"],
+        )
+        domain_loss.enabled = False
+        model = OPFEnhancedModelWrapper(model, domain_loss)
 
     model = hydragnn.utils.distributed.distributed_model_wrapper(
         model, None, config["Verbosity"]["level"]

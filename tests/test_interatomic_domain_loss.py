@@ -13,6 +13,7 @@ from hydragnn.domain_losses import (
 
 class EnergyModel(torch.nn.Module):
     num_heads = 1
+    head_dims = [1]
     head_type = ["node"]
     loss_function_type = "mse"
 
@@ -72,6 +73,33 @@ def test_declarative_interatomic_terms_compute_expected_weighted_loss():
 def test_disabled_domain_loss_returns_original_model():
     model = EnergyModel()
     assert create_domain_loss(model, {"enabled": False}) is model
+
+
+def test_multidimensional_energy_head_is_rejected():
+    model = EnergyModel()
+    model.head_dims = [2]
+
+    with pytest.raises(ValueError, match="scalar energy head"):
+        create_domain_loss(model, _config())
+
+
+def test_position_independent_energy_has_actionable_force_error():
+    class PositionIndependentEnergy(EnergyModel):
+        def forward(self, data):
+            return [torch.ones((1, 1), device=data.pos.device, requires_grad=True)]
+
+    model = create_domain_loss(PositionIndependentEnergy(), _config())
+    data = Data(
+        pos=torch.tensor([[1.0, 0.0, 0.0]], requires_grad=True),
+        batch=torch.tensor([0]),
+        energy=torch.tensor([1.0]),
+        forces=torch.zeros(1, 3),
+    )
+
+    with pytest.raises(
+        ValueError, match="not differentiable with respect to positions"
+    ):
+        model.energy_force_loss(model(data), data)
 
 
 def test_core_factory_rejects_metadata_dependent_opf_provider():
