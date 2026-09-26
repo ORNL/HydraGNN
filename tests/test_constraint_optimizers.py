@@ -42,3 +42,11 @@ def test_augmented_lagrangian_updates_named_dual_and_rho():
 def test_unknown_constraint_optimizer_is_rejected():
     with pytest.raises(ValueError, match="Unknown constraint_optimizer"):
         create_constraint_optimizer(["x"], {"type": "mystery"})
+
+
+@pytest.mark.parametrize("kind", ["fixed_penalty", "augmented_lagrangian"])
+def test_negative_constraint_scale_is_rejected(kind):
+    optimizer = create_constraint_optimizer(["x"], {"type": kind})
+
+    with pytest.raises(ValueError, match="non-negative"):
+        optimizer.penalty("x", torch.tensor(1.0), scale=-0.1)

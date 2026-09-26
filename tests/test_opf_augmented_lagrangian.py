@@ -152,6 +152,41 @@ def test_wrapper_finalizes_duals_when_training_switches_to_validation():
     )
 
 
+def test_wrapper_uses_declarative_supervised_metric_and_weight():
+    class StubModel(torch.nn.Module):
+        def loss(self, pred, value, head_index):
+            raise AssertionError(
+                "The base loss must not override declarative OPF loss."
+            )
+
+    config = {
+        "enabled": True,
+        "supervised": {
+            "default_metric": "mae",
+            "terms": [{"variable": "bus_va_vm", "weight": 2.0}],
+        },
+        "constraints": [],
+        "constraint_optimizer": {"type": "fixed_penalty"},
+    }
+    variables = {"outputs": [{"name": "bus_va_vm", "level": "node", "dim": 1}]}
+    domain_loss = OPFDomainLoss(config, variables=variables)
+    wrapper = OPFEnhancedModelWrapper(StubModel(), domain_loss)
+    prediction = [torch.tensor([[3.0], [1.0]])]
+    target = torch.tensor([[1.0], [0.0]])
+    wrapper._last_batch = HeteroData()
+
+    total, tasks = wrapper.loss(
+        prediction, target, [torch.tensor([0, 1], dtype=torch.long)]
+    )
+
+    assert tasks[0].item() == pytest.approx(1.5)
+    assert total.item() == pytest.approx(3.0)
+    component = wrapper.last_loss_components["supervised.bus_va_vm"]
+    assert component["raw"].item() == pytest.approx(1.5)
+    assert component["weight"] == pytest.approx(2.0)
+    assert component["weighted"].item() == pytest.approx(3.0)
+
+
 @pytest.mark.parametrize(
     "overrides",
     [

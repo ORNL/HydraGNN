@@ -69,6 +69,15 @@ def test_interatomic_examples_use_declarative_conservative_loss(path, config, lo
         assert by_variable["forces"].get("prediction", {}).get("operator") == (
             "negative_gradient"
         ), path
+    graph_outputs = {
+        output["name"]
+        for output in config["Variables"]["outputs"]
+        if output["level"] == "graph"
+    }
+    if graph_outputs.intersection({"energy", "energy_per_atom"}):
+        assert (
+            config["NeuralNetwork"]["Architecture"].get("graph_pooling") == "add"
+        ), path
 
 
 @pytest.mark.parametrize("path,config,loss", list(_loss_configs("optimal_power_flow")))

@@ -17,6 +17,7 @@
             "global_attn_heads": 8,
             "hidden_dim": 64,
             "num_conv_layers": 3,
+            "graph_pooling": "add",
             "int_emb_size": 32,
             "out_emb_size": 16,
             "basis_emb_size": 8,
