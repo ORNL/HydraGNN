@@ -765,9 +765,7 @@ def train(
     )
     fsdp2_force_workaround = compute_grad_energy and _is_fsdp2_enabled()
     fsdp2_workaround_available = True
-    verify_fsdp2_sharding = bool(
-        int(os.getenv("HYDRAGNN_VERIFY_FSDP2_SHARDING", "0"))
-    )
+    verify_fsdp2_sharding = bool(int(os.getenv("HYDRAGNN_VERIFY_FSDP2_SHARDING", "0")))
     if verify_fsdp2_sharding:
         if not _is_fsdp2_enabled():
             raise ValueError(

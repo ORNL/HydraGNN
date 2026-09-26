@@ -126,8 +126,7 @@ def validation_objective(log_path):
     """Return the negative mean of the latest energy, force, and Hessian losses."""
     losses = validation_losses(log_path)
     if losses is None or not all(
-        math.isfinite(losses.get(name, math.inf))
-        for name in PRIMARY_OBJECTIVE_METRICS
+        math.isfinite(losses.get(name, math.inf)) for name in PRIMARY_OBJECTIVE_METRICS
     ):
         return -math.inf
     return -sum(losses[name] for name in PRIMARY_OBJECTIVE_METRICS) / len(
@@ -184,9 +183,7 @@ def run(trial, dequed=None):
     config_path = (log_dir / f"trial-{trial.id}.json").resolve()
     output_path = (log_dir / f"trial-{trial.id}.log").resolve()
     config_path.write_text(json.dumps(config, indent=4) + "\n", encoding="utf-8")
-    command = _trial_command(
-        config_path, f"pubchem_hpo_{campaign}_{trial.id}", dequed
-    )
+    command = _trial_command(config_path, f"pubchem_hpo_{campaign}_{trial.id}", dequed)
 
     try:
         with output_path.open("w", encoding="utf-8") as output:

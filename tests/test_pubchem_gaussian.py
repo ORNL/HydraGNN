@@ -136,13 +136,9 @@ def test_pubchem_hpo_primary_campaign_removes_auxiliary_heads():
     base_config = json.loads(config_path.read_text())
 
     primary = configure_trial(base_config, _hpo_parameters(), campaign="primary")
-    multitask = configure_trial(
-        base_config, _hpo_parameters(), campaign="multitask"
-    )
+    multitask = configure_trial(base_config, _hpo_parameters(), campaign="multitask")
 
-    assert [output["name"] for output in primary["Variables"]["outputs"]] == [
-        "energy"
-    ]
+    assert [output["name"] for output in primary["Variables"]["outputs"]] == ["energy"]
     assert primary["NeuralNetwork"]["Architecture"]["task_weights"] == [1.0]
     assert len(multitask["Variables"]["outputs"]) == 8
     assert len(multitask["NeuralNetwork"]["Architecture"]["task_weights"]) == 8
@@ -157,9 +153,7 @@ def test_pubchem_hpo_trial_command_uses_shared_dataset(monkeypatch, tmp_path):
     assert f"--dataset-path={dataset_path}" in command
 
 
-def test_pubchem_hpo_trial_command_uses_requested_nodes_and_gpus(
-    monkeypatch, tmp_path
-):
+def test_pubchem_hpo_trial_command_uses_requested_nodes_and_gpus(monkeypatch, tmp_path):
     monkeypatch.setenv("TASKS_PER_NODE", "8")
     monkeypatch.setenv("OMP_NUM_THREADS", "7")
 

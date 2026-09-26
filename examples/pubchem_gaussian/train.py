@@ -718,9 +718,7 @@ def load_datasets(
             AdiosDataset(str(path), label, comm, **options)
             for label in ("trainset", "valset", "testset")
         )
-        return tuple(
-            model_ready_dataset(dataset, var_config) for dataset in datasets
-        )
+        return tuple(model_ready_dataset(dataset, var_config) for dataset in datasets)
 
     path = dataset_path if dataset_path is not None else PICKLE_DIR
     datasets = tuple(
@@ -877,11 +875,12 @@ def main():
     verbosity = config["Verbosity"]["level"]
     model = hydragnn.models.create_model_config(config["NeuralNetwork"], verbosity)
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
-    use_fsdp2 = bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0"))) and os.getenv(
-        "HYDRAGNN_FSDP_VERSION", "1"
-    ) == "2"
-    optimizer = None if use_fsdp2 else torch.optim.AdamW(
-        model.parameters(), lr=learning_rate
+    use_fsdp2 = (
+        bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
+        and os.getenv("HYDRAGNN_FSDP_VERSION", "1") == "2"
+    )
+    optimizer = (
+        None if use_fsdp2 else torch.optim.AdamW(model.parameters(), lr=learning_rate)
     )
     model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
         model, optimizer, verbosity, config=config
