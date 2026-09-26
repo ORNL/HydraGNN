@@ -123,10 +123,10 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
                 "data.pos must require gradients for interatomic training."
             )
 
-        energy_pred = self._graph_energy(pred, data).float()
+        energy_pred = self._graph_energy(pred, data)
         values = {}
         if needs_energy_target:
-            energy_true = data.energy.reshape_as(energy_pred).float()
+            energy_true = data.energy.to(energy_pred).reshape_as(energy_pred)
             if "energy" in self.active_terms:
                 values["energy"] = (energy_pred, energy_true)
             if "energy_per_atom" in self.active_terms:
@@ -150,7 +150,11 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
                 raise ValueError(
                     "Predicted energy is not differentiable with respect to positions."
                 )
-            values["forces"] = (-gradient.float(), data.forces.float())
+            force_prediction = -gradient
+            values["forces"] = (
+                force_prediction,
+                data.forces.to(force_prediction),
+            )
         return values
 
     def energy_force_loss(self, pred, data, create_graph=True):
