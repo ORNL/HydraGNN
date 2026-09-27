@@ -215,6 +215,10 @@ pip_retry() {
   local do_filter=1
   for a in "${raw_args[@]}"; do
     case "$a" in
+      -r|--requirement|-c|--constraint)
+        # Requirement and constraint files must reach pip intact; the
+        # package-by-package metadata filter cannot represent their contents.
+        do_filter=0; break;;
       "."|"-e"|./*|../*|/*|git+*|http*|https*|file:*)
         do_filter=0; break;;
     esac

@@ -38,12 +38,21 @@ class RadiusInteractionGraph(nn.Module):
         self.max_num_neighbors = max_num_neighbors
 
     def forward(self, pos: Tensor, batch: Tensor):
+        # torch_cluster provides CPU and CUDA/ROCm kernels, but not kernels for
+        # every accelerator supported by PyTorch (for example XPU). Build the
+        # discrete neighbor list on CPU for those devices, then calculate
+        # distances from the original positions so their autograd graph stays
+        # on the training device.
+        graph_device_supported = pos.device.type in {"cpu", "cuda"}
+        graph_pos = pos if graph_device_supported else pos.cpu()
+        graph_batch = batch if graph_device_supported or batch is None else batch.cpu()
         edge_index = radius_graph(
-            pos,
+            graph_pos,
             r=self.cutoff,
-            batch=batch,
+            batch=graph_batch,
             max_num_neighbors=self.max_num_neighbors,
         )
+        edge_index = edge_index.to(pos.device)
         row, col = edge_index
         edge_weight = (pos[row] - pos[col]).norm(dim=-1)
         return edge_index, edge_weight
