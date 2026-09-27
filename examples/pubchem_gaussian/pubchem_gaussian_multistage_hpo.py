@@ -119,6 +119,32 @@ def auxiliary_score(losses, scales):
     return sum(values) / len(values)
 
 
+def screen_metric_scales(results):
+    """Derive finite metric scales from trials with complete primary losses."""
+    eligible_losses = []
+    for result in results:
+        losses = result.get("losses")
+        if losses is None or any(
+            name not in losses or not math.isfinite(losses[name])
+            for name in PRIMARY_METRICS
+        ):
+            continue
+        eligible_losses.append(losses)
+    if not eligible_losses:
+        raise RuntimeError("No screen-stage trial completed with finite primary losses")
+
+    scales = {}
+    for name in PRIMARY_METRICS + AUXILIARY_METRICS:
+        values = [
+            losses[name]
+            for losses in eligible_losses
+            if name in losses and math.isfinite(losses[name])
+        ]
+        if values:
+            scales[name] = max(statistics.median(values), 1.0e-12)
+    return scales
+
+
 def rank_with_auxiliary_tiebreakers(results, scales, relative_tolerance=0.02):
     """Rank auxiliaries only inside the primary-best model's error envelope.
 
@@ -377,20 +403,7 @@ def main():
             results = [future.result() for future in as_completed(futures)]
 
         if scales is None:
-            finite_losses = [result["losses"] for result in results if result["losses"]]
-            if not finite_losses:
-                raise RuntimeError("No screen-stage trial completed with finite losses")
-            metric_names = PRIMARY_METRICS + AUXILIARY_METRICS
-            scales = {
-                name: max(
-                    statistics.median(
-                        loss[name] for loss in finite_losses if name in loss
-                    ),
-                    1.0e-12,
-                )
-                for name in metric_names
-                if any(name in loss for loss in finite_losses)
-            }
+            scales = screen_metric_scales(results)
             (output_dir / "objective_scales.json").write_text(
                 json.dumps(scales, indent=4) + "\n"
             )

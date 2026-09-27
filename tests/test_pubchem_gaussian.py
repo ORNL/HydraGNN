@@ -7,6 +7,7 @@
 import importlib.util
 import io
 import json
+import math
 from pathlib import Path
 import tarfile
 
@@ -27,6 +28,7 @@ from examples.pubchem_gaussian.pubchem_gaussian_multistage_hpo import (
     normalized_score,
     rank_with_auxiliary_tiebreakers,
     sample_candidates,
+    screen_metric_scales,
 )
 
 
@@ -229,6 +231,42 @@ def test_pubchem_multistage_score_uses_fixed_metric_scales():
     scales = {"Energy": 1.0, "Forces": 5.0, "Hessian": 20.0}
 
     assert normalized_score(losses, scales) == pytest.approx(2.0)
+
+
+def test_pubchem_multistage_screen_scales_ignore_nonfinite_losses():
+    results = [
+        {
+            "losses": {
+                "Energy": 1.0,
+                "Forces": 2.0,
+                "Hessian": 3.0,
+                "dipole_magnitude": 4.0,
+            }
+        },
+        {
+            "losses": {
+                "Energy": 3.0,
+                "Forces": 4.0,
+                "Hessian": 5.0,
+                "dipole_magnitude": math.nan,
+            }
+        },
+        {
+            "losses": {
+                "Energy": math.inf,
+                "Forces": 100.0,
+                "Hessian": 100.0,
+                "dipole_magnitude": 1000.0,
+            }
+        },
+    ]
+
+    assert screen_metric_scales(results) == {
+        "Energy": 2.0,
+        "Forces": 3.0,
+        "Hessian": 4.0,
+        "dipole_magnitude": 4.0,
+    }
 
 
 def test_pubchem_multistage_uses_auxiliaries_only_inside_primary_tolerance():
