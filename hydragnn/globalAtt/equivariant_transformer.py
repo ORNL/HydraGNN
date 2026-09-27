@@ -36,6 +36,31 @@ class EquivariantRMSNorm(torch.nn.Module):
         self.epsilon = epsilon
         self.gain = torch.nn.Parameter(torch.ones(1))
 
+    def _load_from_state_dict(
+        self,
+        state_dict,
+        prefix,
+        local_metadata,
+        strict,
+        missing_keys,
+        unexpected_keys,
+        error_msgs,
+    ):
+        gain_key = prefix + "gain"
+        if gain_key in state_dict and state_dict[gain_key].ndim == 0:
+            # FSDP requires a non-scalar parameter, but older checkpoints
+            # stored this gain with shape []. Migrate only that legacy form.
+            state_dict[gain_key] = state_dict[gain_key].reshape(1)
+        super()._load_from_state_dict(
+            state_dict,
+            prefix,
+            local_metadata,
+            strict,
+            missing_keys,
+            unexpected_keys,
+            error_msgs,
+        )
+
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         if features.ndim != 2 or features.shape[1] != self.irreps.dim:
             raise ValueError(f"features must have shape [N, {self.irreps.dim}]")

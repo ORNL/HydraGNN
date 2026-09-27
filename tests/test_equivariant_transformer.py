@@ -46,6 +46,15 @@ def test_equivariant_rms_norm_is_rotation_equivariant():
     )
 
 
+def test_equivariant_rms_norm_loads_legacy_scalar_gain():
+    norm = EquivariantRMSNorm("2x0e + 1x1o")
+
+    norm.load_state_dict({"gain": torch.tensor(2.5)}, strict=True)
+
+    assert norm.gain.shape == (1,)
+    assert norm.gain.item() == pytest.approx(2.5)
+
+
 def test_equivariant_transformer_layer_preserves_se3_equivariance():
     torch.manual_seed(21)
     irreps, features, positions, batch = _sample()
