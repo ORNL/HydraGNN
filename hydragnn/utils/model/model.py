@@ -59,6 +59,8 @@ def loss_function_selection(loss_function_string: str):
         return lambda x, y: torch.sqrt(torch.nn.functional.mse_loss(x, y))
     elif loss_function_string == "GaussianNLLLoss":
         return torch.nn.GaussianNLLLoss()
+    elif loss_function_string == "binary_cross_entropy":
+        return torch.nn.functional.binary_cross_entropy_with_logits
     else:
         ImportError
 
@@ -282,6 +284,23 @@ def load_existing_model(
                     graph_attr_dim=graph_attr_dim,
                     channel_dim=channel_dim,
                     device=target_model.device,
+                )
+
+        # Ensure per-edge-type projectors (e.g. HeteroHEATStack.edge_lin_dict)
+        # exist before strict load: they are created lazily on first forward
+        # pass, so a freshly constructed model won't have these keys yet.
+        if hasattr(target_model, "_ensure_edge_projector"):
+            edge_lin_marker = "edge_lin_dict."
+            for key, tensor in state_dict.items():
+                if edge_lin_marker not in key or not key.endswith(".weight"):
+                    continue
+                edge_type_key = key.split(edge_lin_marker, 1)[1][: -len(".weight")]
+                existing = getattr(target_model, "edge_lin_dict", None)
+                if existing is not None and edge_type_key in existing:
+                    continue
+                edge_attr_dim = tensor.shape[1]
+                target_model._ensure_edge_projector(
+                    edge_type_key, edge_attr_dim, target_model.device
                 )
 
         ## Load with FSDP

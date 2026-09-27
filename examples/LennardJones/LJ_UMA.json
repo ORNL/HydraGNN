@@ -55,6 +55,7 @@
     }
   },
   "Variables": {
+        "graph_type": "homogeneous",
     "inputs": [
       {"name": "atomic_numbers", "level": "node", "dim": 1},
       {"name": "pos", "level": "node", "dim": 3, "role": "position"}

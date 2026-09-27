@@ -144,6 +144,9 @@ pip_retry igraph
 pip_retry mendeleev==1.2.0
 pip_retry lmdb
 pip_retry h5py==3.16.0
+pip_retry pandas==2.3.3
+pip_retry pyarrow
+pip_retry pandapower==3.5.4
 pip_retry tensorflow
 pip_retry tensorflow_datasets
 pip_retry vesin==0.4.2

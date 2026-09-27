@@ -39,3 +39,7 @@ from .graph_dataset import (
     load_prepared_graph_dataset,
     load_pickled_graphs,
 )
+from .positional_encodings import (
+    create_positional_encoder,
+    add_relative_pe,
+)

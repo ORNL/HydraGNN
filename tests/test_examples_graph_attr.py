@@ -19,6 +19,7 @@ import torch_geometric
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
 
 import hydragnn
+from tests.md17_fixture import create_md17_raw_fixture
 
 
 def _load_example_module(module_path, module_name):
@@ -67,13 +68,14 @@ def test_examples_graph_attr(tmp_path, example, graph_attr_mode):
         )
         compute_edges = hydragnn.preprocess.get_radius_graph_config(arch_config)
         torch_geometric.datasets.MD17.file_names["uracil"] = "md17_uracil.npz"
+        cache_root = tmp_path / "md17"
+        create_md17_raw_fixture(cache_root)
         dataset = torch_geometric.datasets.MD17(
-            root=os.path.join(tmp_path, "md17"),
+            root=cache_root,
             name="uracil",
             pre_transform=lambda data: md17_module.md17_pre_transform(
                 data, compute_edges, transform
             ),
-            pre_filter=md17_module.md17_pre_filter,
         )
 
     sample = dataset[0]
