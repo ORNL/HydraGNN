@@ -132,6 +132,7 @@ def create_model_config(
         graph_attr_conditioning_mode=config["Architecture"].get(
             "graph_attr_conditioning_mode", "concat_node"
         ),
+        graph_attr_dim=config["Architecture"].get("graph_attr_dim"),
         graph_pooling=config["Architecture"].get("graph_pooling", "mean"),
         equivariant_attn_lmax=config["Architecture"].get("equivariant_attn_lmax", 1),
         equivariant_attn_num_radial=config["Architecture"].get(
@@ -323,6 +324,7 @@ def create_model(
     hessian_weight: float = 0.0,
     use_graph_attr_conditioning: bool = False,
     graph_attr_conditioning_mode: str = "fuse_pool",
+    graph_attr_dim: int | None = None,
     graph_pooling: str = "mean",
     equivariant_attn_lmax: int = 1,
     equivariant_attn_num_radial: int = 16,
@@ -977,6 +979,14 @@ def create_model(
 
     model.configure_input_feature_encoders(input_node_encodings)
     model.atomistic_mode_enabled = bool(enable_interatomic_potential)
+
+    if use_graph_attr_conditioning and graph_attr_dim is not None:
+        if model.graph_attr_conditioning_mode == "film":
+            model._ensure_graph_conditioner(graph_attr_dim, device)
+        elif model.graph_attr_conditioning_mode == "concat_node":
+            model._ensure_graph_concat_projector(graph_attr_dim, hidden_dim, device)
+        elif model.graph_attr_conditioning_mode == "fuse_pool":
+            model._ensure_graph_pool_projector(graph_attr_dim, hidden_dim, device)
 
     # Apply interatomic potential enhancement if requested
     if enable_interatomic_potential:

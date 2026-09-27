@@ -142,6 +142,7 @@ def update_config(config, train_loader, val_loader, test_loader):
     named_graph_dim = schema_dimensions(named_schema, "graph", "inputs")
     if named_graph_dim:
         config["NeuralNetwork"]["Architecture"]["use_graph_attr_conditioning"] = True
+        config["NeuralNetwork"]["Architecture"]["graph_attr_dim"] = named_graph_dim
     config["NeuralNetwork"]["Architecture"]["output_dim"] = [
         spec.dim for spec in outputs
     ]

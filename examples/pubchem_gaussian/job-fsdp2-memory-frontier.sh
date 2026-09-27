@@ -84,13 +84,16 @@ run_mode() {
         | tee -a "${RESULT_DIR}/summary.txt"
     grep -E 'fsdp2-sharding|Max memory allocated after optimizer step|OutOfMemoryError|out of memory' \
         "${log_path}" | tail -n 16 >>"${RESULT_DIR}/summary.txt" || true
+    return "${status}"
 }
 
 : >"${RESULT_DIR}/summary.txt"
+overall_status=0
 if [[ "${RUN_DDP}" == "1" ]]; then
-    run_mode ddp
+    run_mode ddp || overall_status=$?
 fi
 if [[ "${RUN_FSDP2}" == "1" ]]; then
-    run_mode fsdp2
+    run_mode fsdp2 || overall_status=$?
 fi
 cat "${RESULT_DIR}/summary.txt"
+exit "${overall_status}"

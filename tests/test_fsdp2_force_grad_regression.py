@@ -35,6 +35,7 @@ def _build_tiny_interatomic_batch(num_nodes=4):
     batch = torch.zeros(num_nodes, dtype=torch.long)
     energy = torch.randn(1, 1, dtype=torch.float32)
     forces = torch.randn(num_nodes, 3, dtype=torch.float32)
+    hessian = torch.randn(3 * num_nodes, 3 * num_nodes, dtype=torch.float32)
     pe = torch.randn(num_nodes, 6, dtype=torch.float32)
 
     edge_index = []
@@ -51,6 +52,8 @@ def _build_tiny_interatomic_batch(num_nodes=4):
         batch=batch,
         energy=energy,
         forces=forces,
+        hessian=hessian,
+        graph_attr=torch.randn(1, 2, dtype=torch.float32),
         pe=pe,
         edge_shifts=torch.zeros(edge_index.size(1), 3, dtype=torch.float32),
     )
@@ -129,6 +132,9 @@ def test_fsdp2_enhanced_wrapper_force_grad_regression(
                     equivariant_attn_feedforward_multiplier=4,
                     equivariant_attn_allow_scalar_only=True,
                     equivariant_attn_require_tensor_coupling=False,
+                    use_graph_attr_conditioning=True,
+                    graph_attr_conditioning_mode="concat_node",
+                    graph_attr_dim=2,
                 )
 
             global_attn_engine = (
@@ -155,6 +161,7 @@ def test_fsdp2_enhanced_wrapper_force_grad_regression(
                 energy_weight=1.0,
                 energy_peratom_weight=1.0,
                 force_weight=1.0,
+                hessian_weight=1.0 if mpnn_type == "DimeNet" else 0.0,
                 use_gpu=True,
                 **model_options,
             )
@@ -187,7 +194,7 @@ def test_fsdp2_enhanced_wrapper_force_grad_regression(
                 model,
                 optimizer,
                 verbosity=0,
-                num_tasks=3,
+                num_tasks=4 if mpnn_type == "DimeNet" else 3,
                 compute_grad_energy=True,
                 precision=precision,
             )
@@ -198,7 +205,7 @@ def test_fsdp2_enhanced_wrapper_force_grad_regression(
         init_path.unlink(missing_ok=True)
 
     assert torch.isfinite(train_error)
-    assert len(task_errors) == 3
+    assert len(task_errors) == (4 if mpnn_type == "DimeNet" else 3)
     assert torch.isfinite(task_errors).all()
     assert reshard_calls, "Expected FSDP2 reshard toggling calls"
     assert reshard_calls[0] is False
