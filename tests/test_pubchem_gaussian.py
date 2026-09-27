@@ -5,6 +5,7 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 import importlib.util
+import inspect
 import io
 import json
 import math
@@ -14,7 +15,7 @@ import tarfile
 import pytest
 import torch
 
-from hydragnn.models.create import compute_forces_and_hessian
+from hydragnn.models.create import compute_forces_and_hessian, create_model
 
 from examples.pubchem_gaussian.pubchem_gaussian_hpo import (
     _trial_command,
@@ -127,6 +128,12 @@ def test_pubchem_hpo_configures_architecture_and_conditional_attention():
     allscaip_architecture = allscaip["NeuralNetwork"]["Architecture"]
     assert allscaip_architecture["allscaip_num_heads"] == 2
     assert allscaip_architecture["allscaip_freq_list"] is None
+
+
+def test_hessian_weight_is_keyword_only():
+    parameter = inspect.signature(create_model).parameters["hessian_weight"]
+
+    assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
 
 
 def test_pubchem_hpo_primary_campaign_removes_auxiliary_heads():
@@ -432,6 +439,22 @@ def test_pubchem_archive_limits_report_shortfall():
 
     assert limits == {0: 2, 1: 1}
     assert unavailable == 2
+
+
+@pytest.mark.parametrize("member", ["../escape.tar", "/absolute.tar", "."])
+def test_pubchem_outer_archive_rejects_unsafe_member_paths(tmp_path, member):
+    example = _load_example_module()
+
+    with pytest.raises(ValueError, match="unsafe archive path"):
+        example._safe_zstd_member_target(tmp_path, member)
+
+
+def test_pubchem_outer_archive_resolves_safe_member_path(tmp_path):
+    example = _load_example_module()
+
+    target = example._safe_zstd_member_target(tmp_path, "nested/123.tar")
+
+    assert target == (tmp_path / "nested" / "123.tar").resolve()
 
 
 def test_pubchem_mpi_degree_histogram_does_not_require_torch_distributed():

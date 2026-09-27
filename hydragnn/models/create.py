@@ -355,7 +355,6 @@ def create_model(
     energy_weight: float = 0.0,
     energy_peratom_weight: float = 0.0,
     force_weight: float = 0.0,
-    hessian_weight: float = 0.0,
     use_graph_attr_conditioning: bool = False,
     graph_attr_dim: int = 0,
     graph_attr_conditioning_mode: str = "fuse_pool",
@@ -417,6 +416,7 @@ def create_model(
     periodic_boundary_conditions: bool = False,
     attn_only: bool = False,
     *,
+    hessian_weight: float = 0.0,
     equivariant_attn_num_hidden_layers: int = 1,
 ):
     timer = Timer("create_model")

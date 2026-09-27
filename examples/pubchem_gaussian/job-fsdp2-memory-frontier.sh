@@ -90,10 +90,16 @@ run_mode() {
 : >"${RESULT_DIR}/summary.txt"
 overall_status=0
 if [[ "${RUN_DDP}" == "1" ]]; then
-    run_mode ddp || overall_status=$?
+    run_mode ddp || {
+        status=$?
+        [[ ${overall_status} -ne 0 ]] || overall_status=${status}
+    }
 fi
 if [[ "${RUN_FSDP2}" == "1" ]]; then
-    run_mode fsdp2 || overall_status=$?
+    run_mode fsdp2 || {
+        status=$?
+        [[ ${overall_status} -ne 0 ]] || overall_status=${status}
+    }
 fi
 cat "${RESULT_DIR}/summary.txt"
 exit "${overall_status}"

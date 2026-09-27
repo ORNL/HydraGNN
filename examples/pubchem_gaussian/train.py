@@ -407,6 +407,28 @@ def _allocate_archive_limits(available_counts, limit):
     return archive_limits, remaining
 
 
+def _safe_zstd_member_target(destination, member):
+    """Resolve an outer archive member below destination or reject it."""
+    root = Path(destination).resolve()
+    target = (root / member).resolve()
+    if target == root or root not in target.parents:
+        raise ValueError(f"unsafe archive path: {member}")
+    return target
+
+
+def _extract_zstd_member(archive, member, destination):
+    """Stream one zstd-compressed tar member without creating archive links."""
+    target = _safe_zstd_member_target(destination, member)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("wb") as output:
+        subprocess.run(
+            ["tar", "--zstd", "-xOf", str(archive), member],
+            check=True,
+            stdout=output,
+        )
+    return target
+
+
 def extract_records(archive_dir, output_dir, limit, comm, rank, world_size):
     output_dir.mkdir(parents=True, exist_ok=True)
     stale_directories = None
@@ -475,12 +497,8 @@ def extract_records(archive_dir, output_dir, limit, comm, rank, world_size):
         with tempfile.TemporaryDirectory(
             dir=output_dir.parent, prefix=f".extract-rank-{rank}-"
         ) as temporary_dir:
-            subprocess.run(
-                ["tar", "--zstd", "-xf", str(archive), "-C", temporary_dir, *members],
-                check=True,
-            )
             for member in members:
-                nested_archive = Path(temporary_dir) / member
+                nested_archive = _extract_zstd_member(archive, member, temporary_dir)
                 target = output_dir / nested_archive.stem
                 if target.exists():
                     continue
