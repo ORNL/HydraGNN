@@ -64,7 +64,6 @@ class Base(Module):
         graph_attr_conditioning_mode: str = "concat_node",
         equivariant_attn_lmax: int = 1,
         equivariant_attn_num_radial: int = 16,
-        equivariant_attn_num_hidden_layers: int = 1,
         equivariant_attn_feedforward_multiplier: int = 2,
         equivariant_attn_allow_scalar_only: bool = False,
         equivariant_attn_require_tensor_coupling: bool = True,
@@ -72,6 +71,7 @@ class Base(Module):
         equivariant_attn_coupling_mode: str = "parallel",
         equivariant_attn_periodic: bool = False,
         equivariant_attn_periodic_replication: int | list[int] = 1,
+        equivariant_attn_num_hidden_layers: int = 1,
     ):
         super().__init__()
         self.device = get_device()

@@ -328,7 +328,6 @@ def create_model(
     graph_pooling: str = "mean",
     equivariant_attn_lmax: int = 1,
     equivariant_attn_num_radial: int = 16,
-    equivariant_attn_num_hidden_layers: int = 1,
     equivariant_attn_feedforward_multiplier: int = 2,
     equivariant_attn_allow_scalar_only: bool = False,
     equivariant_attn_require_tensor_coupling: bool = True,
@@ -373,6 +372,7 @@ def create_model(
     verbosity: int = 0,
     use_gpu: bool = True,
     periodic_boundary_conditions: bool = False,
+    equivariant_attn_num_hidden_layers: int = 1,
 ):
     timer = Timer("create_model")
     timer.start()

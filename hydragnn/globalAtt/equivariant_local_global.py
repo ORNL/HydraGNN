@@ -38,7 +38,6 @@ class EquivariantLocalGlobalConv(torch.nn.Module):
         heads: int,
         lmax: int,
         num_radial: int,
-        num_hidden_layers: int,
         feedforward_multiplier: int,
         allow_scalar_only: bool,
         require_tensor_coupling: bool,
@@ -48,6 +47,7 @@ class EquivariantLocalGlobalConv(torch.nn.Module):
         periodic_replication: int | tuple[int, int, int] | list[int] = 1,
         coupling_mode: str = "parallel",
         irreps: str | None = None,
+        num_hidden_layers: int = 1,
     ):
         super().__init__()
         if coupling_mode not in {"parallel", "sequential"}:

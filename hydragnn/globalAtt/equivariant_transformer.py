@@ -86,10 +86,10 @@ class EquivariantTransformerLayer(torch.nn.Module):
         heads: int = 1,
         lmax: int = 1,
         num_radial: int = 16,
-        num_hidden_layers: int = 1,
         feedforward_multiplier: int = 2,
         require_tensor_coupling: bool = True,
         chunk_size: int | None = None,
+        num_hidden_layers: int = 1,
     ):
         super().__init__()
         self.irreps = o3.Irreps(irreps)
