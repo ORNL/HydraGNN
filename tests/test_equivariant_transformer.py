@@ -90,6 +90,9 @@ def test_equivariant_transformer_preserves_legacy_positional_arguments():
     assert layer.feedforward[0].irreps_out == o3.Irreps("8x0e + 4x1o")
     assert len(layer.feedforward) == 3
 
+    with pytest.raises(TypeError):
+        EquivariantTransformerLayer("2x0e + 1x1o", 2, 1, 16, 4, True, None, 3)
+
 
 def test_equivariant_transformer_layer_is_permutation_equivariant():
     torch.manual_seed(22)

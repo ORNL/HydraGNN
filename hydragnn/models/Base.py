@@ -72,6 +72,7 @@ class Base(Module):
         equivariant_attn_periodic: bool = False,
         equivariant_attn_periodic_replication: int | list[int] = 1,
         attn_only: bool = False,
+        *,
         equivariant_attn_num_hidden_layers: int = 1,
     ):
         super().__init__()

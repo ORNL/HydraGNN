@@ -89,6 +89,7 @@ class EquivariantTransformerLayer(torch.nn.Module):
         feedforward_multiplier: int = 2,
         require_tensor_coupling: bool = True,
         chunk_size: int | None = None,
+        *,
         num_hidden_layers: int = 1,
     ):
         super().__init__()

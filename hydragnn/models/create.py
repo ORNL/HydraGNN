@@ -416,6 +416,7 @@ def create_model(
     use_gpu: bool = True,
     periodic_boundary_conditions: bool = False,
     attn_only: bool = False,
+    *,
     equivariant_attn_num_hidden_layers: int = 1,
 ):
     timer = Timer("create_model")
