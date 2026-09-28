@@ -126,7 +126,11 @@ def _model(mpnn_type="EGNN", atomistic=False, encodings=None, input_dim=1, heads
                         {
                             "variable": "forces",
                             "weight": 1.0,
-                            "prediction": {"operator": "negative_gradient"},
+                            "prediction": {
+                                "operator": "negative_gradient",
+                                "of": "energy",
+                                "with_respect_to": "positions",
+                            },
                         },
                     ],
                 },

@@ -6,7 +6,7 @@ import pytest
 from hydragnn.utils.input_config_parsing import get_variable_schema
 
 EXAMPLES = Path(__file__).parents[1] / "examples"
-INTERATOMIC_TERMS = {"energy", "energy_per_atom", "forces"}
+INTERATOMIC_TERMS = {"energy", "energy_per_atom", "forces", "hessian"}
 OPF_OPERATORS = {
     "voltage_limits": "bounded",
     "angle_limits": "edge_difference_bounded",
@@ -66,9 +66,15 @@ def test_interatomic_examples_use_declarative_conservative_loss(path, config, lo
     if "energy_per_atom" in by_variable:
         assert by_variable["energy_per_atom"].get("normalization") == "per_atom", path
     if "forces" in by_variable:
-        assert by_variable["forces"].get("prediction", {}).get("operator") == (
-            "negative_gradient"
-        ), path
+        prediction = by_variable["forces"].get("prediction", {})
+        assert prediction.get("operator") == "negative_gradient", path
+        assert prediction.get("of") == "energy", path
+        assert prediction.get("with_respect_to") == "positions", path
+    if "hessian" in by_variable:
+        prediction = by_variable["hessian"].get("prediction", {})
+        assert prediction.get("operator") == "hessian", path
+        assert prediction.get("of") == "energy", path
+        assert prediction.get("with_respect_to") == "positions", path
     graph_outputs = {
         output["name"]
         for output in config["Variables"]["outputs"]

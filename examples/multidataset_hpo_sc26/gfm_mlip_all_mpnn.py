@@ -151,7 +151,7 @@ if __name__ == "__main__":
         help="Precision to use; defaults to fp64 and overrides the JSON unless explicitly set",
     )
     parser.add_argument(
-        "--force_weight",
+        "--force_loss_weight",
         type=float,
         default=None,
         help="Override Training.loss.supervised force-term weight.",
@@ -253,11 +253,11 @@ if __name__ == "__main__":
     set_param_value("mpnn_type")
     set_param_value("hidden_dim")
     set_param_value("num_conv_layers")
-    if args.force_weight is not None:
+    if args.force_loss_weight is not None:
         terms = config["NeuralNetwork"]["Training"]["loss"]["supervised"]["terms"]
         next(term for term in terms if term["variable"] == "forces")[
             "weight"
-        ] = args.force_weight
+        ] = args.force_loss_weight
 
     set_param_value("num_filters")
     set_param_value("num_gaussians")
@@ -1008,7 +1008,7 @@ if __name__ == "__main__":
     else:
         context = nullcontext()
 
-    enable_interatomic_potential = uses_interatomic_potential(config)
+    interatomic_loss_enabled = uses_interatomic_potential(config)
 
     with context:
         hydragnn.train.train_validate_test(
@@ -1023,7 +1023,7 @@ if __name__ == "__main__":
             log_name,
             verbosity,
             create_plots=False,
-            compute_grad_energy=enable_interatomic_potential,
+            compute_grad_energy=interatomic_loss_enabled,
             precision=precision,
         )
 

@@ -7,8 +7,21 @@ from hydragnn.utils.model import loss_function_selection
 class InteratomicPotentialDomainLoss(torch.nn.Module):
     """Declarative energy/force training objective for interatomic potentials."""
 
-    _SUPPORTED_TERMS = {"energy", "energy_per_atom", "forces"}
+    _SUPPORTED_TERMS = {"energy", "energy_per_atom", "forces", "hessian"}
     requires_find_unused_parameters = True
+
+    @staticmethod
+    def _validate_energy_derivative(name, prediction, operator):
+        expected = {
+            "operator": operator,
+            "of": "energy",
+            "with_respect_to": "positions",
+        }
+        for field, value in expected.items():
+            if prediction.get(field) != value:
+                raise ValueError(
+                    f"The {name} term requires prediction.{field}={value!r}."
+                )
 
     def __init__(self, model, config):
         super().__init__()
@@ -36,10 +49,10 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
             )
         if "forces" in self.active_terms:
             prediction = self.terms["forces"].get("prediction", {})
-            if prediction.get("operator") != "negative_gradient":
-                raise ValueError(
-                    "The forces term requires prediction.operator='negative_gradient'."
-                )
+            self._validate_energy_derivative("forces", prediction, "negative_gradient")
+        if "hessian" in self.active_terms:
+            prediction = self.terms["hessian"].get("prediction", {})
+            self._validate_energy_derivative("hessian", prediction, "hessian")
         expected = {
             "energy": ("energy", "per_structure"),
             "energy_per_atom": ("energy_per_atom", "per_atom"),
@@ -85,6 +98,8 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
         return self.model(data)
 
     def _loss(self, name, prediction, target):
+        if prediction.numel() == 0:
+            return prediction.sum()
         loss_name = self.terms[name].get(
             "metric",
             self.config.get("supervised", {}).get(
@@ -113,12 +128,12 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
 
     def prediction_target_pairs(self, pred, data, create_graph=True):
         """Build predictions and targets for the configured active terms."""
-        if data.pos is None:
+        if getattr(data, "pos", None) is None:
             raise ValueError("Interatomic training loss requires data.pos.")
         needs_energy_target = bool(
             {"energy", "energy_per_atom"}.intersection(self.active_terms)
         )
-        if needs_energy_target and data.energy is None:
+        if needs_energy_target and getattr(data, "energy", None) is None:
             raise ValueError(
                 "Enabled energy terms require an energy target in data.energy."
             )
@@ -140,9 +155,17 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
                     energy_true / atom_counts,
                 )
 
-        if "forces" in self.active_terms:
-            if data.forces is None:
+        needs_derivatives = bool({"forces", "hessian"}.intersection(self.active_terms))
+        if needs_derivatives:
+            if "forces" in self.active_terms and getattr(data, "forces", None) is None:
                 raise ValueError("The enabled forces term requires data.forces.")
+            if (
+                "hessian" in self.active_terms
+                and getattr(data, "hessian", None) is None
+            ):
+                raise ValueError("The enabled hessian term requires data.hessian.")
+            if "hessian" in self.active_terms and data.num_graphs != 1:
+                raise ValueError("Hessian loss currently requires batch size 1.")
             if not energy_pred.requires_grad:
                 raise ValueError(
                     "Predicted energy is not differentiable with respect to positions."
@@ -152,7 +175,7 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
                 data.pos,
                 grad_outputs=torch.ones_like(energy_pred),
                 retain_graph=energy_pred.requires_grad,
-                create_graph=create_graph,
+                create_graph=create_graph or "hessian" in self.active_terms,
                 allow_unused=True,
             )[0]
             if gradient is None:
@@ -160,10 +183,32 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
                     "Predicted energy is not differentiable with respect to positions."
                 )
             force_prediction = -gradient
-            values["forces"] = (
-                force_prediction,
-                data.forces.to(force_prediction),
-            )
+            if "forces" in self.active_terms:
+                force_target = data.forces.to(force_prediction)
+                finite = torch.isfinite(force_target)
+                values["forces"] = (
+                    force_prediction[finite],
+                    force_target[finite],
+                )
+            if "hessian" in self.active_terms:
+                rows = []
+                for component in force_prediction.reshape(-1):
+                    force_gradient = torch.autograd.grad(
+                        component,
+                        data.pos,
+                        retain_graph=True,
+                        create_graph=create_graph,
+                    )[0]
+                    rows.append(-force_gradient.reshape(-1))
+                hessian_prediction = torch.stack(rows)
+                hessian_target = data.hessian.to(hessian_prediction).reshape_as(
+                    hessian_prediction
+                )
+                finite = torch.isfinite(hessian_target)
+                values["hessian"] = (
+                    hessian_prediction[finite],
+                    hessian_target[finite],
+                )
         return values
 
     def energy_force_loss(self, pred, data, create_graph=True):

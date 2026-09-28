@@ -144,7 +144,11 @@ def test_fsdp2_enhanced_wrapper_force_grad_regression(
                             {
                                 "variable": "forces",
                                 "weight": 1.0,
-                                "prediction": {"operator": "negative_gradient"},
+                                "prediction": {
+                                    "operator": "negative_gradient",
+                                    "of": "energy",
+                                    "with_respect_to": "positions",
+                                },
                             },
                         ],
                     },

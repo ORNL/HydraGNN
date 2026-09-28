@@ -5,7 +5,6 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 import importlib.util
-import inspect
 import io
 import json
 import math
@@ -15,7 +14,7 @@ import tarfile
 import pytest
 import torch
 
-from hydragnn.models.create import compute_forces_and_hessian, create_model
+from hydragnn.models.create import compute_forces_and_hessian
 
 from examples.pubchem_gaussian.pubchem_gaussian_hpo import (
     _trial_command,
@@ -45,9 +44,9 @@ def _hpo_parameters(**updates):
     parameters = {
         "mpnn_type": "SchNet",
         "use_equivariant_graph_transformer": "on",
-        "energy_weight": 0.1,
-        "force_weight": 1.0,
-        "hessian_weight": 10.0,
+        "energy_loss_weight": 0.1,
+        "force_loss_weight": 1.0,
+        "hessian_loss_weight": 10.0,
         "num_conv_layers": 3,
         "hidden_dim": 128,
         "global_attn_heads": 4,
@@ -70,6 +69,10 @@ def test_pubchem_hpo_configures_architecture_and_conditional_attention():
         _hpo_parameters(),
     )
     architecture = config["NeuralNetwork"]["Architecture"]
+    loss_terms = {
+        term["variable"]: term
+        for term in config["NeuralNetwork"]["Training"]["loss"]["supervised"]["terms"]
+    }
 
     assert architecture["mpnn_type"] == "SchNet"
     assert architecture["num_conv_layers"] == 3
@@ -77,9 +80,9 @@ def test_pubchem_hpo_configures_architecture_and_conditional_attention():
     assert architecture["global_attn_engine"] == "EquivariantTransformer"
     assert architecture["global_attn_type"] == ""
     assert architecture["global_attn_heads"] == 4
-    assert architecture["energy_weight"] == pytest.approx(0.1)
-    assert architecture["force_weight"] == pytest.approx(1.0)
-    assert architecture["hessian_weight"] == pytest.approx(10.0)
+    assert loss_terms["energy"]["weight"] == pytest.approx(0.1)
+    assert loss_terms["forces"]["weight"] == pytest.approx(1.0)
+    assert loss_terms["hessian"]["weight"] == pytest.approx(10.0)
     assert architecture["equivariant_attn_num_hidden_layers"] == 3
     assert architecture["equivariant_attn_feedforward_multiplier"] == 4
     assert architecture["equivariant_attn_allow_scalar_only"] is True
@@ -130,10 +133,19 @@ def test_pubchem_hpo_configures_architecture_and_conditional_attention():
     assert allscaip_architecture["allscaip_freq_list"] is None
 
 
-def test_hessian_weight_is_keyword_only():
-    parameter = inspect.signature(create_model).parameters["hessian_weight"]
+def test_hessian_uses_declarative_domain_loss():
+    config_path = (
+        Path(__file__).parents[1]
+        / "examples"
+        / "pubchem_gaussian"
+        / "pubchem_gaussian.json"
+    )
+    config = json.loads(config_path.read_text())
+    loss = config["NeuralNetwork"]["Training"]["loss"]
+    terms = {term["variable"]: term for term in loss["supervised"]["terms"]}
 
-    assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+    assert loss["provider"] == "interatomic_potential"
+    assert terms["hessian"]["prediction"]["operator"] == "hessian"
 
 
 def test_pubchem_hpo_primary_campaign_removes_auxiliary_heads():
@@ -188,12 +200,12 @@ def test_pubchem_hpo_trial_command_uses_requested_nodes_and_gpus(monkeypatch, tm
 def test_pubchem_hpo_objective_uses_latest_named_validation_losses(tmp_path):
     log_path = tmp_path / "trial.log"
     log_path.write_text(
-        "Energy Train Loss: 9, Val Loss: 9, Test Loss: 9\n"
-        "Forces Train Loss: 9, Val Loss: 9, Test Loss: 9\n"
-        "Hessian Train Loss: 9, Val Loss: 9, Test Loss: 9\n"
-        "Energy Train Loss: 1, Val Loss: 2, Test Loss: 3\n"
-        "Forces Train Loss: 4, Val Loss: 5, Test Loss: 6\n"
-        "Hessian Train Loss: 7, Val Loss: 8, Test Loss: 9\n"
+        "energy Train Loss: 9, Val Loss: 9, Test Loss: 9\n"
+        "forces Train Loss: 9, Val Loss: 9, Test Loss: 9\n"
+        "hessian Train Loss: 9, Val Loss: 9, Test Loss: 9\n"
+        "energy Train Loss: 1, Val Loss: 2, Test Loss: 3\n"
+        "forces Train Loss: 4, Val Loss: 5, Test Loss: 6\n"
+        "hessian Train Loss: 7, Val Loss: 8, Test Loss: 9\n"
         "thermochemistry Train Loss: 1e9, Val Loss: 1e9, Test Loss: 1e9\n"
     )
 
@@ -203,20 +215,20 @@ def test_pubchem_hpo_objective_uses_latest_named_validation_losses(tmp_path):
 def test_pubchem_hpo_collects_auxiliary_losses_from_latest_epoch(tmp_path):
     log_path = tmp_path / "trial.log"
     log_path.write_text(
-        "Energy Train Loss: 9, Val Loss: 9, Test Loss: 9\n"
-        "Forces Train Loss: 9, Val Loss: 9, Test Loss: 9\n"
-        "Hessian Train Loss: 9, Val Loss: 9, Test Loss: 9\n"
+        "energy Train Loss: 9, Val Loss: 9, Test Loss: 9\n"
+        "forces Train Loss: 9, Val Loss: 9, Test Loss: 9\n"
+        "hessian Train Loss: 9, Val Loss: 9, Test Loss: 9\n"
         "dipole_magnitude Train Loss: 9, Val Loss: 9, Test Loss: 9\n"
-        "Energy Train Loss: 1, Val Loss: 2, Test Loss: 3\n"
-        "Forces Train Loss: 4, Val Loss: 5, Test Loss: 6\n"
-        "Hessian Train Loss: 7, Val Loss: 8, Test Loss: 9\n"
+        "energy Train Loss: 1, Val Loss: 2, Test Loss: 3\n"
+        "forces Train Loss: 4, Val Loss: 5, Test Loss: 6\n"
+        "hessian Train Loss: 7, Val Loss: 8, Test Loss: 9\n"
         "dipole_magnitude Train Loss: 1, Val Loss: 0.5, Test Loss: 2\n"
     )
 
     assert validation_losses(log_path) == {
-        "Energy": 2.0,
-        "Forces": 5.0,
-        "Hessian": 8.0,
+        "energy": 2.0,
+        "forces": 5.0,
+        "hessian": 8.0,
         "dipole_magnitude": 0.5,
     }
 
@@ -234,8 +246,8 @@ def test_pubchem_multistage_candidates_are_balanced_and_reproducible():
 
 
 def test_pubchem_multistage_score_uses_fixed_metric_scales():
-    losses = {"Energy": 2.0, "Forces": 10.0, "Hessian": 40.0}
-    scales = {"Energy": 1.0, "Forces": 5.0, "Hessian": 20.0}
+    losses = {"energy": 2.0, "forces": 10.0, "hessian": 40.0}
+    scales = {"energy": 1.0, "forces": 5.0, "hessian": 20.0}
 
     assert normalized_score(losses, scales) == pytest.approx(2.0)
 
@@ -244,34 +256,34 @@ def test_pubchem_multistage_screen_scales_ignore_nonfinite_losses():
     results = [
         {
             "losses": {
-                "Energy": 1.0,
-                "Forces": 2.0,
-                "Hessian": 3.0,
+                "energy": 1.0,
+                "forces": 2.0,
+                "hessian": 3.0,
                 "dipole_magnitude": 4.0,
             }
         },
         {
             "losses": {
-                "Energy": 3.0,
-                "Forces": 4.0,
-                "Hessian": 5.0,
+                "energy": 3.0,
+                "forces": 4.0,
+                "hessian": 5.0,
                 "dipole_magnitude": math.nan,
             }
         },
         {
             "losses": {
-                "Energy": math.inf,
-                "Forces": 100.0,
-                "Hessian": 100.0,
+                "energy": math.inf,
+                "forces": 100.0,
+                "hessian": 100.0,
                 "dipole_magnitude": 1000.0,
             }
         },
     ]
 
     assert screen_metric_scales(results) == {
-        "Energy": 2.0,
-        "Forces": 3.0,
-        "Hessian": 4.0,
+        "energy": 2.0,
+        "forces": 3.0,
+        "hessian": 4.0,
         "dipole_magnitude": 4.0,
     }
 
@@ -281,9 +293,9 @@ def test_pubchem_multistage_uses_auxiliaries_only_inside_primary_tolerance():
         return {
             "id": identifier,
             "losses": {
-                "Energy": primary[0],
-                "Forces": primary[1],
-                "Hessian": primary[2],
+                "energy": primary[0],
+                "forces": primary[1],
+                "hessian": primary[2],
                 "dipole_magnitude": auxiliary,
             },
         }
@@ -294,9 +306,9 @@ def test_pubchem_multistage_uses_auxiliaries_only_inside_primary_tolerance():
         result("outside-great-aux", (1.03, 1.0, 1.0), 0.0),
     ]
     scales = {
-        "Energy": 1.0,
-        "Forces": 1.0,
-        "Hessian": 1.0,
+        "energy": 1.0,
+        "forces": 1.0,
+        "hessian": 1.0,
         "dipole_magnitude": 1.0,
     }
 
@@ -322,7 +334,7 @@ def test_pubchem_multistage_writes_ranking_fields(tmp_path):
                 "primary_score": 1.25,
                 "auxiliary_score": 0.5,
                 "primary_comparable": True,
-                "losses": {"Energy": 1.0, "Forces": 2.0, "Hessian": 3.0},
+                "losses": {"energy": 1.0, "forces": 2.0, "hessian": 3.0},
                 "parameters": {"hidden_dim": 64},
             }
         ],

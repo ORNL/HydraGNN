@@ -50,6 +50,32 @@ from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.train.train_validate_test import resolve_precision
 
 
+def compute_forces_and_hessian(
+    energy, positions, *, compute_hessian=False, create_graph=False
+):
+    """Differentiate scalar graph energy into forces and a Cartesian Hessian."""
+    forces = -torch.autograd.grad(
+        energy,
+        positions,
+        grad_outputs=torch.ones_like(energy),
+        retain_graph=create_graph or compute_hessian,
+        create_graph=create_graph or compute_hessian,
+    )[0]
+    if not compute_hessian:
+        return forces, None
+
+    rows = []
+    for component in forces.reshape(-1):
+        force_gradient = torch.autograd.grad(
+            component,
+            positions,
+            retain_graph=True,
+            create_graph=create_graph,
+        )[0]
+        rows.append(-force_gradient.reshape(-1))
+    return forces, torch.stack(rows)
+
+
 def create_model_config(
     config: dict,
     verbosity: int = 0,
@@ -121,6 +147,9 @@ def create_model_config(
         equivariant_attn_lmax=config["Architecture"].get("equivariant_attn_lmax", 1),
         equivariant_attn_num_radial=config["Architecture"].get(
             "equivariant_attn_num_radial", 16
+        ),
+        equivariant_attn_num_hidden_layers=config["Architecture"].get(
+            "equivariant_attn_num_hidden_layers", 1
         ),
         equivariant_attn_feedforward_multiplier=config["Architecture"].get(
             "equivariant_attn_feedforward_multiplier", 2
@@ -376,6 +405,8 @@ def create_model(
     use_gpu: bool = True,
     periodic_boundary_conditions: bool = False,
     attn_only: bool = False,
+    *,
+    equivariant_attn_num_hidden_layers: int = 1,
     attn_node_types: List[str] = None,
     structural_encoding: dict = None,
 ):
@@ -622,6 +653,7 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            equivariant_attn_num_hidden_layers=equivariant_attn_num_hidden_layers,
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -685,6 +717,7 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            equivariant_attn_num_hidden_layers=equivariant_attn_num_hidden_layers,
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -757,6 +790,7 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            equivariant_attn_num_hidden_layers=equivariant_attn_num_hidden_layers,
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -802,6 +836,7 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            equivariant_attn_num_hidden_layers=equivariant_attn_num_hidden_layers,
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -859,6 +894,7 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            equivariant_attn_num_hidden_layers=equivariant_attn_num_hidden_layers,
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -1228,6 +1264,22 @@ def create_model(
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
 
     model.configure_input_feature_encoders(input_node_encodings)
+    if use_graph_attr_conditioning and graph_attr_dim is not None:
+        if model.graph_attr_conditioning_mode == "film":
+            model._ensure_graph_conditioner(graph_attr_dim, device)
+        elif model.graph_attr_conditioning_mode == "concat_node":
+            model._ensure_graph_concat_projector(graph_attr_dim, hidden_dim, device)
+        elif model.graph_attr_conditioning_mode == "fuse_pool":
+            if "graph" not in output_type:
+                raise ValueError(
+                    "fuse_pool graph conditioning requires at least one graph output"
+                )
+            if not getattr(model, "supports_graph_pool_conditioning", True):
+                raise ValueError(
+                    f"{model.__class__.__name__} does not support fuse_pool graph conditioning"
+                )
+            model._ensure_graph_pool_projector(graph_attr_dim, hidden_dim, device)
+
     model.atomistic_mode_enabled = False
     model = create_domain_loss(model, domain_loss_config)
 

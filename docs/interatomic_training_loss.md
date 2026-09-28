@@ -16,6 +16,14 @@ weights or interatomic-mode switch.
             {
                 "variable": "forces", "weight": 10.0,
                 "prediction": {"operator": "negative_gradient", "of": "energy", "with_respect_to": "positions"}
+            },
+            {
+                "variable": "hessian", "weight": 1.0,
+                "prediction": {
+                    "operator": "hessian",
+                    "of": "energy",
+                    "with_respect_to": "positions"
+                }
             }
         ]
     },
@@ -27,7 +35,9 @@ weights or interatomic-mode switch.
 Every positive-weight term is active. A term may specify `metric`; otherwise it
 inherits `supervised.default_metric`. Forces are conservative by construction and are
 computed as the negative gradient of the predicted total energy with respect to
-atomic positions. At least one term must be enabled with a positive weight.
+atomic positions. Hessians are computed by differentiating those forces and
+currently require a batch size of one. At least one term must be enabled with a
+positive weight.
 
 The provider validates variable, normalization, and prediction semantics when the
 model is created. Training and evaluation report only the active terms, in JSON

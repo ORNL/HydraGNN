@@ -8,6 +8,7 @@ from hydragnn.domain_losses import (
     InteratomicPotentialDomainLoss,
     create_domain_loss,
     defer_domain_loss,
+    uses_interatomic_potential,
 )
 
 
@@ -36,7 +37,11 @@ def _config(**term_overrides):
         "forces": {
             "variable": "forces",
             "weight": 4.0,
-            "prediction": {"operator": "negative_gradient"},
+            "prediction": {
+                "operator": "negative_gradient",
+                "of": "energy",
+                "with_respect_to": "positions",
+            },
         },
     }
     terms.update(term_overrides)
@@ -73,6 +78,12 @@ def test_declarative_interatomic_terms_compute_expected_weighted_loss():
 def test_disabled_domain_loss_returns_original_model():
     model = EnergyModel()
     assert create_domain_loss(model, {"enabled": False}) is model
+
+
+def test_null_training_loss_is_not_interatomic():
+    config = {"NeuralNetwork": {"Training": {"loss": None}}}
+
+    assert uses_interatomic_potential(config) is False
 
 
 def test_multidimensional_energy_head_is_rejected():
@@ -136,6 +147,34 @@ def test_metadata_dependent_provider_can_be_explicitly_deferred():
                 }
             ),
             "negative_gradient",
+        ),
+        (
+            _config(
+                forces={
+                    "variable": "forces",
+                    "weight": 1.0,
+                    "prediction": {
+                        "operator": "negative_gradient",
+                        "of": "free_energy",
+                        "with_respect_to": "positions",
+                    },
+                }
+            ),
+            "prediction.of='energy'",
+        ),
+        (
+            _config(
+                forces={
+                    "variable": "forces",
+                    "weight": 1.0,
+                    "prediction": {
+                        "operator": "negative_gradient",
+                        "of": "energy",
+                        "with_respect_to": "coordinates",
+                    },
+                }
+            ),
+            "prediction.with_respect_to='positions'",
         ),
     ],
 )
@@ -245,7 +284,11 @@ def test_prediction_target_pairs_follow_active_task_names(disabled, expected):
             "forces": {
                 "variable": "forces",
                 "weight": 4.0,
-                "prediction": {"operator": "negative_gradient"},
+                "prediction": {
+                    "operator": "negative_gradient",
+                    "of": "energy",
+                    "with_respect_to": "positions",
+                },
             },
         }.items()
     }

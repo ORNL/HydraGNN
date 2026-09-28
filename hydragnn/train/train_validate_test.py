@@ -61,6 +61,16 @@ PRECISION_MAP = {
 }
 
 
+def _print_named_task_losses(verbosity, task_names, losses_by_split):
+    """Print each task loss with its name and a consistent split format."""
+    for task_index, task_name in enumerate(task_names):
+        fields = [
+            f"{split_name} Loss: {losses[task_index].item():.8f}"
+            for split_name, losses in losses_by_split.items()
+        ]
+        print_distributed(verbosity, f"{task_name} " + ", ".join(fields))
+
+
 def resolve_precision(precision: str):
     """Normalize precision string and return parameter/autocast dtypes."""
 
@@ -194,6 +204,45 @@ def _set_reshard_after_backward(model, enabled):
     return False
 
 
+def _verify_fsdp2_sharding(model, phase):
+    """Assert that FSDP2 parameters or gradients use sharded DTensors."""
+    from torch.distributed.tensor import DTensor, Shard
+
+    tensors = []
+    unsharded = []
+    for name, parameter in model.named_parameters():
+        tensor = parameter if phase == "parameters" else parameter.grad
+        if tensor is None:
+            continue
+        tensors.append(tensor)
+        if not isinstance(tensor, DTensor) or not any(
+            isinstance(placement, Shard) for placement in tensor.placements
+        ):
+            unsharded.append(name)
+
+    if not tensors:
+        raise RuntimeError(f"FSDP2 sharding verification found no {phase}")
+    if unsharded:
+        names = ", ".join(unsharded[:5])
+        raise RuntimeError(
+            f"FSDP2 sharding verification found unsharded {phase}: {names}"
+        )
+
+    global_numel = sum(tensor.numel() for tensor in tensors)
+    local_numel = sum(tensor.to_local().numel() for tensor in tensors)
+    if dist.get_world_size() > 1 and local_numel >= global_numel:
+        raise RuntimeError(
+            f"FSDP2 {phase} were not partitioned: "
+            f"local_numel={local_numel}, global_numel={global_numel}"
+        )
+    if dist.get_rank() == 0:
+        print(
+            f"[fsdp2-sharding] phase={phase} tensors={len(tensors)} "
+            f"local_numel={local_numel} global_numel={global_numel} "
+            "placement=Shard(0)"
+        )
+
+
 def get_nbatch(loader):
     """Calculate the number of batches produced by a loader."""
     nbatch = len(loader)
@@ -258,6 +307,7 @@ def train_validate_test(
         task_dims = model.module.head_dims
         task_weights = model.module.loss_weights
         output_names = configured_output_names
+    task_names = output_names
 
     # total loss tracking for train/vali/test
     total_loss_train = torch.zeros(num_epoch, device=device)
@@ -345,9 +395,7 @@ def train_validate_test(
                 verbosity,
                 f"Loss for {dataset_name}: {loss:.8f}",
             )
-            print_distributed(
-                verbosity, "Tasks Loss:", [taskerr.item() for taskerr in taskserr]
-            )
+            _print_named_task_losses(verbosity, task_names, {dataset_name: taskserr})
             print_distributed(
                 verbosity,
                 format_loss_report(
@@ -440,25 +488,23 @@ def train_validate_test(
             writer.add_scalar("train error", train_loss, epoch)
             writer.add_scalar("validate error", val_loss, epoch)
             writer.add_scalar("test error", test_loss, epoch)
-            for ivar in range(num_tasks):
+            for ivar, task_name in enumerate(task_names):
                 writer.add_scalar(
-                    "train error of task" + str(ivar), train_taskserr[ivar], epoch
+                    "train error of " + task_name, train_taskserr[ivar], epoch
                 )
         print_distributed(
             verbosity,
             f"Epoch: {epoch:02d}, Train Loss: {train_loss:.8f}, Val Loss: {val_loss:.8f}, "
             f"Test Loss: {test_loss:.8f}",
         )
-        print_distributed(
+        _print_named_task_losses(
             verbosity,
-            "Tasks Train Loss:",
-            [taskerr.item() for taskerr in train_taskserr],
-        )
-        print_distributed(
-            verbosity, "Tasks Val Loss:", [taskerr.item() for taskerr in val_taskserr]
-        )
-        print_distributed(
-            verbosity, "Tasks Test Loss:", [taskerr.item() for taskerr in test_taskserr]
+            task_names,
+            {
+                "Train": train_taskserr,
+                "Val": val_taskserr,
+                "Test": test_taskserr,
+            },
         )
         for split, total, report in (
             ("train", train_loss, train_loss_report),
@@ -737,6 +783,13 @@ def train(
     )
     fsdp2_force_workaround = compute_grad_energy and _is_fsdp2_enabled()
     fsdp2_workaround_available = True
+    verify_fsdp2_sharding = bool(int(os.getenv("HYDRAGNN_VERIFY_FSDP2_SHARDING", "0")))
+    if verify_fsdp2_sharding:
+        if not _is_fsdp2_enabled():
+            raise ValueError(
+                "HYDRAGNN_VERIFY_FSDP2_SHARDING requires FSDP2 to be enabled"
+            )
+        _verify_fsdp2_sharding(model, "parameters")
 
     local_nbatch = get_nbatch(loader)
     nbatch = MPI.COMM_WORLD.allreduce(local_nbatch, op=MPI.MIN)
@@ -817,6 +870,8 @@ def train(
         with record_function("backward"):
             if fsdp2_force_workaround and fsdp2_workaround_available:
                 _set_reshard_after_backward(model, True)
+            if verify_fsdp2_sharding and ibatch == 0:
+                _verify_fsdp2_sharding(model, "gradients")
             if use_deepspeed:
                 model.backward(loss)
             else:

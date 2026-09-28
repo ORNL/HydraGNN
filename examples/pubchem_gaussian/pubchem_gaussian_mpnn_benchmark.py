@@ -35,9 +35,9 @@ def model_parameters(mpnn_type):
         "hidden_dim": 128,
         "equivariant_attn_num_hidden_layers": 1,
         "equivariant_attn_feedforward_multiplier": 2,
-        "energy_weight": 1.0,
-        "force_weight": 1.0,
-        "hessian_weight": 1.0,
+        "energy_loss_weight": 1.0,
+        "force_loss_weight": 1.0,
+        "hessian_loss_weight": 1.0,
         "use_equivariant_graph_transformer": "off",
         "global_attn_heads": 1,
     }

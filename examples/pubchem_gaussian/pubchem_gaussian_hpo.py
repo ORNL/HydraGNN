@@ -23,7 +23,7 @@ import sys
 EXAMPLE_DIR = Path(__file__).resolve().parent
 BASE_CONFIG_PATH = EXAMPLE_DIR / "pubchem_gaussian.json"
 SPHERICAL_HARMONIC_ORDER = 2
-PRIMARY_OBJECTIVE_METRICS = ("Energy", "Forces", "Hessian")
+PRIMARY_OBJECTIVE_METRICS = ("energy", "forces", "hessian")
 HPO_CAMPAIGNS = ("primary", "multitask")
 LOSS_PATTERN = re.compile(
     r"^(?:\d+:\s*)?(.+?) Train Loss: "
@@ -50,9 +50,13 @@ def configure_trial(base_config, parameters, campaign="multitask"):
     architecture["equivariant_attn_feedforward_multiplier"] = int(
         parameters["equivariant_attn_feedforward_multiplier"]
     )
-    architecture["energy_weight"] = float(parameters["energy_weight"])
-    architecture["force_weight"] = float(parameters["force_weight"])
-    architecture["hessian_weight"] = float(parameters["hessian_weight"])
+    loss_terms = {
+        term["variable"]: term
+        for term in config["NeuralNetwork"]["Training"]["loss"]["supervised"]["terms"]
+    }
+    loss_terms["energy"]["weight"] = float(parameters["energy_loss_weight"])
+    loss_terms["forces"]["weight"] = float(parameters["force_loss_weight"])
+    loss_terms["hessian"]["weight"] = float(parameters["hessian_loss_weight"])
 
     supported_transformer_models = {"SchNet", "DimeNet", "MACE", "PAINN", "PNAEq"}
     use_transformer = (
@@ -112,12 +116,12 @@ def validation_losses(log_path):
         match = LOSS_PATTERN.match(line.strip())
         if match is None:
             continue
-        if match.group(1) == "Energy" and "Energy" in current:
-            if {"Energy", "Forces", "Hessian"} <= set(current):
+        if match.group(1) == "energy" and "energy" in current:
+            if {"energy", "forces", "hessian"} <= set(current):
                 latest = current
             current = {}
         current[match.group(1)] = float(match.group(2))
-    if {"Energy", "Forces", "Hessian"} <= set(current):
+    if {"energy", "forces", "hessian"} <= set(current):
         latest = current
     return latest
 
@@ -213,9 +217,9 @@ def build_problem(mpnn_types):
     problem = HpProblem()
     problem.add_hyperparameter(mpnn_types, "mpnn_type")
     problem.add_hyperparameter(["off", "on"], "use_equivariant_graph_transformer")
-    problem.add_hyperparameter([0.1, 1.0, 10.0], "energy_weight")
-    problem.add_hyperparameter([0.1, 1.0, 10.0], "force_weight")
-    problem.add_hyperparameter([0.1, 1.0, 10.0], "hessian_weight")
+    problem.add_hyperparameter([0.1, 1.0, 10.0], "energy_loss_weight")
+    problem.add_hyperparameter([0.1, 1.0, 10.0], "force_loss_weight")
+    problem.add_hyperparameter([0.1, 1.0, 10.0], "hessian_loss_weight")
     problem.add_hyperparameter((2, 6), "num_conv_layers")
     problem.add_hyperparameter([64, 128, 256, 512], "hidden_dim")
     problem.add_hyperparameter([1, 2, 4, 8], "global_attn_heads")

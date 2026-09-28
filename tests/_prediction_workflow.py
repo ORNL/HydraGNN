@@ -61,10 +61,10 @@ def load_checkpoint_and_test(config, test_loader, use_deepspeed=False):
     log_name = get_log_name_config(config)
     load_existing_model(model, log_name, use_deepspeed=use_deepspeed)
 
-    enable_interatomic_potential = uses_interatomic_potential(config)
+    interatomic_loss_enabled = uses_interatomic_potential(config)
     num_tasks = (
         len(model.module.task_names)
-        if enable_interatomic_potential
+        if interatomic_loss_enabled
         else model.module.num_heads
     )
 
@@ -78,7 +78,7 @@ def load_checkpoint_and_test(config, test_loader, use_deepspeed=False):
         model,
         config["Verbosity"]["level"],
         num_tasks=num_tasks,
-        compute_grad_energy=enable_interatomic_potential,
+        compute_grad_energy=interatomic_loss_enabled,
         precision=config["NeuralNetwork"]["Training"].get("precision", "fp32"),
     )
 

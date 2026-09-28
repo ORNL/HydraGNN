@@ -20,7 +20,7 @@ def create_domain_loss(model, config):
 
 
 def uses_interatomic_potential(config):
-    domain = config.get("NeuralNetwork", {}).get("Training", {}).get("loss", {})
+    domain = config.get("NeuralNetwork", {}).get("Training", {}).get("loss") or {}
     return bool(
         domain.get("enabled") and domain.get("provider") == "interatomic_potential"
     )
