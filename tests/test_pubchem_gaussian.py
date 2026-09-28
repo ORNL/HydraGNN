@@ -457,6 +457,23 @@ def test_pubchem_outer_archive_resolves_safe_member_path(tmp_path):
     assert target == (tmp_path / "nested" / "123.tar").resolve()
 
 
+def test_pubchem_outer_archive_terminates_tar_options(tmp_path, monkeypatch):
+    example = _load_example_module()
+    commands = []
+    monkeypatch.setattr(
+        example.subprocess,
+        "run",
+        lambda command, **kwargs: commands.append(command),
+    )
+    member = "--checkpoint-action=exec=payload.tar"
+
+    example._extract_zstd_member(tmp_path / "outer.tar.zst", member, tmp_path)
+
+    assert commands == [
+        ["tar", "--zstd", "-xOf", str(tmp_path / "outer.tar.zst"), "--", member]
+    ]
+
+
 def test_pubchem_mpi_degree_histogram_does_not_require_torch_distributed():
     example = _load_example_module()
     graph = example.Data(

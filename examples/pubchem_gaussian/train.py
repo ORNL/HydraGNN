@@ -422,7 +422,7 @@ def _extract_zstd_member(archive, member, destination):
     target.parent.mkdir(parents=True, exist_ok=True)
     with target.open("wb") as output:
         subprocess.run(
-            ["tar", "--zstd", "-xOf", str(archive), member],
+            ["tar", "--zstd", "-xOf", str(archive), "--", member],
             check=True,
             stdout=output,
         )
