@@ -923,8 +923,10 @@ class Base(Module):
         else:
             x_graph = self._pool_graph_features(x, data.batch)
 
-        # Optional pool-level fusion of graph_attr into pooled embedding
-        x_graph = self._apply_graph_pool_conditioning(x_graph, data)
+        # A node-only model does not consume the pooled representation.  Do not
+        # run a pool conditioner whose parameters cannot contribute to its loss.
+        if "graph" in self.head_type:
+            x_graph = self._apply_graph_pool_conditioning(x_graph, data)
         outputs = []
         outputs_var = []
         # if no dataset_name, set it to be 0

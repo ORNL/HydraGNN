@@ -1263,11 +1263,16 @@ def create_model(
 
     if use_graph_attr_conditioning and graph_attr_dim is not None:
         if model.graph_attr_conditioning_mode == "film":
-            model._ensure_graph_conditioner(graph_attr_dim, device)
+            if not getattr(model, "skip_post_conv_processing", False):
+                model._ensure_graph_conditioner(graph_attr_dim, device)
         elif model.graph_attr_conditioning_mode == "concat_node":
-            model._ensure_graph_concat_projector(graph_attr_dim, hidden_dim, device)
+            if not getattr(model, "skip_post_conv_processing", False):
+                model._ensure_graph_concat_projector(graph_attr_dim, hidden_dim, device)
         elif model.graph_attr_conditioning_mode == "fuse_pool":
-            model._ensure_graph_pool_projector(graph_attr_dim, hidden_dim, device)
+            if "graph" in output_type and getattr(
+                model, "supports_graph_pool_conditioning", True
+            ):
+                model._ensure_graph_pool_projector(graph_attr_dim, hidden_dim, device)
 
     # Apply interatomic potential enhancement if requested
     if enable_interatomic_potential:
