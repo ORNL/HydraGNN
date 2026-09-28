@@ -366,7 +366,9 @@ def parse_gaussian_log(path, text=None):
             latest_energy = float(energy_match.group(1).replace("D", "E"))
             continue
 
-        if "Forces (Hartrees/Bohr)" not in line:
+        # The column-header line ("Center Atomic Forces (Hartrees/Bohr)")
+        # contains the same substring, but it does not begin a new table.
+        if line.strip() != "Forces (Hartrees/Bohr)":
             continue
         if latest_atomic_numbers is None or latest_positions is None:
             raise ValueError(
