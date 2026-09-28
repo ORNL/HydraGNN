@@ -54,6 +54,16 @@ PRECISION_MAP = {
 }
 
 
+def _print_named_task_losses(verbosity, task_names, losses_by_split):
+    """Print each task loss with its name and a consistent split format."""
+    for task_index, task_name in enumerate(task_names):
+        fields = [
+            f"{split_name} Loss: {losses[task_index].item():.8f}"
+            for split_name, losses in losses_by_split.items()
+        ]
+        print_distributed(verbosity, f"{task_name} " + ", ".join(fields))
+
+
 def resolve_precision(precision: str):
     """Normalize precision string and return parameter/autocast dtypes."""
 
@@ -187,6 +197,45 @@ def _set_reshard_after_backward(model, enabled):
     return False
 
 
+def _verify_fsdp2_sharding(model, phase):
+    """Assert that FSDP2 parameters or gradients use sharded DTensors."""
+    from torch.distributed.tensor import DTensor, Shard
+
+    tensors = []
+    unsharded = []
+    for name, parameter in model.named_parameters():
+        tensor = parameter if phase == "parameters" else parameter.grad
+        if tensor is None:
+            continue
+        tensors.append(tensor)
+        if not isinstance(tensor, DTensor) or not any(
+            isinstance(placement, Shard) for placement in tensor.placements
+        ):
+            unsharded.append(name)
+
+    if not tensors:
+        raise RuntimeError(f"FSDP2 sharding verification found no {phase}")
+    if unsharded:
+        names = ", ".join(unsharded[:5])
+        raise RuntimeError(
+            f"FSDP2 sharding verification found unsharded {phase}: {names}"
+        )
+
+    global_numel = sum(tensor.numel() for tensor in tensors)
+    local_numel = sum(tensor.to_local().numel() for tensor in tensors)
+    if dist.get_world_size() > 1 and local_numel >= global_numel:
+        raise RuntimeError(
+            f"FSDP2 {phase} were not partitioned: "
+            f"local_numel={local_numel}, global_numel={global_numel}"
+        )
+    if dist.get_rank() == 0:
+        print(
+            f"[fsdp2-sharding] phase={phase} tensors={len(tensors)} "
+            f"local_numel={local_numel} global_numel={global_numel} "
+            "placement=Shard(0)"
+        )
+
+
 def get_nbatch(loader):
     """Calculate the number of batches produced by a loader."""
     nbatch = len(loader)
@@ -241,23 +290,36 @@ def train_validate_test(
 
     device = get_device()
     if compute_grad_energy:
-        num_tasks = 3  # [energy, energy per atom, forces]
-        task_dims = [1, 1, 1]
+        hessian_enabled = model.module.hessian_weight > 0
+        auxiliary_names = configured_output_names[1:]
+        num_tasks = (4 if hessian_enabled else 3) + len(auxiliary_names)
+        task_dims = [1] * num_tasks
         task_weights = [
             model.module.energy_weight,
             model.module.energy_peratom_weight,
             model.module.force_weight,
         ]
+        if hessian_enabled:
+            task_weights.append(model.module.hessian_weight)
+        task_weights.extend(model.module.loss_weights[1:])
         output_names = [
             configured_output_names[0],
             "energy_peratom",
             "forces",
         ]
+        if hessian_enabled:
+            output_names.append("hessian")
+        output_names.extend(auxiliary_names)
+        task_names = ["Energy", "Energy Per Atom", "Forces"]
+        if hessian_enabled:
+            task_names.append("Hessian")
+        task_names.extend(auxiliary_names)
     else:
         num_tasks = model.module.num_heads
         task_dims = model.module.head_dims
         task_weights = model.module.loss_weights
         output_names = configured_output_names
+        task_names = output_names
 
     # total loss tracking for train/vali/test
     total_loss_train = torch.zeros(num_epoch, device=device)
@@ -345,8 +407,10 @@ def train_validate_test(
                 verbosity,
                 f"Loss for {dataset_name}: {loss:.8f}",
             )
-            print_distributed(
-                verbosity, "Tasks Loss:", [taskerr.item() for taskerr in taskserr]
+            _print_named_task_losses(
+                verbosity,
+                task_names,
+                {dataset_name: taskserr},
             )
         return
 
@@ -428,25 +492,23 @@ def train_validate_test(
             writer.add_scalar("train error", train_loss, epoch)
             writer.add_scalar("validate error", val_loss, epoch)
             writer.add_scalar("test error", test_loss, epoch)
-            for ivar in range(num_tasks):
+            for ivar, task_name in enumerate(task_names):
                 writer.add_scalar(
-                    "train error of task" + str(ivar), train_taskserr[ivar], epoch
+                    "train error of " + task_name, train_taskserr[ivar], epoch
                 )
         print_distributed(
             verbosity,
             f"Epoch: {epoch:02d}, Train Loss: {train_loss:.8f}, Val Loss: {val_loss:.8f}, "
             f"Test Loss: {test_loss:.8f}",
         )
-        print_distributed(
+        _print_named_task_losses(
             verbosity,
-            "Tasks Train Loss:",
-            [taskerr.item() for taskerr in train_taskserr],
-        )
-        print_distributed(
-            verbosity, "Tasks Val Loss:", [taskerr.item() for taskerr in val_taskserr]
-        )
-        print_distributed(
-            verbosity, "Tasks Test Loss:", [taskerr.item() for taskerr in test_taskserr]
+            task_names,
+            {
+                "Train": train_taskserr,
+                "Val": val_taskserr,
+                "Test": test_taskserr,
+            },
         )
 
         total_loss_train[epoch] = train_loss
@@ -716,6 +778,13 @@ def train(
     )
     fsdp2_force_workaround = compute_grad_energy and _is_fsdp2_enabled()
     fsdp2_workaround_available = True
+    verify_fsdp2_sharding = bool(int(os.getenv("HYDRAGNN_VERIFY_FSDP2_SHARDING", "0")))
+    if verify_fsdp2_sharding:
+        if not _is_fsdp2_enabled():
+            raise ValueError(
+                "HYDRAGNN_VERIFY_FSDP2_SHARDING requires FSDP2 to be enabled"
+            )
+        _verify_fsdp2_sharding(model, "parameters")
 
     local_nbatch = get_nbatch(loader)
     nbatch = MPI.COMM_WORLD.allreduce(local_nbatch, op=MPI.MIN)
@@ -805,6 +874,8 @@ def train(
                     loss.backward()
             if fsdp2_force_workaround and fsdp2_workaround_available:
                 _set_reshard_after_backward(model, True)
+            if verify_fsdp2_sharding and ibatch == 0:
+                _verify_fsdp2_sharding(model, "gradients")
             if trace_level > 0:
                 tr.start("backward_sync", **syncopt)
                 MPI.COMM_WORLD.Barrier()
@@ -943,7 +1014,12 @@ def test(
         import torch_scatter
 
     if num_tasks is None:
-        num_tasks = 3 if compute_grad_energy else model.module.num_heads
+        if compute_grad_energy:
+            num_tasks = (4 if model.module.hessian_weight > 0 else 3) + max(
+                model.module.num_heads - 1, 0
+            )
+        else:
+            num_tasks = model.module.num_heads
 
     total_error = torch.tensor(0.0, device=get_device())
     tasks_error = torch.zeros(num_tasks, device=get_device())
@@ -1083,26 +1159,52 @@ def test(
                                 "Force predictions are only supported for node or graph energy heads."
                             )
 
-                        graph_energy_true = data.energy.squeeze().float()
-
                         ncount = torch.bincount(data.batch)
                         graph_energy_peratom_pred = graph_energy_pred / ncount
-                        graph_energy_peratom_true = graph_energy_true / ncount
+                        if hasattr(data, "energy"):
+                            graph_energy_true = data.energy.squeeze().float()
+                            graph_energy_peratom_true = graph_energy_true / ncount
+                        else:
+                            # Force/Hessian-only configurations have no energy
+                            # labels. Preserve task alignment for callers that
+                            # request samples while marking those targets absent.
+                            graph_energy_true = torch.full_like(
+                                graph_energy_pred, torch.nan
+                            )
+                            graph_energy_peratom_true = torch.full_like(
+                                graph_energy_peratom_pred, torch.nan
+                            )
 
-                        forces_true = data.forces.float()
-                        forces_pred = torch.autograd.grad(
+                        hessian_enabled = model.module.hessian_weight > 0
+                        forces_pred = -torch.autograd.grad(
                             graph_energy_pred,
                             data.pos,
                             grad_outputs=torch.ones_like(graph_energy_pred),
-                            retain_graph=graph_energy_pred.requires_grad,
-                            create_graph=False,
-                        )[0].float()
+                            retain_graph=hessian_enabled,
+                            create_graph=hessian_enabled,
+                        )[0]
+                        hessian_pred = None
+                        if hessian_enabled:
+                            hessian_rows = []
+                            for component in forces_pred.reshape(-1):
+                                force_gradient = torch.autograd.grad(
+                                    component,
+                                    data.pos,
+                                    retain_graph=True,
+                                    create_graph=False,
+                                )[0]
+                                hessian_rows.append(-force_gradient.reshape(-1))
+                            hessian_pred = torch.stack(hessian_rows)
+                        forces_pred = forces_pred.float()
                         assert (
                             forces_pred is not None
                         ), "No gradients were found for data.pos. Does your model use positions for prediction?"
-                        forces_pred = -forces_pred
-                        forces_true = forces_true.flatten()
                         forces_pred = forces_pred.flatten()
+                        forces_true = (
+                            data.forces.float().flatten()
+                            if hasattr(data, "forces")
+                            else torch.full_like(forces_pred, torch.nan)
+                        )
                         true_values[0].append(graph_energy_true.reshape(-1, 1))
                         true_values[1].append(graph_energy_peratom_true.reshape(-1, 1))
                         true_values[2].append(forces_true.reshape(-1, 1))
@@ -1111,6 +1213,54 @@ def test(
                             graph_energy_peratom_pred.reshape(-1, 1)
                         )
                         predicted_values[2].append(forces_pred.reshape(-1, 1))
+                        task_offset = 3
+                        if hessian_enabled:
+                            hessian_true = data.hessian.reshape(
+                                hessian_pred.shape
+                            ).float()
+                            hessian_mask = torch.isfinite(hessian_true)
+                            true_values[3].append(
+                                hessian_true[hessian_mask].reshape(-1, 1)
+                            )
+                            predicted_values[3].append(
+                                hessian_pred[hessian_mask].reshape(-1, 1)
+                            )
+                            task_offset = 4
+
+                        if model.module.num_heads > 1:
+                            if not isinstance(pred, (list, tuple)):
+                                raise ValueError(
+                                    "Multitask interatomic potentials require list-like model outputs"
+                                )
+                            sample_sizes = data.y_loc[:, -1]
+                            sample_starts = (
+                                torch.cumsum(sample_sizes, dim=0) - sample_sizes
+                            )
+                            for head_index in range(1, model.module.num_heads):
+                                indices = []
+                                for sample_index in range(data.y_loc.shape[0]):
+                                    start = (
+                                        sample_starts[sample_index]
+                                        + data.y_loc[sample_index, head_index]
+                                    )
+                                    end = (
+                                        sample_starts[sample_index]
+                                        + data.y_loc[sample_index, head_index + 1]
+                                    )
+                                    indices.append(
+                                        torch.arange(start, end, device=data.y.device)
+                                    )
+                                target = data.y[torch.cat(indices)].reshape(
+                                    pred[head_index].shape
+                                )
+                                mask = torch.isfinite(target)
+                                task_index = task_offset + head_index - 1
+                                true_values[task_index].append(
+                                    target[mask].reshape(-1, 1)
+                                )
+                                predicted_values[task_index].append(
+                                    pred[head_index][mask].reshape(-1, 1)
+                                )
             else:
                 head_index = get_head_indices(model, data)
                 ytrue = data.y

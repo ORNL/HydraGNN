@@ -215,6 +215,10 @@ pip_retry() {
   local do_filter=1
   for a in "${raw_args[@]}"; do
     case "$a" in
+      -r|--requirement|-c|--constraint)
+        # Requirement and constraint files must reach pip intact; the
+        # package-by-package metadata filter cannot represent their contents.
+        do_filter=0; break;;
       "."|"-e"|./*|../*|/*|git+*|http*|https*|file:*)
         do_filter=0; break;;
     esac
@@ -503,6 +507,11 @@ pip_retry e3nn==0.5.1 openequivariance
 pip_retry "vesin==0.4.2"
 pip_retry Cython
 pip_retry setuptools wheel
+
+subbanner "Install model-specific backbone dependencies"
+MODEL_REQUIREMENTS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)/requirements-specific-models.txt"
+[[ -f "$MODEL_REQUIREMENTS" ]] || { echo "Missing $MODEL_REQUIREMENTS" >&2; exit 1; }
+pip_retry -r "$MODEL_REQUIREMENTS"
 
 banner "Re-check NumPy pin (must be 2.4.6 in venv)"
 pip_retry "numpy==2.4.6"

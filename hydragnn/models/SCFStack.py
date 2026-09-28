@@ -15,6 +15,7 @@ import pdb
 import torch
 from torch import nn
 from torch import Tensor
+from torch_cluster import radius_graph
 from torch.nn import Identity, Linear, ReLU, Sequential
 from torch_geometric.nn import Sequential as PyGSeq
 from torch_geometric.nn import MessagePassing
@@ -24,19 +25,37 @@ from torch_geometric.nn.models.schnet import (
 )
 from torch_geometric.typing import OptTensor
 
-if torch.cuda.is_available():
-    from torch_geometric.nn.models.schnet import (
-        RadiusInteractionGraph as RadiusInteractionGraph,
-    )
-else:
-    from hydragnn.preprocess.graph_samples_checks_and_updates import (
-        RadiusInteractionGraphCPU as RadiusInteractionGraph,
-    )
-
 from .Base import Base
 
 from hydragnn.utils.model import unsorted_segment_mean
 from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
+
+
+class RadiusInteractionGraph(nn.Module):
+    def __init__(self, cutoff: float, max_num_neighbors: int):
+        super().__init__()
+        self.cutoff = cutoff
+        self.max_num_neighbors = max_num_neighbors
+
+    def forward(self, pos: Tensor, batch: Tensor):
+        # torch_cluster provides CPU and CUDA/ROCm kernels, but not kernels for
+        # every accelerator supported by PyTorch (for example XPU). Build the
+        # discrete neighbor list on CPU for those devices, then calculate
+        # distances from the original positions so their autograd graph stays
+        # on the training device.
+        graph_device_supported = pos.device.type in {"cpu", "cuda"}
+        graph_pos = pos if graph_device_supported else pos.cpu()
+        graph_batch = batch if graph_device_supported or batch is None else batch.cpu()
+        edge_index = radius_graph(
+            graph_pos,
+            r=self.cutoff,
+            batch=graph_batch,
+            max_num_neighbors=self.max_num_neighbors,
+        )
+        edge_index = edge_index.to(pos.device)
+        row, col = edge_index
+        edge_weight = (pos[row] - pos[col]).norm(dim=-1)
+        return edge_index, edge_weight
 
 
 class SCFStack(Base):

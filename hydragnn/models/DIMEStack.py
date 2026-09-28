@@ -216,11 +216,13 @@ class DIMEStack(Base):
                     raise ValueError(
                         "EquivariantTransformer requires invariant node features"
                     )
-                x = self.node_emb(node_features.float())
+                node_features = node_features.to(self.node_emb.weight.dtype)
+                x = self.node_emb(node_features)
             else:
                 x = self.pos_emb(data.pe)
                 if self.input_dim:
-                    x = torch.cat((self.node_emb(node_features.float()), x), 1)
+                    node_features = node_features.to(self.node_emb.weight.dtype)
+                    x = torch.cat((self.node_emb(node_features), x), 1)
                     x = self.node_lin(x)
 
             if self.is_edge_model and self.global_attn_engine == "GPS":

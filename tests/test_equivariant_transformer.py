@@ -30,6 +30,7 @@ def _sample(dtype=torch.float64):
 def test_equivariant_rms_norm_is_rotation_equivariant():
     irreps, features, _, _ = _sample()
     norm = EquivariantRMSNorm(irreps).double()
+    assert norm.gain.shape == (1,)
     rotation = o3.rand_matrix(dtype=torch.float64)
     representation = irreps.D_from_matrix(rotation)
 
@@ -45,11 +46,24 @@ def test_equivariant_rms_norm_is_rotation_equivariant():
     )
 
 
+def test_equivariant_rms_norm_loads_legacy_scalar_gain():
+    norm = EquivariantRMSNorm("2x0e + 1x1o")
+
+    norm.load_state_dict({"gain": torch.tensor(2.5)}, strict=True)
+
+    assert norm.gain.shape == (1,)
+    assert norm.gain.item() == pytest.approx(2.5)
+
+
 def test_equivariant_transformer_layer_preserves_se3_equivariance():
     torch.manual_seed(21)
     irreps, features, positions, batch = _sample()
     layer = EquivariantTransformerLayer(
-        irreps, heads=2, lmax=1, feedforward_multiplier=2
+        irreps,
+        heads=2,
+        lmax=1,
+        num_hidden_layers=3,
+        feedforward_multiplier=2,
     ).double()
     rotation = o3.rand_matrix(dtype=torch.float64)
     translation = torch.randn(1, 3, dtype=torch.float64)
@@ -68,6 +82,16 @@ def test_equivariant_transformer_layer_preserves_se3_equivariance():
         rtol=3.0e-5,
         atol=5.0e-6,
     )
+
+
+def test_equivariant_transformer_preserves_legacy_positional_arguments():
+    layer = EquivariantTransformerLayer("2x0e + 1x1o", 2, 1, 16, 4)
+
+    assert layer.feedforward[0].irreps_out == o3.Irreps("8x0e + 4x1o")
+    assert len(layer.feedforward) == 3
+
+    with pytest.raises(TypeError):
+        EquivariantTransformerLayer("2x0e + 1x1o", 2, 1, 16, 4, True, None, 3)
 
 
 def test_equivariant_transformer_layer_is_permutation_equivariant():

@@ -478,7 +478,9 @@ if __name__ == "__main__":
         print(rank, "number of heads %d" % len(true_values))
         print(rank, "number of samples %d" % len(true_values[0]))
         if rank == 0:
-            print(log_name, datasetname, setname, "loss=", total_error, tasks_error)
+            print(log_name, datasetname, setname, "loss=", total_error)
+            for output, task_error in zip(config["Variables"]["outputs"], tasks_error):
+                print(f'{output["name"]} Test Loss: {task_error.item():.8f}')
             assert len(true_values) == len(
                 predicted_values
             ), "inconsistent number of heads, %d!=%d" % (

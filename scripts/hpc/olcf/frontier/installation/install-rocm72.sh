@@ -190,6 +190,11 @@ pip_retry tensorflow
 pip_retry tensorflow_datasets
 pip_retry vesin==0.4.2
 
+subbanner "Install model-specific backbone dependencies"
+MODEL_REQUIREMENTS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)/requirements-specific-models.txt"
+[[ -f "$MODEL_REQUIREMENTS" ]] || { echo "Missing $MODEL_REQUIREMENTS" >&2; exit 1; }
+pip_retry -r "$MODEL_REQUIREMENTS"
+
 # ============================================================
 # ROCm detection + ROCm-aware PyTorch
 # ============================================================

@@ -177,7 +177,16 @@ def test_painn_equivariant_transformer_supports_graph_conditioning(
     model = _create_model(
         use_graph_attr_conditioning=True,
         graph_attr_conditioning_mode=conditioning_mode,
+        graph_attr_dim=2,
     )
+    conditioner_parameters_before = {
+        name: parameter
+        for name, parameter in model.named_parameters()
+        if "graph_conditioner" in name
+        or "graph_concat_projector" in name
+        or "graph_pool_projector" in name
+    }
+    assert conditioner_parameters_before
     positions = torch.randn(3, 3, requires_grad=True)
     data = _data(positions)
     data.graph_attr = torch.tensor([[0.3, -0.2]])
@@ -187,15 +196,22 @@ def test_painn_equivariant_transformer_supports_graph_conditioning(
 
     assert output.shape == (1, 1)
     assert positions.grad is not None and torch.isfinite(positions.grad).all()
-    conditioner_parameters = [
-        parameter
+    conditioner_parameters_after = {
+        name: parameter
         for name, parameter in model.named_parameters()
         if "graph_conditioner" in name
         or "graph_concat_projector" in name
         or "graph_pool_projector" in name
-    ]
-    assert conditioner_parameters
-    assert all(parameter.grad is not None for parameter in conditioner_parameters)
+    }
+    assert conditioner_parameters_before.keys() == conditioner_parameters_after.keys()
+    assert all(
+        conditioner_parameters_before[name] is parameter
+        for name, parameter in conditioner_parameters_after.items()
+    )
+    assert all(
+        parameter.grad is not None
+        for parameter in conditioner_parameters_after.values()
+    )
 
 
 def test_painn_equivariant_transformer_requires_explicit_periodic_opt_in():
