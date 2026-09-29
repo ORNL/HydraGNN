@@ -874,7 +874,8 @@ class Base(Module):
         activation because their encoder output is already final, but explicit
         graph conditioning must still affect that output.
         """
-        inv_node_feat = self._apply_graph_conditioning(inv_node_feat, batch, data)
+        if getattr(self, "use_graph_attr_conditioning", False):
+            inv_node_feat = self._apply_graph_conditioning(inv_node_feat, batch, data)
         if getattr(self, "skip_post_conv_processing", False):
             return inv_node_feat
         return self.activation_function(feat_layer(inv_node_feat))

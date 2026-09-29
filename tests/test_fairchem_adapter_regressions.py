@@ -51,8 +51,24 @@ def test_external_backbone_embedding_skips_hydragnn_activation():
     model.skip_post_conv_processing = True
     model.activation_function = nn.ReLU()
     embedding = torch.tensor([[-2.0, 3.0]])
-    delivered = model._postprocess_conv_output(embedding, None, object(), nn.Identity())
+    delivered = model._postprocess_conv_output(
+        embedding, None, object(), nn.Identity()
+    )
     assert torch.equal(delivered, embedding)
+
+
+def test_external_backbone_embedding_still_applies_requested_conditioning():
+    model = Base.__new__(Base)
+    nn.Module.__init__(model)
+    model.skip_post_conv_processing = True
+    model.use_graph_attr_conditioning = True
+    model.activation_function = nn.ReLU()
+    model._apply_graph_conditioning = lambda value, _batch, _data: value + 1.0
+    embedding = torch.tensor([[-2.0, 3.0]])
+
+    delivered = model._postprocess_conv_output(embedding, None, object(), nn.Identity())
+
+    assert torch.equal(delivered, embedding + 1.0)
 
 
 def test_allscaip_embedding_applies_output_normalization():
