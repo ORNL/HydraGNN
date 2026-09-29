@@ -51,9 +51,7 @@ def test_external_backbone_embedding_skips_hydragnn_activation():
     model.skip_post_conv_processing = True
     model.activation_function = nn.ReLU()
     embedding = torch.tensor([[-2.0, 3.0]])
-    delivered = model._postprocess_conv_output(
-        embedding, None, object(), nn.Identity()
-    )
+    delivered = model._postprocess_conv_output(embedding, None, object(), nn.Identity())
     assert torch.equal(delivered, embedding)
 
 
