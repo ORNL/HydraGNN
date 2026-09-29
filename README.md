@@ -23,6 +23,7 @@ Scalable PyTorch Implementation of Multi-Headed Graph Neural Networks
 ### Optional graph-level conditioning
 - Enable with `NeuralNetwork.Architecture.use_graph_attr_conditioning` (off by default) and choose mode via `graph_attr_conditioning_mode` (`"concat_node"` default, `"film"`, or `"fuse_pool"`).
 - `concat_node` (default) appends `graph_attr` to node embeddings and projects back to hidden dimension; FiLM scales/shifts invariant channels per graph; `fuse_pool` fuses `graph_attr` with the pooled graph embedding before the heads.
+- `fuse_pool` requires at least one graph output and is not supported by MACE, whose staged readout does not use the generic pooled representation. AllScAIP and UMA apply `concat_node` and `film` after their monolithic backbone output.
 - Conditioning consumes `data.graph_attr` and requires those global attributes to be rotation/translation invariant; providing orientation-dependent values will break equivariance by design.
 
 
