@@ -870,12 +870,13 @@ class Base(Module):
     def _postprocess_conv_output(self, inv_node_feat, batch, data, feat_layer):
         """Apply HydraGNN processing after one convolution layer.
 
-        Monolithic external backbones opt out because their encoder output is
-        already final and an identity wrapper must not change it.
+        Monolithic external backbones skip the generic normalization and
+        activation because their encoder output is already final, but explicit
+        graph conditioning must still affect that output.
         """
+        inv_node_feat = self._apply_graph_conditioning(inv_node_feat, batch, data)
         if getattr(self, "skip_post_conv_processing", False):
             return inv_node_feat
-        inv_node_feat = self._apply_graph_conditioning(inv_node_feat, batch, data)
         return self.activation_function(feat_layer(inv_node_feat))
 
     def forward(self, data):

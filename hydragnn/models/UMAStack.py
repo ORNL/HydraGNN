@@ -340,8 +340,9 @@ class UMAStack(Base):
         # Mark this as an edge-aware model so HydraGNN's preprocess sets
         # one up via the standard radius graph transform.
         self.is_edge_model = True
-        # UMA completes its encoder in _embedding; do not alter the spherical
-        # representation in Base's identity-convolution wrapper.
+        # UMA completes its encoder in _embedding. Skip generic normalization
+        # and activation in Base's identity-convolution wrapper; Base still
+        # applies explicitly requested graph conditioning.
         self.skip_post_conv_processing = True
         # Force num_conv_layers=1 for the Base forward loop. The actual
         # UMA depth lives in self.uma_num_layers.

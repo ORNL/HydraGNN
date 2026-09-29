@@ -253,17 +253,9 @@ def load_existing_model(
                 concat_cond_key = key
             if key.endswith("graph_pool_projector.0.weight"):
                 pool_cond_key = key
-        supports_node_conditioning = not getattr(
-            target_model, "skip_post_conv_processing", False
-        )
         supports_pool_conditioning = "graph" in getattr(
             target_model, "head_type", ()
         ) and getattr(target_model, "supports_graph_pool_conditioning", True)
-        if (graph_cond_key or concat_cond_key) and not supports_node_conditioning:
-            raise ValueError(
-                "Checkpoint contains node graph-conditioning parameters, but the "
-                f"{target_model.__class__.__name__} forward path does not consume them"
-            )
         if pool_cond_key and not supports_pool_conditioning:
             raise ValueError(
                 "Checkpoint contains pooled graph-conditioning parameters, but the "

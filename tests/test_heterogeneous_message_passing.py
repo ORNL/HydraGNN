@@ -152,7 +152,7 @@ def test_graph_conditioning_parameters_exist_before_optimizer_and_preserve_dtype
     assert output.dtype == torch.float64
 
 
-def test_node_only_heterogeneous_model_skips_pool_conditioner():
+def test_node_only_heterogeneous_model_rejects_pool_conditioner():
     output_heads = {
         "node": {
             "num_headlayers": 1,
@@ -171,14 +171,8 @@ def test_node_only_heterogeneous_model_skips_pool_conditioner():
         graph_attr_dim=2,
         graph_attr_conditioning_mode="fuse_pool",
     )
-    model = create_model(**args)
-    assert model.graph_pool_projector is None
-
-    data = _build_simple_hetero_graph()
-    data.graph_attr = torch.tensor([1.0, 2.0])
-    output = model(data)[0]
-
-    assert output.shape == (data["a"].num_nodes, 2)
+    with pytest.raises(ValueError, match="requires at least one graph output"):
+        create_model(**args)
 
 
 def test_hetero_heat_with_gps_unpacks_local_output():
@@ -252,9 +246,7 @@ def test_load_rejects_unused_pool_conditioner_for_node_only_model(tmp_path):
             output_type=["node"],
             output_heads=update_multibranch_heads(output_heads),
             node_target_type="a",
-            use_graph_attr_conditioning=True,
-            graph_attr_dim=2,
-            graph_attr_conditioning_mode="fuse_pool",
+            use_graph_attr_conditioning=False,
         )
     )
     model_name = "hetero_node_only_unused_pool_conditioner"

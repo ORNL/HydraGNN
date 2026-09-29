@@ -97,6 +97,14 @@ def unittest_train_model_graphattr(
         "graph_attr_conditioning_mode"
     ] = graph_attr_conditioning_mode
 
+    has_graph_output = any(
+        output["level"] == "graph" for output in config["Variables"]["outputs"]
+    )
+    if graph_attr_conditioning_mode == "fuse_pool" and (
+        not has_graph_output or mpnn_type == "MACE"
+    ):
+        pytest.skip("fuse_pool is unsupported for this model/output configuration")
+
     # AllScAIP requires hidden_dim divisible by allscaip_num_heads; the unit-test
     # configs use hidden_dim=8, so override the default (8) to a value that fits.
     # The resulting head_dim=4 has no canonical FAIR-Chem frequency spectrum,
