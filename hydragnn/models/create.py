@@ -1267,6 +1267,14 @@ def create_model(
         elif model.graph_attr_conditioning_mode == "concat_node":
             model._ensure_graph_concat_projector(graph_attr_dim, hidden_dim, device)
         elif model.graph_attr_conditioning_mode == "fuse_pool":
+            if "graph" not in output_type:
+                raise ValueError(
+                    "fuse_pool graph conditioning requires at least one graph output"
+                )
+            if not getattr(model, "supports_graph_pool_conditioning", True):
+                raise ValueError(
+                    f"{model.__class__.__name__} does not support fuse_pool graph conditioning"
+                )
             model._ensure_graph_pool_projector(graph_attr_dim, hidden_dim, device)
 
     # Apply interatomic potential enhancement if requested

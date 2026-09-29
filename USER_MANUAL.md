@@ -785,6 +785,8 @@ Therefore, GPS provides global communication between invariant node representati
     - `"concat_node"` (default): concatenate `graph_attr` onto node embeddings and project back to `hidden_dim`.
     - `"film"`: per-graph FiLM scale/shift on invariant node channels.
     - `"fuse_pool"`: fuse `graph_attr` with the pooled graph embedding before prediction heads.
+- `"fuse_pool"` requires at least one graph-level output. It is not supported by MACE because MACE uses staged custom readouts instead of the generic pooled graph representation; unsupported configurations raise an error during model creation.
+- AllScAIP and UMA apply `"concat_node"` and `"film"` to the completed monolithic-backbone node embedding before prediction heads. Their backbone-owned normalization and activation are preserved.
 - Conditioning does not touch equivariant channels, so equivariance is preserved only if `graph_attr` is itself invariant.
 - Provide `graph_attr` tensors during data loading; a missing attribute raises an error when conditioning is enabled.
 - Orientation-dependent attributes will intentionally break rotation/translation equivariance—use only when that is desired.

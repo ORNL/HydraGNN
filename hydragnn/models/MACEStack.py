@@ -72,6 +72,10 @@ import math
 
 @compile_mode("script")
 class MACEStack(Base):
+    # MACE performs its own staged readouts and does not use Base's pooled
+    # graph-conditioning path.
+    supports_graph_pool_conditioning = False
+
     def __init__(
         self,
         input_args,

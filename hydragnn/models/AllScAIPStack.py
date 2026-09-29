@@ -343,8 +343,9 @@ class AllScAIPStack(Base):
         # not pass edge_attr through it. Mark the model as edge-free for
         # Base.__init__'s edge handling.
         self.is_edge_model = False
-        # AllScAIP completes message passing in _embedding.  Avoid an extra
-        # generic HydraGNN activation after the identity placeholder conv.
+        # AllScAIP completes message passing in _embedding. Avoid the generic
+        # normalization/activation after its identity placeholder conv; Base
+        # still applies explicitly requested graph conditioning.
         self.skip_post_conv_processing = True
         # Force num_conv_layers=1 for the Base forward loop. The actual
         # AllScAIP depth lives in self.allscaip_num_layers.

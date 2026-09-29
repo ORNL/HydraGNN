@@ -110,6 +110,22 @@ class GATStack(Base):
             )
             self.feature_layers.append(BatchNorm(self.hidden_dim))
 
+    def _postprocess_conv_output(self, inv_node_feat, batch, data, feat_layer):
+        """Condition GAT node features only after they return to hidden_dim.
+
+        Intermediate multi-head layers have ``hidden_dim * heads`` channels.
+        Replacing the eagerly registered hidden-dimension concat projector at
+        runtime leaves DDP tracking stale parameters and omits the replacement
+        from gradient synchronization.
+        """
+        if (
+            self.use_graph_attr_conditioning
+            and self.graph_attr_conditioning_mode == "concat_node"
+            and inv_node_feat.size(-1) != self.hidden_dim
+        ):
+            return self.activation_function(feat_layer(inv_node_feat))
+        return super()._postprocess_conv_output(inv_node_feat, batch, data, feat_layer)
+
     def _init_node_conv(self):
         """Here this function overwrites _init_conv() in Base since it has different implementation
         in terms of dimensions due to the multi-head attention"""

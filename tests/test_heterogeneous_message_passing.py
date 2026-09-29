@@ -152,6 +152,29 @@ def test_graph_conditioning_parameters_exist_before_optimizer_and_preserve_dtype
     assert output.dtype == torch.float64
 
 
+def test_node_only_heterogeneous_model_rejects_pool_conditioner():
+    output_heads = {
+        "node": {
+            "num_headlayers": 1,
+            "dim_headlayers": [8],
+            "type": "mlp",
+        }
+    }
+    args = _graph_head_model_args(
+        "HeteroSAGE",
+        None,
+        output_dim=[2],
+        output_type=["node"],
+        output_heads=update_multibranch_heads(output_heads),
+        node_target_type="a",
+        use_graph_attr_conditioning=True,
+        graph_attr_dim=2,
+        graph_attr_conditioning_mode="fuse_pool",
+    )
+    with pytest.raises(ValueError, match="requires at least one graph output"):
+        create_model(**args)
+
+
 def test_hetero_heat_with_gps_unpacks_local_output():
     data = _build_simple_hetero_graph(edge_dim=3)
     args = _graph_head_model_args(
@@ -205,6 +228,39 @@ def test_load_unwrapped_hetero_heat_lazy_edge_projectors(tmp_path):
     assert set(target.edge_lin_dict) == set(source.edge_lin_dict)
     for key, value in source.state_dict().items():
         torch.testing.assert_close(target.state_dict()[key], value)
+
+
+def test_load_rejects_unused_pool_conditioner_for_node_only_model(tmp_path):
+    output_heads = {
+        "node": {
+            "num_headlayers": 1,
+            "dim_headlayers": [8],
+            "type": "mlp",
+        }
+    }
+    model = create_model(
+        **_graph_head_model_args(
+            "HeteroSAGE",
+            None,
+            output_dim=[2],
+            output_type=["node"],
+            output_heads=update_multibranch_heads(output_heads),
+            node_target_type="a",
+            use_graph_attr_conditioning=False,
+        )
+    )
+    model_name = "hetero_node_only_unused_pool_conditioner"
+    checkpoint_dir = tmp_path / model_name
+    checkpoint_dir.mkdir()
+    state_dict = model.state_dict()
+    state_dict["graph_pool_projector.0.weight"] = torch.zeros(16, 18)
+    torch.save(
+        {"model_state_dict": state_dict},
+        checkpoint_dir / f"{model_name}.pk",
+    )
+
+    with pytest.raises(ValueError, match="no supported graph head"):
+        load_existing_model(model, model_name, path=tmp_path)
 
 
 def _build_random_hetero_graph(

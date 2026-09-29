@@ -253,6 +253,14 @@ def load_existing_model(
                 concat_cond_key = key
             if key.endswith("graph_pool_projector.0.weight"):
                 pool_cond_key = key
+        supports_pool_conditioning = "graph" in getattr(
+            target_model, "head_type", ()
+        ) and getattr(target_model, "supports_graph_pool_conditioning", True)
+        if pool_cond_key and not supports_pool_conditioning:
+            raise ValueError(
+                "Checkpoint contains pooled graph-conditioning parameters, but the "
+                f"{target_model.__class__.__name__} output path has no supported graph head"
+            )
         if graph_cond_key and hasattr(target_model, "_ensure_graph_conditioner"):
             if getattr(target_model, "graph_conditioner", None) is None:
                 graph_attr_dim = state_dict[graph_cond_key].shape[1]

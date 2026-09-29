@@ -209,7 +209,7 @@ class HeteroBase(Module):
                 self.graph_concat_projector_in_dim = (
                     self.hidden_dim + self.graph_attr_dim
                 )
-            else:
+            elif "graph" in self.head_type:
                 self.graph_pool_projector = Sequential(
                     Linear(self.hidden_dim + self.graph_attr_dim, self.hidden_dim),
                     self.activation_function,
@@ -870,7 +870,8 @@ class HeteroBase(Module):
 
     def _decode_from_x_dict(self, x_dict, batch_dict, data, edge_attr_dict):
         x_graph = self._pool_hetero_graph_features(x_dict, batch_dict)
-        x_graph = self._apply_graph_pool_conditioning(x_graph, data)
+        if "graph" in self.head_type:
+            x_graph = self._apply_graph_pool_conditioning(x_graph, data)
 
         # Prepare dataset_name for multi-branch heads
         if not hasattr(data, "dataset_name"):
