@@ -250,6 +250,7 @@ def train_validate_test(
     task_loss_test = torch.zeros((num_epoch, num_tasks), device=device)
     task_loss_val = torch.zeros((num_epoch, num_tasks), device=device)
 
+    lr_history = torch.zeros(num_epoch, device=device)
     # preparing for results visualization
     ## collecting node feature
     if create_plots:
@@ -278,6 +279,7 @@ def train_validate_test(
             verbosity,
             compute_grad_energy=compute_grad_energy,
             num_tasks=num_tasks,
+            precision=precision
         )
 
         visualizer.create_scatter_plots(
@@ -367,7 +369,13 @@ def train_validate_test(
             compute_grad_energy=compute_grad_energy,
             precision=precision,
         )
-        scheduler.step(val_loss)
+        current_lr = optimizer.param_groups[0]["lr"]
+        
+        if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+            scheduler.step(val_loss)
+        elif scheduler is not None:
+            scheduler.step()
+
         if writer is not None:
             writer.add_scalar("train error", train_loss, epoch)
             writer.add_scalar("validate error", val_loss, epoch)
@@ -379,7 +387,7 @@ def train_validate_test(
         print_distributed(
             verbosity,
             f"Epoch: {epoch:02d}, Train Loss: {train_loss:.8f}, Val Loss: {val_loss:.8f}, "
-            f"Test Loss: {test_loss:.8f}",
+            f"Test Loss: {test_loss:.8f}, LR {current_lr: .8f}",
         )
         print_distributed(
             verbosity,
@@ -399,6 +407,7 @@ def train_validate_test(
         task_loss_train[epoch, :] = train_taskserr
         task_loss_val[epoch, :] = val_taskserr
         task_loss_test[epoch, :] = test_taskserr
+        lr_history[epoch] = current_lr
 
         ###tracking the solution evolving with training
         if plot_hist_solution:
@@ -487,6 +496,7 @@ def train_validate_test(
             task_loss_val,
             task_loss_test,
             task_weights,
+            lr_history,
             output_names,
         )
 
