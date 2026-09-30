@@ -44,6 +44,8 @@ def activation_function_selection(activation_function_string: str):
         return torch.nn.LeakyReLU(0.5)
     elif activation_function_string == "sigmoid":
         return torch.nn.Sigmoid()
+    elif activation_function_string == "tanh":
+        return torch.nn.Tanh()
 
 
 def loss_function_selection(loss_function_string: str):
