@@ -114,6 +114,20 @@ def test_download_file_removes_partial_after_checksum_mismatch(monkeypatch, tmp_
     assert not destination.exists()
 
 
+def test_download_file_rejects_non_content_status(monkeypatch, tmp_path):
+    destination = tmp_path / "dataset.bin"
+    monkeypatch.setattr(
+        "hydragnn.utils.datasets.download.urlopen",
+        lambda request: _Response(b"", status=202),
+    )
+
+    with pytest.raises(OSError, match="Unexpected HTTP status 202"):
+        download_file("https://example.invalid/dataset.bin", destination)
+
+    assert not destination.exists()
+    assert not (tmp_path / "dataset.bin.part").exists()
+
+
 def _write_tar(path: Path, member_name: str, data: bytes = b"data"):
     with tarfile.open(path, "w:gz") as tar:
         info = tarfile.TarInfo(member_name)

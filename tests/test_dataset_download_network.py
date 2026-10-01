@@ -25,8 +25,8 @@ pytestmark = [
 
 ENDPOINTS = {
     "mptrj": "https://ndownloader.figshare.com/files/41619375",
-    "transition1x": "https://figshare.com/ndownloader/files/36035789",
-    "ani1x": "https://springernature.figshare.com/ndownloader/files/18112775",
+    "transition1x": "https://api.figshare.com/v2/file/download/36035789",
+    "ani1x": "https://api.figshare.com/v2/file/download/18112775",
     "oc20": "https://dl.fbaipublicfiles.com/opencatalystproject/data/s2ef_train_200K.tar",
     "oc22": "https://materials.colabfit.org/dataset-original/DS_jgaid7espcoc_0",
     "odac23": "https://dl.fbaipublicfiles.com/dac/datasets/extxyz_val.tar.gz",
