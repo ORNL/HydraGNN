@@ -26,6 +26,13 @@ from hydragnn.utils.distributed import (
 from hydragnn.utils.model.model import Checkpoint, EarlyStopping
 from hydragnn.globalAtt.gps import redraw_performer_projections
 from hydragnn.utils.input_config_parsing.variable_schema import parse_variable_schema
+from hydragnn.loss_reporting import (
+    accumulate_loss_report,
+    configure_supervised_components,
+    finalize_loss_report,
+    format_loss_report,
+    reset_loss_report,
+)
 
 import os
 
@@ -287,39 +294,20 @@ def train_validate_test(
 
     precision, _, _ = resolve_precision(precision)
     configured_output_names = [spec.name for spec in variable_schema.outputs]
+    configure_supervised_components(model.module, variable_schema.outputs)
 
     device = get_device()
     if compute_grad_energy:
-        hessian_enabled = model.module.hessian_weight > 0
-        auxiliary_names = configured_output_names[1:]
-        num_tasks = (4 if hessian_enabled else 3) + len(auxiliary_names)
+        num_tasks = len(model.module.task_names)
         task_dims = [1] * num_tasks
-        task_weights = [
-            model.module.energy_weight,
-            model.module.energy_peratom_weight,
-            model.module.force_weight,
-        ]
-        if hessian_enabled:
-            task_weights.append(model.module.hessian_weight)
-        task_weights.extend(model.module.loss_weights[1:])
-        output_names = [
-            configured_output_names[0],
-            "energy_peratom",
-            "forces",
-        ]
-        if hessian_enabled:
-            output_names.append("hessian")
-        output_names.extend(auxiliary_names)
-        task_names = ["Energy", "Energy Per Atom", "Forces"]
-        if hessian_enabled:
-            task_names.append("Hessian")
-        task_names.extend(auxiliary_names)
+        task_weights = model.module.task_weights
+        output_names = list(model.module.task_names)
     else:
         num_tasks = model.module.num_heads
         task_dims = model.module.head_dims
         task_weights = model.module.loss_weights
         output_names = configured_output_names
-        task_names = output_names
+    task_names = output_names
 
     # total loss tracking for train/vali/test
     total_loss_train = torch.zeros(num_epoch, device=device)
@@ -407,10 +395,15 @@ def train_validate_test(
                 verbosity,
                 f"Loss for {dataset_name}: {loss:.8f}",
             )
-            _print_named_task_losses(
+            _print_named_task_losses(verbosity, task_names, {dataset_name: taskserr})
+            print_distributed(
                 verbosity,
-                task_names,
-                {dataset_name: taskserr},
+                format_loss_report(
+                    -1,
+                    dataset_name.removesuffix("set"),
+                    loss,
+                    model.module.last_epoch_loss_report,
+                ),
             )
         return
 
@@ -449,6 +442,7 @@ def train_validate_test(
                     "global_attn_redraw_interval", 1000
                 ),
             )
+            train_loss_report = dict(model.module.last_epoch_loss_report)
             tr.stop("train")
             tr.disable()
             if epoch == 0:
@@ -477,6 +471,7 @@ def train_validate_test(
             compute_grad_energy=compute_grad_energy,
             precision=precision,
         )
+        val_loss_report = dict(model.module.last_epoch_loss_report)
         test_loss, test_taskserr, true_values, predicted_values = test(
             test_loader,
             model,
@@ -487,6 +482,7 @@ def train_validate_test(
             compute_grad_energy=compute_grad_energy,
             precision=precision,
         )
+        test_loss_report = dict(model.module.last_epoch_loss_report)
         scheduler.step(val_loss)
         if writer is not None:
             writer.add_scalar("train error", train_loss, epoch)
@@ -510,6 +506,14 @@ def train_validate_test(
                 "Test": test_taskserr,
             },
         )
+        for split, total, report in (
+            ("train", train_loss, train_loss_report),
+            ("validation", val_loss, val_loss_report),
+            ("test", test_loss, test_loss_report),
+        ):
+            print_distributed(
+                verbosity, format_loss_report(epoch, split, total, report)
+            )
 
         total_loss_train[epoch] = train_loss
         total_loss_val[epoch] = val_loss
@@ -758,6 +762,7 @@ def train(
     tasks_error = torch.zeros(num_tasks, device=get_device())
     num_samples_local = 0
     model.train()
+    reset_loss_report(model.module)
 
     rank0 = (not dist.is_initialized()) or dist.get_rank() == 0
     model_param_dtype = None
@@ -865,6 +870,8 @@ def train(
         with record_function("backward"):
             if fsdp2_force_workaround and fsdp2_workaround_available:
                 _set_reshard_after_backward(model, True)
+            if verify_fsdp2_sharding and ibatch == 0:
+                _verify_fsdp2_sharding(model, "gradients")
             if use_deepspeed:
                 model.backward(loss)
             else:
@@ -874,8 +881,6 @@ def train(
                     loss.backward()
             if fsdp2_force_workaround and fsdp2_workaround_available:
                 _set_reshard_after_backward(model, True)
-            if verify_fsdp2_sharding and ibatch == 0:
-                _verify_fsdp2_sharding(model, "gradients")
             if trace_level > 0:
                 tr.start("backward_sync", **syncopt)
                 MPI.COMM_WORLD.Barrier()
@@ -905,6 +910,7 @@ def train(
             num_samples_local += data.num_graphs
             for itask in range(len(tasks_loss)):
                 tasks_error[itask] += tasks_loss[itask] * data.num_graphs
+            accumulate_loss_report(model.module, data.num_graphs)
         if ibatch < (nbatch - 1):
             tr.start("dataload", **syncopt)
         if use_ddstore:
@@ -921,6 +927,7 @@ def train(
 
     train_error = reduce_values_ranks(train_error)
     tasks_error = reduce_values_ranks(tasks_error)
+    finalize_loss_report(model.module, get_device())
 
     return train_error, tasks_error
 
@@ -942,6 +949,7 @@ def validate(
     tasks_error = torch.zeros(num_tasks, device=get_device())
     num_samples_local = 0
     model.eval()
+    reset_loss_report(model.module)
     use_ddstore = (
         hasattr(loader.dataset, "ddstore")
         and hasattr(loader.dataset.ddstore, "epoch_begin")
@@ -983,6 +991,7 @@ def validate(
         num_samples_local += data.num_graphs
         for itask in range(len(tasks_loss)):
             tasks_error[itask] += tasks_loss[itask] * data.num_graphs
+        accumulate_loss_report(model.module, data.num_graphs)
         if use_ddstore:
             loader.dataset.ddstore.epoch_begin()
     if use_ddstore:
@@ -993,6 +1002,7 @@ def validate(
     if reduce_ranks:
         val_error = reduce_values_ranks(val_error)
         tasks_error = reduce_values_ranks(tasks_error)
+    finalize_loss_report(model.module, get_device())
     return val_error, tasks_error
 
 
@@ -1010,21 +1020,18 @@ def test(
     precision, param_dtype, _ = resolve_precision(precision)
     autocast_context, scaler = get_autocast_and_scaler(precision)
 
-    if compute_grad_energy:
-        import torch_scatter
-
     if num_tasks is None:
-        if compute_grad_energy:
-            num_tasks = (4 if model.module.hessian_weight > 0 else 3) + max(
-                model.module.num_heads - 1, 0
-            )
-        else:
-            num_tasks = model.module.num_heads
+        num_tasks = (
+            len(model.module.task_names)
+            if compute_grad_energy
+            else model.module.num_heads
+        )
 
     total_error = torch.tensor(0.0, device=get_device())
     tasks_error = torch.zeros(num_tasks, device=get_device())
     num_samples_local = 0
     model.eval()
+    reset_loss_report(model.module)
     use_ddstore = (
         hasattr(loader.dataset, "ddstore")
         and hasattr(loader.dataset.ddstore, "epoch_begin")
@@ -1101,6 +1108,7 @@ def test(
         num_samples_local += data.num_graphs
         for itask in range(len(tasks_loss)):
             tasks_error[itask] += tasks_loss[itask] * data.num_graphs
+        accumulate_loss_report(model.module, data.num_graphs)
         if use_ddstore:
             loader.dataset.ddstore.epoch_begin()
     if use_ddstore:
@@ -1131,136 +1139,13 @@ def test(
                     data.pos.requires_grad = True
                     with autocast_context:
                         pred = model(data)
-                        # Support both node and graph heads; enforce sum pooling for graph heads
-                        if model.module.head_type[0] == "node":
-                            node_energy_pred = pred[0]
-                            graph_energy_pred = (
-                                torch_scatter.scatter_add(
-                                    node_energy_pred, data.batch, dim=0
-                                )
-                                .squeeze()
-                                .float()
-                            )
-                        elif model.module.head_type[0] == "graph":
-                            if getattr(
-                                model.module.model, "graph_pooling", "mean"
-                            ) not in ["add"]:
-                                raise ValueError(
-                                    "Graph head force loss requires sum pooling (graph_pooling='add')."
-                                )
-                            if isinstance(pred, dict) and "graph" in pred:
-                                graph_energy_pred = pred["graph"][0].squeeze().float()
-                            elif isinstance(pred, (list, tuple)):
-                                graph_energy_pred = pred[0].squeeze().float()
-                            else:
-                                graph_energy_pred = pred.squeeze().float()
-                        else:
-                            raise ValueError(
-                                "Force predictions are only supported for node or graph energy heads."
-                            )
-
-                        ncount = torch.bincount(data.batch)
-                        graph_energy_peratom_pred = graph_energy_pred / ncount
-                        if hasattr(data, "energy"):
-                            graph_energy_true = data.energy.squeeze().float()
-                            graph_energy_peratom_true = graph_energy_true / ncount
-                        else:
-                            # Force/Hessian-only configurations have no energy
-                            # labels. Preserve task alignment for callers that
-                            # request samples while marking those targets absent.
-                            graph_energy_true = torch.full_like(
-                                graph_energy_pred, torch.nan
-                            )
-                            graph_energy_peratom_true = torch.full_like(
-                                graph_energy_peratom_pred, torch.nan
-                            )
-
-                        hessian_enabled = model.module.hessian_weight > 0
-                        forces_pred = -torch.autograd.grad(
-                            graph_energy_pred,
-                            data.pos,
-                            grad_outputs=torch.ones_like(graph_energy_pred),
-                            retain_graph=hessian_enabled,
-                            create_graph=hessian_enabled,
-                        )[0]
-                        hessian_pred = None
-                        if hessian_enabled:
-                            hessian_rows = []
-                            for component in forces_pred.reshape(-1):
-                                force_gradient = torch.autograd.grad(
-                                    component,
-                                    data.pos,
-                                    retain_graph=True,
-                                    create_graph=False,
-                                )[0]
-                                hessian_rows.append(-force_gradient.reshape(-1))
-                            hessian_pred = torch.stack(hessian_rows)
-                        forces_pred = forces_pred.float()
-                        assert (
-                            forces_pred is not None
-                        ), "No gradients were found for data.pos. Does your model use positions for prediction?"
-                        forces_pred = forces_pred.flatten()
-                        forces_true = (
-                            data.forces.float().flatten()
-                            if hasattr(data, "forces")
-                            else torch.full_like(forces_pred, torch.nan)
+                        values = model.module.prediction_target_pairs(
+                            pred, data, create_graph=False
                         )
-                        true_values[0].append(graph_energy_true.reshape(-1, 1))
-                        true_values[1].append(graph_energy_peratom_true.reshape(-1, 1))
-                        true_values[2].append(forces_true.reshape(-1, 1))
-                        predicted_values[0].append(graph_energy_pred.reshape(-1, 1))
-                        predicted_values[1].append(
-                            graph_energy_peratom_pred.reshape(-1, 1)
-                        )
-                        predicted_values[2].append(forces_pred.reshape(-1, 1))
-                        task_offset = 3
-                        if hessian_enabled:
-                            hessian_true = data.hessian.reshape(
-                                hessian_pred.shape
-                            ).float()
-                            hessian_mask = torch.isfinite(hessian_true)
-                            true_values[3].append(
-                                hessian_true[hessian_mask].reshape(-1, 1)
-                            )
-                            predicted_values[3].append(
-                                hessian_pred[hessian_mask].reshape(-1, 1)
-                            )
-                            task_offset = 4
-
-                        if model.module.num_heads > 1:
-                            if not isinstance(pred, (list, tuple)):
-                                raise ValueError(
-                                    "Multitask interatomic potentials require list-like model outputs"
-                                )
-                            sample_sizes = data.y_loc[:, -1]
-                            sample_starts = (
-                                torch.cumsum(sample_sizes, dim=0) - sample_sizes
-                            )
-                            for head_index in range(1, model.module.num_heads):
-                                indices = []
-                                for sample_index in range(data.y_loc.shape[0]):
-                                    start = (
-                                        sample_starts[sample_index]
-                                        + data.y_loc[sample_index, head_index]
-                                    )
-                                    end = (
-                                        sample_starts[sample_index]
-                                        + data.y_loc[sample_index, head_index + 1]
-                                    )
-                                    indices.append(
-                                        torch.arange(start, end, device=data.y.device)
-                                    )
-                                target = data.y[torch.cat(indices)].reshape(
-                                    pred[head_index].shape
-                                )
-                                mask = torch.isfinite(target)
-                                task_index = task_offset + head_index - 1
-                                true_values[task_index].append(
-                                    target[mask].reshape(-1, 1)
-                                )
-                                predicted_values[task_index].append(
-                                    pred[head_index][mask].reshape(-1, 1)
-                                )
+                        for itask, name in enumerate(model.module.task_names):
+                            task_pred, task_true = values[name]
+                            true_values[itask].append(task_true.reshape(-1, 1))
+                            predicted_values[itask].append(task_pred.reshape(-1, 1))
             else:
                 head_index = get_head_indices(model, data)
                 ytrue = data.y
@@ -1289,5 +1174,7 @@ def test(
             for itask in range(num_tasks):
                 true_values[itask] = gather_tensor_ranks(true_values[itask])
                 predicted_values[itask] = gather_tensor_ranks(predicted_values[itask])
+
+    finalize_loss_report(model.module, get_device())
 
     return test_error, tasks_error, true_values, predicted_values

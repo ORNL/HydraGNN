@@ -854,8 +854,12 @@ def distributed_model_wrapper(
             optimizer=optimizer,  # optimizer is managed by deepspeed
         )  # scheduler is not managed by deepspeed because it is per-epoch instead of per-step
     else:
-        # Auto-detect EnhancedModelWrapper and enable find_unused_parameters to avoid DDP gradient stride warnings
-        enhanced_model_detected = (
+        # Force-gradient objectives can legitimately leave architecture-specific
+        # parameters outside a particular backward graph. Their provider declares
+        # that requirement explicitly instead of relying on a wrapper class name.
+        enhanced_model_detected = bool(
+            getattr(model, "requires_find_unused_parameters", False)
+        ) or (
             hasattr(model, "__class__")
             and "EnhancedModelWrapper" in model.__class__.__name__
         )
@@ -863,7 +867,7 @@ def distributed_model_wrapper(
         if enhanced_model_detected:
             print_distributed(
                 verbosity,
-                f"EnhancedModelWrapper detected: {model.__class__.__name__}",
+                f"Dynamic-gradient model detected: {model.__class__.__name__}",
             )
             print_distributed(
                 verbosity,

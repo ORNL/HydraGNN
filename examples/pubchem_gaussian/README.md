@@ -60,7 +60,7 @@ read only from the final frequency calculation; records missing any configured
 label are skipped with a warning. Batch size is one because dense Hessians vary
 with molecular size.
 
-Each epoch's text log reports energy, energy-per-atom, force, Hessian, and all
+Each epoch's text log reports energy, force, Hessian, and all
 configured auxiliary train, validation, and test losses using the same named
 format.
 

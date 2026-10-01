@@ -227,24 +227,24 @@ if __name__ == "__main__":
     # ~10B params target (rough): problem.add_hyperparameter((4000, 600), "dim_headlayers")
     # ~100B params target (rough): problem.add_hyperparameter((6000, 9000), "dim_headlayers")
 
-    hyperparameters["force_weight"] = [10.0, 50.0, 100.0]
+    hyperparameters["force_loss_weight"] = [10.0, 50.0, 100.0]
     hyperparameters["learning_rate"] = (1e-5, 1e-3)
     hyperparameters["mpnn_type"] = mpnn_type_list
 
     ## Model specific hyperparameters
     if len(mpnn_type_list) == 1:
         if mpnn_type_list[0] == "EGNN":
-            hyperparameters["force_weight"] = (10.0, 1000.0)
+            hyperparameters["force_loss_weight"] = (10.0, 1000.0)
             hyperparameters["learning_rate"] = (1e-5, 3e-3)
         elif mpnn_type_list[0] == "SchNet":
-            hyperparameters["force_weight"] = (10.0, 1000.0)
+            hyperparameters["force_loss_weight"] = (10.0, 1000.0)
             hyperparameters["learning_rate"] = (1e-5, 3e-3)
 
             hyperparameters["num_filters"] = (6, 300)
             hyperparameters["num_gaussians"] = (3, 100)
         elif mpnn_type_list[0] == "DimeNet":
             hyperparameters["hidden_dim"] = (10, 100)
-            hyperparameters["force_weight"] = (10.0, 1000.0)
+            hyperparameters["force_loss_weight"] = (10.0, 1000.0)
             hyperparameters["learning_rate"] = (1e-5, 3e-3)
 
             hyperparameters["basis_emb_size"] = (8, 200)
@@ -257,7 +257,7 @@ if __name__ == "__main__":
             hyperparameters["num_spherical"] = (2, 8)
         elif mpnn_type_list[0] == "MACE":
             hyperparameters["hidden_dim"] = (100, 1000)
-            hyperparameters["force_weight"] = (10.0, 1000.0)
+            hyperparameters["force_loss_weight"] = (10.0, 1000.0)
             hyperparameters["learning_rate"] = (1e-5, 3e-3)
 
             hyperparameters["radial_type"] = ["bessel", "gaussian", "chebyshev"]
@@ -268,16 +268,16 @@ if __name__ == "__main__":
             hyperparameters["correlation"] = (2, 3)
         elif mpnn_type_list[0] == "PAINN":
             hyperparameters["hidden_dim"] = (100, 1000)
-            hyperparameters["force_weight"] = (10.0, 1000.0)
+            hyperparameters["force_loss_weight"] = (10.0, 1000.0)
             hyperparameters["learning_rate"] = (1e-5, 3e-3)
 
             hyperparameters["num_radial"] = (3, 12)
         elif mpnn_type_list[0] == "EGNN":
-            hyperparameters["force_weight"] = (10.0, 1000.0)
+            hyperparameters["force_loss_weight"] = (10.0, 1000.0)
             hyperparameters["learning_rate"] = (1e-5, 3e-3)
         elif mpnn_type_list[0] == "PNAEq":
             hyperparameters["hidden_dim"] = (100, 1000)
-            hyperparameters["force_weight"] = (10.0, 1000.0)
+            hyperparameters["force_loss_weight"] = (10.0, 1000.0)
             hyperparameters["learning_rate"] = (1e-5, 3e-3)
 
             hyperparameters["num_radial"] = (3, 12)
@@ -290,7 +290,7 @@ if __name__ == "__main__":
             hyperparameters["num_conv_layers"] = (4, 8)
             hyperparameters["allscaip_num_heads"] = [4, 8, 16]
             hyperparameters["max_neighbours"] = (20, 30)
-            hyperparameters["force_weight"] = [10.0, 50.0, 100.0]
+            hyperparameters["force_loss_weight"] = [10.0, 50.0, 100.0]
             hyperparameters["learning_rate"] = (1e-4, 1e-3)
         elif mpnn_type_list[0] == "UMA":
             # UMA (equivariant, eSEN backbone): keep lmax/mmax fixed (=2, set in the
@@ -301,7 +301,7 @@ if __name__ == "__main__":
             hyperparameters["num_conv_layers"] = (4, 8)
             hyperparameters["uma_edge_channels"] = [64, 128, 256]
             hyperparameters["max_neighbours"] = (20, 30)
-            hyperparameters["force_weight"] = [10.0, 50.0, 100.0]
+            hyperparameters["force_loss_weight"] = [10.0, 50.0, 100.0]
             hyperparameters["learning_rate"] = (1e-4, 1e-3)
         else:
             raise ValueError(f"Unsupported MPNN type: {mpnn_type_list[0]}")

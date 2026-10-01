@@ -29,6 +29,7 @@ from torch_geometric.transforms import Distance, Spherical, LocalCartesian
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
 
 import hydragnn
+from hydragnn.domain_losses import uses_interatomic_potential
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.model import print_model
 from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
@@ -544,9 +545,7 @@ if __name__ == "__main__":
         log_name,
         verbosity,
         create_plots=False,
-        compute_grad_energy=config["NeuralNetwork"]["Architecture"].get(
-            "enable_interatomic_potential", False
-        ),
+        compute_grad_energy=uses_interatomic_potential(config),
     )
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)

@@ -56,8 +56,8 @@ DEFAULT_STAGES = (
     {"name": "full", "train_samples": 3_000_000, "epochs": 25, "keep": 3},
 )
 WEIGHT_CHOICES = (0.01, 0.1, 1.0, 10.0, 100.0)
-PRIMARY_METRICS = ("Energy", "Forces", "Hessian")
-DERIVED_PRIMARY_METRICS = ("Energy Per Atom",)
+PRIMARY_METRICS = ("energy", "forces", "hessian")
+DERIVED_PRIMARY_METRICS = ("energy_per_atom",)
 AUXILIARY_METRICS = (
     "mulliken_charges",
     "dipole_magnitude",
@@ -81,9 +81,9 @@ def sample_candidates(count, seed, model_types=DEFAULT_MODELS):
                 "parameters": {
                     "mpnn_type": model_type,
                     "use_equivariant_graph_transformer": rng.choice(("off", "on")),
-                    "energy_weight": rng.choice(WEIGHT_CHOICES),
-                    "force_weight": rng.choice(WEIGHT_CHOICES),
-                    "hessian_weight": rng.choice(WEIGHT_CHOICES),
+                    "energy_loss_weight": rng.choice(WEIGHT_CHOICES),
+                    "force_loss_weight": rng.choice(WEIGHT_CHOICES),
+                    "hessian_loss_weight": rng.choice(WEIGHT_CHOICES),
                     "num_conv_layers": rng.randint(2, 6),
                     "hidden_dim": rng.choice((64, 128, 256, 512)),
                     "global_attn_heads": rng.choice((1, 2, 4, 8)),

@@ -24,7 +24,6 @@
             "global_attn_type": "",
             "hidden_dim": 50,
             "num_conv_layers": 3,
-            "enable_interatomic_potential": true,
             "output_heads": {
                 "node": [
                     {
@@ -64,6 +63,38 @@
             "Optimizer": {
                 "type": "AdamW",
                 "learning_rate": 0.001
+            },
+            "loss": {
+                "enabled": true,
+                "provider": "interatomic_potential",
+                "supervised": {
+                    "default_metric": "mae",
+                    "terms": [
+                        {
+                            "variable": "energy",
+                            "weight": 1.0,
+                            "normalization": "per_structure"
+                        },
+                        {
+                            "variable": "energy_per_atom",
+                            "weight": 1.0,
+                            "normalization": "per_atom"
+                        },
+                        {
+                            "variable": "forces",
+                            "weight": 1.0,
+                            "prediction": {
+                                "operator": "negative_gradient",
+                                "of": "energy",
+                                "with_respect_to": "positions"
+                            }
+                        }
+                    ]
+                },
+                "constraints": [],
+                "constraint_optimizer": {
+                    "type": "fixed_penalty"
+                }
             }
         }
     },
@@ -81,7 +112,10 @@
                 "dim": 1
             },
             {
-                "name": "pos", "role": "position", "level": "node", "dim": 3
+                "name": "pos",
+                "role": "position",
+                "level": "node",
+                "dim": 3
             }
         ],
         "outputs": [

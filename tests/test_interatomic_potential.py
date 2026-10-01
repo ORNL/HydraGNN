@@ -88,7 +88,7 @@ def create_mock_molecular_data(num_atoms=10, num_graphs=2):
     return data
 
 
-def create_weighted_interatomic_model(**weights):
+def create_interatomic_model(*terms):
     from hydragnn.models.create import create_model
     from hydragnn.utils.model.model import update_multibranch_heads
 
@@ -117,35 +117,72 @@ def create_weighted_interatomic_model(**weights):
         task_weights=[1.0],
         num_conv_layers=1,
         num_nodes=3,
-        enable_interatomic_potential=True,
+        domain_loss_config={
+            "enabled": True,
+            "provider": "interatomic_potential",
+            "supervised": {"default_metric": "mse", "terms": list(terms)},
+            "constraints": [],
+            "constraint_optimizer": {"type": "fixed_penalty"},
+        },
         use_gpu=False,
-        **weights,
     )
 
 
 @pytest.mark.mpi_skip()
 def test_force_only_loss_does_not_require_energy():
-    model = create_weighted_interatomic_model(force_weight=1.0)
+    model = create_interatomic_model(
+        {
+            "variable": "forces",
+            "weight": 1.0,
+            "prediction": {
+                "operator": "negative_gradient",
+                "of": "energy",
+                "with_respect_to": "positions",
+            },
+        }
+    )
     data = create_mock_molecular_data(num_atoms=3, num_graphs=1)
     del data.energy
     loss, tasks = model.energy_force_loss(model(data), data)
     assert loss.requires_grad
-    assert len(tasks) == 3
+    assert len(tasks) == 1
 
 
 @pytest.mark.mpi_skip()
 def test_energy_and_force_loss_still_works():
-    model = create_weighted_interatomic_model(energy_weight=1.0, force_weight=1.0)
+    model = create_interatomic_model(
+        {"variable": "energy", "weight": 1.0, "normalization": "per_structure"},
+        {
+            "variable": "forces",
+            "weight": 1.0,
+            "prediction": {
+                "operator": "negative_gradient",
+                "of": "energy",
+                "with_respect_to": "positions",
+            },
+        },
+    )
     data = create_mock_molecular_data(num_atoms=3, num_graphs=1)
     loss, tasks = model.energy_force_loss(model(data), data)
     assert loss.requires_grad
-    assert len(tasks) == 3
+    assert len(tasks) == 2
 
 
 @pytest.mark.mpi_skip()
 @pytest.mark.parametrize("all_unavailable", [False, True])
 def test_nan_force_labels_are_skipped(all_unavailable):
-    model = create_weighted_interatomic_model(energy_weight=1.0, force_weight=1.0)
+    model = create_interatomic_model(
+        {"variable": "energy", "weight": 1.0, "normalization": "per_structure"},
+        {
+            "variable": "forces",
+            "weight": 1.0,
+            "prediction": {
+                "operator": "negative_gradient",
+                "of": "energy",
+                "with_respect_to": "positions",
+            },
+        },
+    )
     data = create_mock_molecular_data(num_atoms=3, num_graphs=1)
     if all_unavailable:
         data.forces.fill_(torch.nan)
@@ -156,15 +193,33 @@ def test_nan_force_labels_are_skipped(all_unavailable):
 
     assert loss.requires_grad
     assert torch.isfinite(loss)
-    assert torch.isfinite(tasks[2])
+    assert torch.isfinite(tasks[1])
     if all_unavailable:
-        assert tasks[2].item() == 0.0
+        assert tasks[1].item() == 0.0
 
 
 @pytest.mark.mpi_skip()
 def test_unavailable_hessian_is_skipped():
-    model = create_weighted_interatomic_model(
-        energy_weight=1.0, force_weight=1.0, hessian_weight=1.0
+    model = create_interatomic_model(
+        {"variable": "energy", "weight": 1.0, "normalization": "per_structure"},
+        {
+            "variable": "forces",
+            "weight": 1.0,
+            "prediction": {
+                "operator": "negative_gradient",
+                "of": "energy",
+                "with_respect_to": "positions",
+            },
+        },
+        {
+            "variable": "hessian",
+            "weight": 1.0,
+            "prediction": {
+                "operator": "hessian",
+                "of": "energy",
+                "with_respect_to": "positions",
+            },
+        },
     )
     data = create_mock_molecular_data(num_atoms=3, num_graphs=1)
     data.hessian = torch.full((9, 9), torch.nan)
@@ -174,21 +229,49 @@ def test_unavailable_hessian_is_skipped():
 
     assert loss.requires_grad
     assert torch.isfinite(loss)
-    assert len(tasks) == 4
+    assert len(tasks) == 3
     assert tasks[-1].item() == 0.0
 
 
 @pytest.mark.mpi_skip()
 @pytest.mark.parametrize(
-    "weights,missing,message",
+    "term,missing,message",
     [
-        ({"energy_weight": 1.0}, "energy", "data.energy is required"),
-        ({"force_weight": 1.0}, "forces", "data.forces is required"),
-        ({"hessian_weight": 1.0}, "hessian", "data.hessian is required"),
+        (
+            {"variable": "energy", "weight": 1.0, "normalization": "per_structure"},
+            "energy",
+            "energy target",
+        ),
+        (
+            {
+                "variable": "forces",
+                "weight": 1.0,
+                "prediction": {
+                    "operator": "negative_gradient",
+                    "of": "energy",
+                    "with_respect_to": "positions",
+                },
+            },
+            "forces",
+            "data.forces",
+        ),
+        (
+            {
+                "variable": "hessian",
+                "weight": 1.0,
+                "prediction": {
+                    "operator": "hessian",
+                    "of": "energy",
+                    "with_respect_to": "positions",
+                },
+            },
+            "hessian",
+            "data.hessian",
+        ),
     ],
 )
-def test_enabled_interatomic_loss_requires_its_label(weights, missing, message):
-    model = create_weighted_interatomic_model(**weights)
+def test_enabled_interatomic_loss_requires_its_label(term, missing, message):
+    model = create_interatomic_model(term)
     data = create_mock_molecular_data(num_atoms=3, num_graphs=1)
     if missing in data:
         del data[missing]
@@ -230,7 +313,31 @@ def test_model_creation_with_enhancement():
         "task_weights": [1.0],
         "num_conv_layers": 2,
         "num_nodes": 10,
-        "enable_interatomic_potential": True,
+        "domain_loss_config": {
+            "enabled": True,
+            "provider": "interatomic_potential",
+            "supervised": {
+                "default_metric": "mse",
+                "terms": [
+                    {
+                        "variable": "energy",
+                        "weight": 1.0,
+                        "normalization": "per_structure",
+                    },
+                    {
+                        "variable": "forces",
+                        "weight": 1.0,
+                        "prediction": {
+                            "operator": "negative_gradient",
+                            "of": "energy",
+                            "with_respect_to": "positions",
+                        },
+                    },
+                ],
+            },
+            "constraints": [],
+            "constraint_optimizer": {"type": "fixed_penalty"},
+        },
         "use_gpu": False,
     }
 
@@ -279,7 +386,31 @@ def test_forward_pass():
         "task_weights": [1.0],
         "num_conv_layers": 2,
         "num_nodes": 10,
-        "enable_interatomic_potential": True,
+        "domain_loss_config": {
+            "enabled": True,
+            "provider": "interatomic_potential",
+            "supervised": {
+                "default_metric": "mse",
+                "terms": [
+                    {
+                        "variable": "energy",
+                        "weight": 1.0,
+                        "normalization": "per_structure",
+                    },
+                    {
+                        "variable": "forces",
+                        "weight": 1.0,
+                        "prediction": {
+                            "operator": "negative_gradient",
+                            "of": "energy",
+                            "with_respect_to": "positions",
+                        },
+                    },
+                ],
+            },
+            "constraints": [],
+            "constraint_optimizer": {"type": "fixed_penalty"},
+        },
         "use_gpu": False,
     }
 
@@ -334,7 +465,31 @@ def test_energy_force_consistency():
         "task_weights": [1.0],
         "num_conv_layers": 2,
         "num_nodes": 10,
-        "enable_interatomic_potential": True,
+        "domain_loss_config": {
+            "enabled": True,
+            "provider": "interatomic_potential",
+            "supervised": {
+                "default_metric": "mse",
+                "terms": [
+                    {
+                        "variable": "energy",
+                        "weight": 1.0,
+                        "normalization": "per_structure",
+                    },
+                    {
+                        "variable": "forces",
+                        "weight": 1.0,
+                        "prediction": {
+                            "operator": "negative_gradient",
+                            "of": "energy",
+                            "with_respect_to": "positions",
+                        },
+                    },
+                ],
+            },
+            "constraints": [],
+            "constraint_optimizer": {"type": "fixed_penalty"},
+        },
         "use_gpu": False,
     }
 

@@ -47,13 +47,49 @@ def _base_training(lr, num_epoch, regime):
         "checkpoint_warmup": 2,
         "continue": 0,
         "startfrom": "existing_model",
-        "DomainLoss": {
+        "loss": {
             "enabled": False,
-            "smoothness_weight": 0.001,
-            "transformer_smoothness_weight": 0.001,
-            "voltage_bound_weight": 0.01,
-            "voltage_bound_feature_indices": [2, 3],
-            "voltage_output_index": -1,
+            "provider": "optimal_power_flow",
+            "supervised": {
+                "default_metric": "mse",
+                "terms": [{"variable": "bus_va_vm", "weight": 1.0}],
+            },
+            "constraints": [
+                {
+                    "name": "voltage_limits",
+                    "operator": "bounded",
+                    "value": "bus_voltage_magnitude",
+                    "lower": "bus_vmin",
+                    "upper": "bus_vmax",
+                    "scale": 0.01,
+                },
+                {
+                    "name": "angle_limits",
+                    "operator": "edge_difference_bounded",
+                    "value": "bus_voltage_angle",
+                    "relations": ["ac_line", "transformer"],
+                    "lower": "angle_minimum",
+                    "upper": "angle_maximum",
+                    "scale": 0.001,
+                },
+                {
+                    "name": "thermal_limits",
+                    "operator": "ac_thermal_limit",
+                    "relations": ["ac_line", "transformer"],
+                    "scale": 0.001,
+                    "slack": 0.0001,
+                },
+            ],
+            "constraint_optimizer": {
+                "type": "augmented_lagrangian",
+                "rho": 1.0,
+                "rho_growth": 2.0,
+                "rho_max": 10000.0,
+                "required_reduction": 0.9,
+                "update_every": 1,
+                "warmup_epochs": 3,
+                "ramp_epochs": 3,
+            },
         },
         "Optimizer": {"type": "AdamW", "learning_rate": lr},
         "conv_checkpointing": False,
@@ -177,10 +213,43 @@ def _variables(output_name, level, dim, node_type=None):
     output = {"name": output_name, "level": level, "dim": dim}
     if node_type is not None:
         output["node_type"] = node_type
+    if output_name == "bus_va_vm":
+        output["components"] = ["bus_voltage_angle", "bus_voltage_magnitude"]
+    elif output_name == "generator_pg_qg":
+        output["components"] = [
+            "generator_active_power",
+            "generator_reactive_power",
+        ]
     return {
         "graph_type": "heterogeneous",
         "node_types": ["bus", "generator", "load", "shunt"],
         "inputs": HETERO_INPUTS,
+        "edge_attributes": {
+            "ac_line": [
+                "angle_minimum",
+                "angle_maximum",
+                "shunt_from",
+                "shunt_to",
+                "resistance",
+                "reactance",
+                "rate_a",
+                "rate_b",
+                "rate_c",
+            ],
+            "transformer": [
+                "angle_minimum",
+                "angle_maximum",
+                "resistance",
+                "reactance",
+                "rate_a",
+                "rate_b",
+                "rate_c",
+                "tap_ratio",
+                "reserved_0",
+                "reserved_1",
+                "reserved_2",
+            ],
+        },
         "outputs": [output],
     }
 
@@ -346,6 +415,10 @@ def generate_all():
                         out_dim,
                     )
                     training = _base_training(lr, fm["epochs"], regime)
+                    if tgt == "generator":
+                        # The current OPF constraint provider operates on predicted
+                        # bus voltage and cannot constrain a generator-only head.
+                        training.pop("loss")
                     cfg = {
                         "_ft_strategy": ft_dir,
                         "_ft_description": fm["desc"],

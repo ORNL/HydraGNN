@@ -186,9 +186,7 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         log_name,
         verbosity,
         create_plots=False,
-        compute_grad_energy=config["NeuralNetwork"]["Architecture"].get(
-            "enable_interatomic_potential", False
-        ),
+        compute_grad_energy=hydragnn.domain_losses.uses_interatomic_potential(config),
     )
     if writer is not None:
         writer.close()

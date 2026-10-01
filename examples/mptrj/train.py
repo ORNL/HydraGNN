@@ -314,9 +314,6 @@ if __name__ == "__main__":
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
     parser.add_argument(
-        "--compute_grad_energy", type=bool, help="compute_grad_energy", default=False
-    )
-    parser.add_argument(
         "--precision",
         type=str,
         choices=["fp32", "fp64", "bf16"],
@@ -582,9 +579,7 @@ if __name__ == "__main__":
         log_name,
         verbosity,
         create_plots=False,
-        compute_grad_energy=config["NeuralNetwork"]["Architecture"].get(
-            "enable_interatomic_potential", False
-        ),
+        compute_grad_energy=hydragnn.domain_losses.uses_interatomic_potential(config),
         precision=precision,
     )
 

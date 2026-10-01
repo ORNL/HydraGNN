@@ -34,6 +34,7 @@ from torch_geometric.utils import degree
 from torch.utils.data import Subset
 
 import hydragnn
+from hydragnn.domain_losses import uses_interatomic_potential
 from hydragnn.preprocess.load_data import SchemaPreparedDataset, split_dataset
 from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
 from hydragnn.utils.datasets.adiosdataset import AdiosDataset, AdiosWriter
@@ -951,9 +952,7 @@ def main():
         args.log,
         verbosity,
         create_plots=False,
-        compute_grad_energy=config["NeuralNetwork"]["Architecture"].get(
-            "enable_interatomic_potential", False
-        ),
+        compute_grad_energy=uses_interatomic_potential(config),
     )
     hydragnn.utils.model.save_model(model, optimizer, args.log)
     if writer is not None:

@@ -3,11 +3,6 @@
     "NeuralNetwork": {
         "Architecture": {
             "mpnn_type": "DimeNet",
-            "enable_interatomic_potential": true,
-            "energy_weight": 10.0,
-            "energy_peratom_weight": 0.0,
-            "force_weight": 10.0,
-            "hessian_weight": 10.0,
             "graph_pooling": "add",
             "edge_features": [],
             "max_neighbours": 64,
@@ -53,6 +48,42 @@
             "batch_size": 1,
             "continue": 0,
             "loss_function_type": "mse",
+            "loss": {
+                "enabled": true,
+                "provider": "interatomic_potential",
+                "supervised": {
+                    "default_metric": "mse",
+                    "terms": [
+                        {
+                            "variable": "energy",
+                            "weight": 10.0,
+                            "normalization": "per_structure"
+                        },
+                        {
+                            "variable": "forces",
+                            "weight": 10.0,
+                            "prediction": {
+                                "operator": "negative_gradient",
+                                "of": "energy",
+                                "with_respect_to": "positions"
+                            }
+                        },
+                        {
+                            "variable": "hessian",
+                            "weight": 10.0,
+                            "prediction": {
+                                "operator": "hessian",
+                                "of": "energy",
+                                "with_respect_to": "positions"
+                            }
+                        }
+                    ]
+                },
+                "constraints": [],
+                "constraint_optimizer": {
+                    "type": "fixed_penalty"
+                }
+            },
             "Optimizer": {"learning_rate": 0.001}
         }
     },

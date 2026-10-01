@@ -60,6 +60,8 @@ class VariableSpec:
     # Disambiguates which heterogeneous node type this variable belongs to;
     # unused (and must be omitted) for homogeneous graphs.
     node_type: str | None = None
+    # Optional semantic names for the columns of a multi-dimensional variable.
+    components: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -70,6 +72,7 @@ class VariableSchema:
     node_types: tuple[str, ...]
     inputs: tuple[VariableSpec, ...]
     outputs: tuple[VariableSpec, ...]
+    edge_attributes: dict[str, tuple[str, ...]]
 
 
 def _parse_group(raw_variables, group: str) -> tuple[VariableSpec, ...]:
@@ -82,7 +85,15 @@ def _parse_group(raw_variables, group: str) -> tuple[VariableSpec, ...]:
         path = f"Variables.{group}[{index}]"
         if not isinstance(raw, dict):
             raise TypeError(f"{path} must be a JSON object")
-        extra = set(raw) - {"name", "level", "dim", "role", "encoding", "node_type"}
+        extra = set(raw) - {
+            "name",
+            "level",
+            "dim",
+            "role",
+            "encoding",
+            "node_type",
+            "components",
+        }
         missing = {"name", "level", "dim"} - set(raw)
         if missing:
             raise ValueError(f"{path} is missing: {', '.join(sorted(missing))}")
@@ -95,6 +106,7 @@ def _parse_group(raw_variables, group: str) -> tuple[VariableSpec, ...]:
         role = raw.get("role", "feature")
         raw_encoding = raw.get("encoding")
         node_type = raw.get("node_type")
+        raw_components = raw.get("components")
         if not isinstance(name, str) or not name.strip():
             raise ValueError(f"{path}.name must be a non-empty string")
         if level not in _LEVELS:
@@ -108,6 +120,20 @@ def _parse_group(raw_variables, group: str) -> tuple[VariableSpec, ...]:
                 raise ValueError(f"{path}.node_type is valid only when level is 'node'")
             if not isinstance(node_type, str) or not node_type.strip():
                 raise ValueError(f"{path}.node_type must be a non-empty string")
+        components = ()
+        if raw_components is not None:
+            if not isinstance(raw_components, list):
+                raise TypeError(f"{path}.components must be a JSON array")
+            if len(raw_components) != dim:
+                raise ValueError(f"{path}.components must contain exactly {dim} names")
+            if any(
+                not isinstance(component, str) or not component.strip()
+                for component in raw_components
+            ):
+                raise ValueError(f"{path}.components entries must be non-empty strings")
+            if len(set(raw_components)) != len(raw_components):
+                raise ValueError(f"{path}.components entries must be unique")
+            components = tuple(raw_components)
         if role == "position":
             if group != "inputs":
                 raise ValueError(f"{path}.role 'position' is valid only for inputs")
@@ -178,6 +204,7 @@ def _parse_group(raw_variables, group: str) -> tuple[VariableSpec, ...]:
                 role=role,
                 encoding=encoding,
                 node_type=node_type,
+                components=components,
             )
         )
     return tuple(parsed)
@@ -187,7 +214,13 @@ def parse_variable_schema(raw_variables: dict) -> VariableSchema:
     """Parse and validate the top-level ``Variables`` JSON section."""
     if not isinstance(raw_variables, dict):
         raise TypeError("Variables must be a JSON object")
-    extra = set(raw_variables) - {"graph_type", "node_types", "inputs", "outputs"}
+    extra = set(raw_variables) - {
+        "graph_type",
+        "node_types",
+        "inputs",
+        "outputs",
+        "edge_attributes",
+    }
     if extra:
         raise ValueError("Variables has unknown keys: " + ", ".join(sorted(extra)))
     graph_type = raw_variables.get("graph_type")
@@ -212,11 +245,33 @@ def parse_variable_schema(raw_variables: dict) -> VariableSchema:
         if len(set(raw_node_types)) != len(raw_node_types):
             raise ValueError("Variables.node_types entries must be unique")
         node_types = tuple(raw_node_types)
+    raw_edge_attributes = raw_variables.get("edge_attributes", {})
+    if not isinstance(raw_edge_attributes, dict):
+        raise TypeError("Variables.edge_attributes must be a JSON object")
+    edge_attributes = {}
+    for relation, names in raw_edge_attributes.items():
+        if not isinstance(relation, str) or not relation.strip():
+            raise ValueError("Variables.edge_attributes keys must be non-empty strings")
+        if not isinstance(names, list) or not names:
+            raise ValueError(
+                f"Variables.edge_attributes[{relation!r}] must be a non-empty array"
+            )
+        if any(not isinstance(name, str) or not name.strip() for name in names):
+            raise ValueError(
+                f"Variables.edge_attributes[{relation!r}] entries must be non-empty strings"
+            )
+        if len(set(names)) != len(names):
+            raise ValueError(
+                f"Variables.edge_attributes[{relation!r}] entries must be unique"
+            )
+        edge_attributes[relation] = tuple(names)
+
     schema = VariableSchema(
         graph_type=graph_type,
         node_types=node_types,
         inputs=_parse_group(raw_variables, "inputs"),
         outputs=_parse_group(raw_variables, "outputs"),
+        edge_attributes=edge_attributes,
     )
     for group, specs in (("inputs", schema.inputs), ("outputs", schema.outputs)):
         names = [spec.name for spec in specs]

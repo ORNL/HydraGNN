@@ -5,7 +5,6 @@
     "NeuralNetwork": {
         "Architecture": {
             "mpnn_type": "EGNN",
-            "enable_interatomic_potential": true,
             "equivariance": true,
             "max_neighbours": 50,
             "num_gaussians": 50,
@@ -43,6 +42,38 @@
             "startfrom": "ANI1x",
             "Optimizer": {
                 "learning_rate": 0.001
+            },
+            "loss": {
+                "enabled": true,
+                "provider": "interatomic_potential",
+                "supervised": {
+                    "default_metric": "mse",
+                    "terms": [
+                        {
+                            "variable": "energy",
+                            "weight": 1.0,
+                            "normalization": "per_structure"
+                        },
+                        {
+                            "variable": "energy_per_atom",
+                            "weight": 1.0,
+                            "normalization": "per_atom"
+                        },
+                        {
+                            "variable": "forces",
+                            "weight": 1.0,
+                            "prediction": {
+                                "operator": "negative_gradient",
+                                "of": "energy",
+                                "with_respect_to": "positions"
+                            }
+                        }
+                    ]
+                },
+                "constraints": [],
+                "constraint_optimizer": {
+                    "type": "fixed_penalty"
+                }
             }
         }
     },
