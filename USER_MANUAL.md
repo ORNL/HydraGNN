@@ -33,6 +33,16 @@ HydraGNN is a distributed PyTorch implementation of multi-headed graph convoluti
 - Scale to hundreds of GPUs using MPI and distributed computing frameworks
 - Support various data formats including ADIOS2 for high-performance I/O
 - Flexible configuration system for rapid prototyping and experimentation
+- Learn on heterogeneous graphs with typed nodes and relations
+- Combine local message passing with GPS or equivariant all-to-all attention
+- Train energy-conserving potentials with force and Hessian supervision
+- Optimize OPF predictions with fixed-penalty or augmented-Lagrangian constraints
+
+Feature guides: [heterogeneous models](docs/heterogeneous_models.md),
+[structural encodings](docs/structural_encodings.md),
+[interatomic losses](docs/interatomic_training_loss.md),
+[OPF constraints](examples/opf/README_augmented_lagrangian.md), and
+[named loss reporting](docs/training_loss_reporting.md).
 
 ---
 
@@ -398,6 +408,14 @@ HydraGNN provides extensive configuration options for building graph neural netw
        "interaction_order": 3
    }
    ```
+
+### Heterogeneous architectures
+
+For typed graphs, select `HeteroGIN`, `HeteroSAGE`, `HeteroGAT`, `HeteroPNA`,
+`HeteroRGAT`, `HeteroHGT`, or `HeteroHEAT`. The
+[heterogeneous model guide](docs/heterogeneous_models.md) covers edge-feature
+support, local attention heads, pooling, metadata, and heterogeneous GPS.
+Use it together with the [Variables schema](#variables).
 
 ### Output Head Configuration
 
@@ -779,6 +797,17 @@ and returns $(h', v')$.
 
 Therefore, GPS provides global communication between invariant node representations, while geometric equivariance remains governed by the selected local equivariant MPNN. Global information may influence equivariant features indirectly in subsequent layers through the coupling between invariant and equivariant channels inside the local MPNN.
 
+#### Equivariant all-to-all attention
+
+`global_attn_engine: "EquivariantTransformer"` provides geometric all-to-all
+attention. PaiNN, PNAEq, and MACE support tensor-valued local/global coupling;
+SchNet and DimeNet require explicit scalar-only opt-in. EGNN is unsupported
+by this engine. See the [Transformer guide](docs/equivariant_graph_transformer.md)
+for compatibility, chunking, and periodic-supercell semantics.
+For typed graphs, use [heterogeneous GPS](docs/heterogeneous_models.md);
+its structural inputs are described in the
+[structural-encoding guide](docs/structural_encodings.md).
+
 ### Graph-level conditioning (concat_node default)
 
 - Enable with `NeuralNetwork.Architecture.use_graph_attr_conditioning: true` and select `graph_attr_conditioning_mode`:
@@ -788,8 +817,29 @@ Therefore, GPS provides global communication between invariant node representati
 - `"fuse_pool"` requires at least one graph-level output. It is not supported by MACE because MACE uses staged custom readouts instead of the generic pooled graph representation; unsupported configurations raise an error during model creation.
 - AllScAIP and UMA apply `"concat_node"` and `"film"` to the completed monolithic-backbone node embedding before prediction heads. Their backbone-owned normalization and activation are preserved.
 - Conditioning does not touch equivariant channels, so equivariance is preserved only if `graph_attr` is itself invariant.
-- Provide `graph_attr` tensors during data loading; a missing attribute raises an error when conditioning is enabled.
+- Declare named graph inputs in `Variables.inputs` and provide their source
+  tensors on each sample. Schema preparation constructs `data.graph_attr`;
+  importers should not build that internal tensor themselves. A missing
+  compiled attribute raises an error when conditioning is enabled.
 - Orientation-dependent attributes will intentionally break rotation/translation equivariance—use only when that is desired.
+
+For example, add this entry to an otherwise complete `Variables.inputs` list:
+
+```json
+{"name": "charge_and_spin", "level": "graph", "dim": 2}
+```
+
+Each raw sample supplies `data.charge_and_spin` with shape `(1, 2)`. After
+schema preparation, batching produces `data.graph_attr` with shape `(B, 2)`.
+`update_config` derives `Architecture.graph_attr_dim = 2` and enables
+conditioning whenever the schema has graph inputs, even if the flag was
+previously false. The configuration default without graph inputs is off.
+
+Prepare samples before serialization, create loaders, and call `update_config`
+before constructing the model with `create_model_config`. Construct the
+optimizer and apply distributed wrapping only after model creation so the
+conditioning parameters are included from the start. Reusing prepared data
+does not rebuild its attributes; regenerate it when the input schema changes.
 
 ### Geometric Features
 
@@ -1098,7 +1148,17 @@ HydraGNN supports energy-conserving interatomic potential workflows. When enable
 The enabled terms define the objective explicitly. The training workflow detects
 the provider and derives forces by automatic differentiation; there is no
 architecture-level interatomic switch or separate `compute_grad_energy` JSON
-flag. See `docs/interatomic_training_loss.md` for validation rules and examples.
+flag. See the [interatomic training-loss guide](docs/interatomic_training_loss.md)
+for validation rules and examples.
+
+The same provider supports Hessian supervision through a term with
+`prediction.operator: "hessian"`. It computes the Cartesian energy Hessian
+(the negative force Jacobian) and currently requires batch size one. Forces
+and Hessians are energy derivatives, not additional direct prediction heads.
+See the [PubChem Gaussian example](examples/pubchem_gaussian/README.md) for
+data conventions, charge/spin conditioning, auxiliary targets, and HPO.
+Its FSDP2 experiment is a memory diagnostic, not a supported Hessian-training
+mode; see the [FSDP notes](#fsdp-fully-sharded-data-parallel-integration).
 
 Categorical handling is configured on each scalar node input. For example,
 atomic numbers can use a learned embedding:
@@ -1381,6 +1441,12 @@ export HYDRAGNN_FSDP_VERSION=2
 ```
 
 Notes:
+
+- The PubChem Hessian workflow rejects ordinary FSDP runs. Its explicit
+  `--allow-experimental-fsdp2` option permits only an unsupported FSDP2
+  `FULL_SHARD` diagnostic. Parameter sharding does not partition a molecule
+  across ranks or partition its dense Hessian and retained derivative graph.
+  See the [diagnostic instructions](examples/pubchem_gaussian/README.md#fsdp2-hessian-memory-diagnostic).
 - FSDP v2 currently supports `HYDRAGNN_FSDP_STRATEGY` values `FULL_SHARD` and `SHARD_GRAD_OP`.
 - Multi-branch model-parallel mode (`MultiTaskModelMP`) supports `HYDRAGNN_FSDP_VERSION=2`.
 - For task-parallel runs (`--task_parallel`) without `--use_devicemesh`, branch groups are split proportionally by dataset size by default.

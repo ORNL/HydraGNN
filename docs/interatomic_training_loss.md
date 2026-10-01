@@ -39,6 +39,13 @@ atomic positions. Hessians are computed by differentiating those forces and
 currently require a batch size of one. At least one term must be enabled with a
 positive weight.
 
+Derivative targets are supplied as dataset attributes, not direct output
+heads. See the [PubChem Gaussian workflow](../examples/pubchem_gaussian/README.md)
+for a complete energy/force/Hessian example and target layout. That workflow
+rejects ordinary FSDP runs; its explicit FSDP2 diagnostic does not shard a
+single molecule's Hessian or retained derivative graph and is not a supported
+Hessian-training mode.
+
 The provider validates variable, normalization, and prediction semantics when the
 model is created. Training and evaluation report only the active terms, in JSON
 order.

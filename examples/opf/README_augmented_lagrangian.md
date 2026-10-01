@@ -95,3 +95,57 @@ overrides include `--constraint_voltage_scale`, `--constraint_thermal_slack`,
 Raw and weighted values for every supervised property and constraint are written
 separately for train, validation, and test as documented in
 [Named training-loss reporting](../../docs/training_loss_reporting.md).
+
+
+## Running the provider
+
+From the repository root, with HydraGNN and the example dependencies installed:
+
+```bash
+cd examples/opf
+python train_opf_solution_heterogeneous.py \
+  --inputfile opf_solution_heterogeneous.json \
+  --data_root dataset --case_name pglib_opf_case14_ieee \
+  --max_samples 100 --num_epoch 2
+```
+
+The entry point uses PyG's `OPFDataset`; allow network access for data acquisition
+when the selected case is not cached. `--max_samples` caps the total retained
+samples across train/validation/test. Add `--preonly` to prepare and serialize
+the data without training. This small run demonstrates the workflow, not
+converged constraint satisfaction.
+
+An enabled `optimal_power_flow` provider cannot be passed directly to
+`create_model_config`: the factory rejects it because OPF needs application
+metadata. Custom workflows should follow the entry point's sequence after
+preparing data, creating loaders, and calling `update_config`:
+
+```python
+# OPFDomainLoss and OPFEnhancedModelWrapper are application classes in
+# examples/opf/opf_solution_utils.py (importable from examples/opf).
+import hydragnn
+from opf_solution_utils import OPFDomainLoss, OPFEnhancedModelWrapper
+
+model_config = hydragnn.domain_losses.defer_domain_loss(
+    config["NeuralNetwork"], "optimal_power_flow"
+)
+model = hydragnn.models.create_model_config(
+    model_config,
+    metadata=trainset[0].metadata(),
+    node_input_dims=config["NeuralNetwork"]["Architecture"]["node_input_dims"],
+)
+model = OPFEnhancedModelWrapper(
+    model,
+    OPFDomainLoss(
+        config["NeuralNetwork"]["Training"]["loss"],
+        node_target_type="bus",
+        variables=config["Variables"],
+    ),
+)
+```
+
+`defer_domain_loss` copies the model configuration and disables the provider
+only in that copy. The wrapper receives the original loss settings and named
+variable metadata. Construct the optimizer and apply distributed wrapping
+after this step, as in
+[the training script](train_opf_solution_heterogeneous.py).

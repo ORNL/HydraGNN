@@ -15,13 +15,21 @@ Scalable PyTorch Implementation of Multi-Headed Graph Neural Networks
 - **Distributed Training** via DDP, FSDP (v1/v2), and DeepSpeed at supercomputing scale
 - **Convolutional Layers** as a hyperparameter  
 - **Geometric Equivariance** in convolution and prediction (EGNN, PaiNN, PNAEq, MACE, DimeNet)
-- **Global Attention** (GPS)
+- **Heterogeneous Graph Learning** with typed nodes, relations, and heterogeneous GPS
+- **Global Attention** via GPS and the equivariant all-to-all Transformer
 - **Multiple Precision Training** (FP32, BF16, FP64)
-- **Machine-Learned Interatomic Potentials** with energy-conserving force prediction
+- **Machine-Learned Interatomic Potentials** with energy-conserving forces and energy-derived Hessian supervision
+- **Constraint-Aware Training** for optimal power flow with fixed penalties or augmented Lagrangian optimization
 - **Gradient Checkpointing** for memory-efficient training
 
 ### Optional graph-level conditioning
-- Enable with `NeuralNetwork.Architecture.use_graph_attr_conditioning` (off by default) and choose mode via `graph_attr_conditioning_mode` (`"concat_node"` default, `"film"`, or `"fuse_pool"`).
+
+Declare named graph-level attributes in `Variables.inputs`; schema preparation
+builds `data.graph_attr`. `update_config` derives `graph_attr_dim` and enables
+conditioning when graph inputs are present. See the
+[conditioning example](USER_MANUAL.md#graph-level-conditioning-concat_node-default).
+
+- Enable with `NeuralNetwork.Architecture.use_graph_attr_conditioning` (off by default without graph inputs) and choose mode via `graph_attr_conditioning_mode` (`"concat_node"` default, `"film"`, or `"fuse_pool"`).
 - `concat_node` (default) appends `graph_attr` to node embeddings and projects back to hidden dimension; FiLM scales/shifts invariant channels per graph; `fuse_pool` fuses `graph_attr` with the pooled graph embedding before the heads.
 - `fuse_pool` requires at least one graph output and is not supported by MACE, whose staged readout does not use the generic pooled representation. AllScAIP and UMA apply `concat_node` and `film` after their monolithic backbone output.
 - Conditioning consumes `data.graph_attr` and requires those global attributes to be rotation/translation invariant; providing orientation-dependent values will break equivariance by design.
@@ -198,7 +206,8 @@ Additionally, many important arguments fall within the `["NeuralNetwork"]` secti
 - `["NeuralNetwork"]`
   - `["Architecture"]`
     - `["mpnn_type"]`  
-      Accepted types: `AllScAIP`, `CGCNN`, `DimeNet`, `EGNN`, `GAT`, `GIN`, `MACE`, `MFC`, `PAINN`, `PNAEq`, `PNAPlus`, `PNA`, `SAGE`, `SchNet`, `UMA` (str)
+      Homogeneous types: `AllScAIP`, `CGCNN`, `DimeNet`, `EGNN`, `GAT`, `GIN`, `MACE`, `MFC`, `PAINN`, `PNAEq`, `PNAPlus`, `PNA`, `SAGE`, `SchNet`, `UMA` (str)
+      Heterogeneous types: `HeteroGIN`, `HeteroSAGE`, `HeteroGAT`, `HeteroPNA`, `HeteroRGAT`, `HeteroHGT`, `HeteroHEAT`. See the [heterogeneous model guide](docs/heterogeneous_models.md) for configuration and compatibility.
     - `["num_conv_layers"]`  
       Examples: `1`, `2`, `3`, `4` ... (int)
     - `["output_heads"]`  
@@ -258,6 +267,9 @@ and propagated alongside the globally attended invariant representation.
 ### Feature guides
 
 - [GraphGPS and Performer configuration](#configurable-settings)
+- [Heterogeneous models and GPS](docs/heterogeneous_models.md)
+- [Structural encodings for heterogeneous models](docs/structural_encodings.md)
+- [PubChem energy, force, and Hessian training](examples/pubchem_gaussian/README.md)
 - [Equivariant all-to-all graph Transformer](docs/equivariant_graph_transformer.md)
 - [UMA and AllScAIP integration](docs/uma_allscaip.md)
 - [Cost-aware graph batching](docs/cost_aware_batching.md)
