@@ -22,9 +22,12 @@ change when switching models.
 
 Edge-unaware models still use every declared relation's topology. HeteroPNA
 requires degree statistics (`pna_deg`). `hetero_attention_heads` controls local
-attention in the attention-based stacks; `global_attn_heads` independently
-controls GPS. For HGT, choose a hidden width divisible by its local head count.
-HGT does not support convolutional node heads; use `mlp` or `mlp_per_node`.
+attention in `HeteroRGAT`, `HeteroHGT`, and `HeteroHEAT`. The model factory
+uses six fixed local attention heads for `HeteroGAT`; setting
+`hetero_attention_heads` does not change that model's local head count.
+`global_attn_heads` independently controls GPS. For HGT, choose a hidden width
+divisible by its local head count. Both `HeteroHGT` and `HeteroHEAT` reject
+convolutional node heads; use `mlp` or `mlp_per_node`.
 `hetero_pooling_mode` is `sum` (default) or `mean` and combines the already
 pooled representations of the node types for graph predictions.
 
