@@ -9,7 +9,7 @@ Scalable PyTorch Implementation of Multi-Headed Graph Neural Networks
 
 ## Capabilities
 
-<img src="images/HydraGNN-Overview.png" alt="HydraGNN Overview" width="1100" />
+<img src="images/HydraGNN-Overview-v2.png" alt="HydraGNN Overview" width="1100" />
 
 - **Multi-headed Prediction** for graph and node-level properties  
 - **Distributed Training** via DDP, FSDP (v1/v2), and DeepSpeed at supercomputing scale
