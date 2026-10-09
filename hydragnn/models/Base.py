@@ -965,7 +965,7 @@ class Base(Module):
                         # print("Pei debugging:", branchtype, data.dataset_name, mask, data.dataset_name[mask])
                         x_graph_head = self.graph_shared[branchtype](x_graph[mask, :])
                         output_head = headloc[branchtype](x_graph_head)
-                        head[mask] = output_head[:, :head_dim]
+                        head[mask] = output_head[:, :head_dim].to(dtype=out_dtype)
                         headvar[mask] = (output_head[:, head_dim:] ** 2).to(
                             dtype=out_dtype
                         )
@@ -1027,8 +1027,10 @@ class Base(Module):
                             x_node = headloc[branchtype](
                                 x=x[mask_nodes, :], batch=data.batch[mask_nodes]
                             )
-                        head[mask_nodes] = x_node[:, :head_dim]
-                        headvar[mask_nodes] = x_node[:, head_dim:] ** 2
+                        head[mask_nodes] = x_node[:, :head_dim].to(dtype=out_dtype)
+                        headvar[mask_nodes] = (x_node[:, head_dim:] ** 2).to(
+                            dtype=out_dtype
+                        )
                 outputs.append(head)
                 outputs_var.append(headvar)
         tr.stop("branch_forward")

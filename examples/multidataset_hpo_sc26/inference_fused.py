@@ -753,7 +753,7 @@ def _decode_branch(model, data, encoded_feats):
                     branchtype = f"branch-{ID.item()}"
                     x_graph_head = model.graph_shared[branchtype](x_graph[mask, :])
                     output_head = headloc[branchtype](x_graph_head)
-                    head[mask] = output_head[:, :head_dim]
+                    head[mask] = output_head[:, :head_dim].to(dtype=out_dtype)
                     headvar[mask] = (output_head[:, head_dim:] ** 2).to(dtype=out_dtype)
             outputs.append(head)
             outputs_var.append(headvar)
@@ -809,8 +809,10 @@ def _decode_branch(model, data, encoded_feats):
                         x_node = headloc[branchtype](
                             x=x[mask_nodes, :], batch=data.batch[mask_nodes]
                         )
-                    head[mask_nodes] = x_node[:, :head_dim]
-                    headvar[mask_nodes] = x_node[:, head_dim:] ** 2
+                    head[mask_nodes] = x_node[:, :head_dim].to(dtype=out_dtype)
+                    headvar[mask_nodes] = (x_node[:, head_dim:] ** 2).to(
+                        dtype=out_dtype
+                    )
             outputs.append(head)
             outputs_var.append(headvar)
 

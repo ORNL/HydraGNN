@@ -1110,6 +1110,11 @@ HydraGNN supports multiple training precisions:
 - **`"bf16"`**: Mixed-precision with BF16 compute and FP32 master parameters, using `torch.autocast`.
 - **`"fp64"`**: Double-precision training for high-accuracy applications.
 
+Multi-branch graph and node decoders cast branch predictions to the output
+buffer dtype before assembling them. This allows BF16 autocast computation
+with FP32 output buffers while retaining gradients for energy and force losses.
+The fused-inference encoder-reuse decoder follows the same convention.
+
 ```json
 {
     "Training": {
