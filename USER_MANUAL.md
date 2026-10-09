@@ -61,6 +61,54 @@ torchvision 0.28.0, and PyTorch Geometric 2.8.0. HydraGNN accepts PyTorch 2.13
 or 2.14 so facility installers can retain their tested accelerator wheels.
 Refer to the modular requirements files for the authoritative version set.
 
+TensorBoard's `SummaryWriter` is imported only when `get_summary_writer`
+creates a writer on rank zero. Importing HydraGNN or using model utilities
+does not initialize TensorBoard; writer creation still requires its installed
+dependencies and reports import errors normally.
+
+#### Why TensorBoard initialization is deferred
+
+In an environment with Python 3.11.16, PyTorch 2.14.0+cu130, PyTorch
+Geometric, Triton, and TensorFlow installed, a fresh `import hydragnn`
+could segfault while initializing Triton's native extension. The updated
+package imports `domain_losses` early, which imports model utilities.
+Those utilities previously imported `torch.utils.tensorboard.SummaryWriter`
+at module scope, before importing PyTorch Geometric. TensorBoard could
+initialize TensorFlow in that environment; subsequent PyTorch Geometric
+imports initialized PyTorch Dynamo and Triton. The traceback ended in
+Triton's native-module initialization, not in a model forward pass.
+
+Moving the `SummaryWriter` import into the rank-zero branch of
+`get_summary_writer` removes logging initialization from the package-import
+path. PyTorch Geometric and its Dynamo/Triton dependencies can initialize
+before TensorBoard is needed. This fixes the reproduced import-order failure
+without forcing a Dynamo preimport, disabling logging, catching import
+errors, or changing models, checkpoint formats, or numerical precision.
+Ranks other than zero still return `None`; rank zero still creates the same
+writer at the same path when requested.
+
+Standalone validation on a Perlmutter A100 compute node (Slurm job
+`59591125`, upstream baseline `7fab9cc79678f9644ce177aac25481f3652eb7e0`):
+
+- An unmodified upstream snapshot running only `import hydragnn` reproduced
+  the native segmentation fault (subprocess return code `-11`).
+- Two fresh subprocesses importing the patched snapshot passed without
+  explicit Dynamo preimports.
+- A fresh subprocess importing the patched snapshot, creating a real
+  rank-zero writer, writing a scalar, flushing, and closing it passed.
+- `python -m pytest -q tests/test_summary_writer_import.py
+  tests/test_precision_control.py --tb=short` passed: **6 tests**.
+  The import regression checks that TensorBoard and TensorFlow are not
+  loaded by importing HydraGNN; rank tests check writer creation and paths.
+
+These checks used the existing Python environment, but no matsim-agents
+imports, foundation checkpoints, or training scripts. They establish that
+deferring TensorBoard fixes this reproduced standalone failure and preserves
+logging. They do **not** identify the precise native-library conflict or
+prove that TensorFlow alone causes it. Full-suite execution and qualification
+in a fresh dependency installation were not performed for this change.
+Legacy-checkpoint compatibility is a separate issue.
+
 #### Recommended: Automated Installation
 ```bash
 ./install_dependencies.sh

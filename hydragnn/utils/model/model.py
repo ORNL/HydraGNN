@@ -14,7 +14,6 @@ import numpy as np
 
 import torch
 import torch.distributed as dist
-from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.utils import degree
 from hydragnn.utils.print.print_utils import print_master, iterate_tqdm
 
@@ -198,6 +197,8 @@ def get_summary_writer(name, path="./logs/"):
     _, world_rank = get_comm_size_and_rank()
     writer = None
     if world_rank == 0:
+        from torch.utils.tensorboard import SummaryWriter
+
         path_name = os.path.join(path, name)
         writer = SummaryWriter(path_name)
     return writer
