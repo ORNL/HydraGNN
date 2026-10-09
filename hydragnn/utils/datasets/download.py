@@ -59,7 +59,10 @@ def download_file(
     offset = partial.stat().st_size if partial.exists() else 0
     headers = {"Range": f"bytes={offset}-"} if offset else {}
     with urlopen(Request(url, headers=headers)) as response:
-        resumed = offset > 0 and getattr(response, "status", None) == 206
+        status = getattr(response, "status", None)
+        if status not in (None, 200, 206):
+            raise OSError(f"Unexpected HTTP status {status} for {url}")
+        resumed = offset > 0 and status == 206
         mode = "ab" if resumed else "wb"
         with partial.open(mode) as output:
             shutil.copyfileobj(response, output, length=chunk_size)
