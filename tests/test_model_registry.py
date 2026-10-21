@@ -363,23 +363,7 @@ def _build_any(mpnn_type, **overrides):
         pytest.skip(f"{mpnn_type} dependencies unavailable: {exc}")
 
 
-@pytest.mark.parametrize(
-    "mpnn_type",
-    [
-        (
-            pytest.param(
-                name,
-                marks=pytest.mark.xfail(
-                    strict=True,
-                    reason="MACE silently ignores initial_bias (#567)",
-                ),
-            )
-            if name == "MACE"
-            else name
-        )
-        for name in HOMOGENEOUS_MODELS + HETEROGENEOUS_MODELS
-    ],
-)
+@pytest.mark.parametrize("mpnn_type", HOMOGENEOUS_MODELS + HETEROGENEOUS_MODELS)
 def test_initial_bias_is_applied_to_graph_heads(mpnn_type):
     model, _ = _build_any(mpnn_type, initial_bias=0.3)
 
