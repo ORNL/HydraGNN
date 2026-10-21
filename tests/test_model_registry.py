@@ -371,8 +371,7 @@ def _build_any(mpnn_type, **overrides):
                 name,
                 marks=pytest.mark.xfail(
                     strict=True,
-                    reason="MACE keeps its heads in multihead_decoders, so "
-                    "initial_bias is silently ignored",
+                    reason="MACE silently ignores initial_bias (#567)",
                 ),
             )
             if name == "MACE"
@@ -384,15 +383,17 @@ def _build_any(mpnn_type, **overrides):
 def test_initial_bias_is_applied_to_graph_heads(mpnn_type):
     model, _ = _build_any(mpnn_type, initial_bias=0.3)
 
-    graph_heads = [
-        head for head, kind in zip(model.heads_NN, model.head_type) if kind == "graph"
-    ]
-    assert graph_heads
-    for head in graph_heads:
-        for branch in head.values():
-            torch.testing.assert_close(
-                branch[-1].bias, torch.full_like(branch[-1].bias, 0.3)
-            )
+    # MACE sums one readout per layer, so its effective bias is the sum over decoders.
+    readouts = getattr(model, "multihead_decoders", None) or [model]
+    biases = {}
+    for readout in readouts:
+        for i, (head, kind) in enumerate(zip(readout.heads_NN, readout.head_type)):
+            if kind == "graph":
+                for name, branch in head.items():
+                    biases[i, name] = biases.get((i, name), 0) + branch[-1].bias
+    assert biases
+    for bias in biases.values():
+        torch.testing.assert_close(bias, torch.full_like(bias, 0.3))
 
 
 @pytest.mark.parametrize("mpnn_type", HOMOGENEOUS_MODELS + HETEROGENEOUS_MODELS)
