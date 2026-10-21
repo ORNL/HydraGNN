@@ -192,6 +192,7 @@ class HeteroHEATStack(HeteroBase):
                 )
 
         for conv, node_norms in zip(self.graph_convs, self.feature_layers):
+            conv = self._maybe_checkpoint(conv)
             if self.use_global_attn:
                 x_dict, _ = conv(
                     x_dict,

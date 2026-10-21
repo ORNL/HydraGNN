@@ -675,7 +675,8 @@ class Base(Module):
             # FIXME: we only currently enable this for graph outputs.
             if type == "graph":
                 # Set the bias of the last linear layer to a large value (UQ)
-                head[-1].bias.data.fill_(self.initial_bias)
+                for branch in head.values():
+                    branch[-1].bias.data.fill_(self.initial_bias)
 
     def _init_node_conv(self):
         # *******convolutional layers for node level predictions*******#

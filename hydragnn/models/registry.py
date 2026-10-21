@@ -92,19 +92,17 @@ def _base_args(p):
     )
 
 
-def _base_kwargs(p, initial_bias=True):
-    kwargs = dict(
+def _base_kwargs(p):
+    return dict(
         loss_weights=p.task_weights,
         freeze_conv=p.freeze_conv,
+        initial_bias=p.initial_bias,
         num_conv_layers=p.num_conv_layers,
         num_nodes=p.num_nodes,
         graph_pooling=p.graph_pooling,
         use_graph_attr_conditioning=p.use_graph_attr_conditioning,
         graph_attr_conditioning_mode=p.graph_attr_conditioning_mode,
     )
-    if initial_bias:
-        kwargs["initial_bias"] = p.initial_bias
-    return kwargs
 
 
 def _equivariant_attn_kwargs(p):
@@ -231,7 +229,7 @@ def _build_sage(p):
         "inv_node_feat, equiv_node_feat, edge_index",
         "inv_node_feat, edge_index",
         *_base_args(p),
-        **_base_kwargs(p, initial_bias=False),
+        **_base_kwargs(p),
     )
 
 
@@ -308,7 +306,7 @@ def _build_painn(p):
         p.num_radial,
         p.radius,
         *_base_args(p),
-        **_base_kwargs(p, initial_bias=False),
+        **_base_kwargs(p),
         **_equivariant_attn_kwargs(p),
     )
 
@@ -324,7 +322,7 @@ def _build_pnaeq(p):
         p.num_radial,
         p.radius,
         *_base_args(p),
-        **_base_kwargs(p, initial_bias=False),
+        **_base_kwargs(p),
         **_equivariant_attn_kwargs(p),
     )
 

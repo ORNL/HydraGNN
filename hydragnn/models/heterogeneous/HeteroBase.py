@@ -9,8 +9,11 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
+import functools
+
 import torch
 from torch.nn import Module, ModuleList, ModuleDict, Linear, Parameter, Sequential
+from torch.utils.checkpoint import checkpoint
 from torch_geometric.nn import (
     BatchNorm,
     HeteroConv,
@@ -22,6 +25,7 @@ from torch_geometric.nn import (
 from hydragnn.utils.model import activation_function_selection, loss_function_selection
 from hydragnn.utils.distributed import get_device
 from hydragnn.models.Base import MLPNode
+from hydragnn.utils.print.print_utils import print_master
 from hydragnn.globalAtt.HeteroGPS import HeteroGPSConv
 from hydragnn.globalAtt.structural import StructuralAttentionContext
 from hydragnn.loss_reporting import supervised_loss_report
@@ -555,10 +559,20 @@ class HeteroBase(Module):
                 for param in layer.parameters():
                     param.requires_grad = False
 
+    def enable_conv_checkpointing(self):
+        print_master("Enabling checkpointing")
+        self.conv_checkpointing = True
+
+    def _maybe_checkpoint(self, conv):
+        if self.conv_checkpointing:
+            return functools.partial(checkpoint, conv, use_reentrant=False)
+        return conv
+
     def _set_bias(self):
         for head, type in zip(self.heads_NN, self.head_type):
             if type == "graph":
-                head[-1].bias.data.fill_(self.initial_bias)
+                for branch in head.values():
+                    branch[-1].bias.data.fill_(self.initial_bias)
 
     def _multihead(self):
         self.graph_shared = ModuleDict({})
@@ -1205,6 +1219,7 @@ class HeteroBase(Module):
         edge_attr_dict = self._get_edge_attr_dict(data)
 
         for conv, node_norms in zip(self.graph_convs, self.feature_layers):
+            conv = self._maybe_checkpoint(conv)
             if self.use_global_attn:
                 x_dict, equiv_node_feat_dict = conv(
                     inv_node_feat_dict=x_dict,
