@@ -33,7 +33,7 @@ import warnings
 # Torch
 import torch
 from torch.nn import ModuleList, Sequential, Linear
-from torch.utils.checkpoint import checkpoint
+from torch.utils.checkpoint import checkpoint, set_checkpoint_early_stop
 from torch_scatter import scatter
 
 # Torch Geo
@@ -68,6 +68,11 @@ from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 # Etc
 import numpy as np
 import math
+
+
+def _unoptimized_torchscript_context():
+    # The JIT executor can switch graphs between forward and recompute, changing the saved tensors.
+    return torch.jit.optimized_execution(False), torch.jit.optimized_execution(False)
 
 
 @compile_mode("script")
@@ -407,13 +412,16 @@ class MACEStack(Base):
                     data, torch.cat([inv_node_feat, equiv_node_feat], dim=1)
                 )  # [index][n_output, size_output]
             else:
-                inv_node_feat, equiv_node_feat = checkpoint(
-                    conv,
-                    use_reentrant=False,
-                    inv_node_feat=inv_node_feat,
-                    equiv_node_feat=equiv_node_feat,
-                    **conv_args,
-                )
+                # Early stop raises inside e3nn's TorchScript ops, which rewrap it as a RuntimeError.
+                with set_checkpoint_early_stop(False):
+                    inv_node_feat, equiv_node_feat = checkpoint(
+                        conv,
+                        use_reentrant=False,
+                        context_fn=_unoptimized_torchscript_context,
+                        inv_node_feat=inv_node_feat,
+                        equiv_node_feat=equiv_node_feat,
+                        **conv_args,
+                    )
                 output = readout(
                     data, torch.cat([inv_node_feat, equiv_node_feat], dim=1)
                 )  # output is a list of tensors with [index][n_output, size_output]
