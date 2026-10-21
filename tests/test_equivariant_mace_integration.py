@@ -136,6 +136,18 @@ def test_mace_conv_checkpointing_matches_plain_forward_and_backward(
                 torch.testing.assert_close(c.grad, p.grad)
 
 
+def test_mace_initial_bias_sets_summed_graph_prediction():
+    model = _create_model(global_attn_engine=None, initial_bias=0.3).eval()
+    with torch.no_grad():
+        for decoder in model.multihead_decoders:
+            for head in decoder.heads_NN:
+                for branch in head.values():
+                    branch[-1].weight.zero_()
+        output = model(_data(torch.randn(3, 3)))[0]
+
+    torch.testing.assert_close(output, torch.full_like(output, 0.3))
+
+
 @pytest.mark.parametrize("coupling_mode", ["parallel", "sequential"])
 def test_mace_equivariant_transformer_coupling_modes(coupling_mode):
     model = _create_model(equivariant_attn_coupling_mode=coupling_mode)

@@ -534,6 +534,16 @@ class MACEStack(Base):
         # However, various parts of multihead are applied in the LinearMultiheadBlock and NonLinearMultiheadBlock classes.
         pass
 
+    def _set_bias(self):
+        # Readouts are summed, so only the last one carries the bias.
+        last = len(self.multihead_decoders) - 1
+        for i, decoder in enumerate(self.multihead_decoders):
+            value = self.initial_bias if i == last else 0.0
+            for head, kind in zip(decoder.heads_NN, decoder.head_type):
+                if kind == "graph":
+                    for branch in head.values():
+                        branch[-1].bias.data.fill_(value)
+
     def __str__(self):
         return "MACEStack"
 
