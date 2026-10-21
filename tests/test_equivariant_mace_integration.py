@@ -109,6 +109,33 @@ def test_mace_equivariant_transformer_forward_backward_and_se3():
     )
 
 
+@pytest.mark.parametrize("global_attn_engine", [None, "EquivariantTransformer"])
+def test_mace_conv_checkpointing_matches_plain_forward_and_backward(
+    global_attn_engine,
+):
+    torch.manual_seed(7)
+    plain = _create_model(global_attn_engine=global_attn_engine)
+    checkpointed = copy.deepcopy(plain)
+    checkpointed.enable_conv_checkpointing()
+    positions = torch.tensor([[0.0, 0.0, 0.0], [1.0, 0.2, 0.0], [-0.1, 0.8, 0.3]])
+
+    # Several steps, so TorchScript's profiling executor moves past its warm-up runs.
+    for _ in range(3):
+        plain.zero_grad()
+        checkpointed.zero_grad()
+        plain_out = plain(_data(positions))[0]
+        checkpointed_out = checkpointed(_data(positions))[0]
+        torch.testing.assert_close(checkpointed_out, plain_out)
+
+        plain_out.square().sum().backward()
+        checkpointed_out.square().sum().backward()
+        for p, c in zip(plain.parameters(), checkpointed.parameters()):
+            if p.grad is None:
+                assert c.grad is None
+            else:
+                torch.testing.assert_close(c.grad, p.grad)
+
+
 @pytest.mark.parametrize("coupling_mode", ["parallel", "sequential"])
 def test_mace_equivariant_transformer_coupling_modes(coupling_mode):
     model = _create_model(equivariant_attn_coupling_mode=coupling_mode)
