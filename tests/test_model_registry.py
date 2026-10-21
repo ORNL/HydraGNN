@@ -344,3 +344,79 @@ def test_heterogeneous_state_dict_round_trip(mpnn_type):
 
     with torch.no_grad():
         torch.testing.assert_close(restored(data)[0], expected)
+
+
+# ---------------------------------------------------------------------------
+# Shared options (all models)
+# ---------------------------------------------------------------------------
+
+
+def _build_any(mpnn_type, **overrides):
+    if mpnn_type in HOMOGENEOUS_MODELS:
+        args, data = _homogeneous_args(mpnn_type), _batch()
+    else:
+        args = _heterogeneous_args(mpnn_type)
+        data = Batch.from_data_list([_hetero_graph(1), _hetero_graph(2)])
+    try:
+        return create_model(**{**args, **overrides}), data
+    except ImportError as exc:
+        pytest.skip(f"{mpnn_type} dependencies unavailable: {exc}")
+
+
+@pytest.mark.parametrize(
+    "mpnn_type",
+    [
+        (
+            pytest.param(
+                name,
+                marks=pytest.mark.xfail(
+                    strict=True,
+                    reason="MACE keeps its heads in multihead_decoders, so "
+                    "initial_bias is silently ignored",
+                ),
+            )
+            if name == "MACE"
+            else name
+        )
+        for name in HOMOGENEOUS_MODELS + HETEROGENEOUS_MODELS
+    ],
+)
+def test_initial_bias_is_applied_to_graph_heads(mpnn_type):
+    model, _ = _build_any(mpnn_type, initial_bias=0.3)
+
+    graph_heads = [
+        head for head, kind in zip(model.heads_NN, model.head_type) if kind == "graph"
+    ]
+    assert graph_heads
+    for head in graph_heads:
+        for branch in head.values():
+            torch.testing.assert_close(
+                branch[-1].bias, torch.full_like(branch[-1].bias, 0.3)
+            )
+
+
+@pytest.mark.parametrize("mpnn_type", HOMOGENEOUS_MODELS + HETEROGENEOUS_MODELS)
+def test_conv_checkpointing_matches_plain_forward_and_backward(mpnn_type):
+    plain, data = _build_any(mpnn_type)
+    plain.eval()
+    with torch.no_grad():
+        plain(data)  # materialize lazily-initialized parameters before copying
+    checkpointed = _build_any(mpnn_type, conv_checkpointing=True)[0].eval()
+    checkpointed.load_state_dict(plain.state_dict(), strict=True)
+    assert checkpointed.conv_checkpointing
+
+    # Some models (e.g. UMA) draw random numbers in forward.
+    torch.manual_seed(1)
+    plain_out = plain(data)
+    torch.manual_seed(1)
+    checkpointed_out = checkpointed(data)
+    for c, p in zip(checkpointed_out, plain_out):
+        torch.testing.assert_close(c, p)
+
+    sum(out.square().sum() for out in plain_out).backward()
+    sum(out.square().sum() for out in checkpointed_out).backward()
+    for (name, p), c in zip(plain.named_parameters(), checkpointed.parameters()):
+        if p.grad is None:
+            assert c.grad is None, name
+        else:
+            torch.testing.assert_close(c.grad, p.grad, msg=name)
