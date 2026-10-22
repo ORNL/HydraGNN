@@ -8,7 +8,13 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
-"""Shared training pipeline behind ``hydragnn train`` and the example scripts."""
+"""Shared training pipeline behind ``hydragnn train`` and the example scripts.
+
+Only homogeneous graphs (``torch_geometric.data.Data``) are supported.
+Heterogeneous graphs (``HeteroData``, ``Hetero*`` models) need hetero metadata,
+per-edge-type PNA degrees and dataset/loader adapters that this module does not
+provide yet; see the scripts in ``examples/opf`` for heterogeneous training.
+"""
 
 import argparse
 import json
@@ -114,7 +120,10 @@ def dataset_path(script_dir, name, fmt):
 
 
 def write_split_datasets(path, fmt, trainset, valset, testset, comm=None):
-    """Write rank-local splits to ``path`` and store the PNA degree histogram."""
+    """Write rank-local splits to ``path`` and store the PNA degree histogram.
+
+    The degree histogram is homogeneous; ``HeteroData`` splits are not supported.
+    """
     from mpi4py import MPI
     from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 
@@ -206,7 +215,10 @@ def run_training(
     everyone=False,
     comm=None,
 ):
-    """Build loaders, model and optimizer, then train, validate, test and save."""
+    """Build loaders, model and optimizer, then train, validate, test and save.
+
+    Homogeneous models only: no hetero ``metadata`` is passed to the model.
+    """
     import torch
     from mpi4py import MPI
 
@@ -251,7 +263,9 @@ def run_training(
     model = hydragnn.models.create_model_config(
         config=config["NeuralNetwork"], verbosity=verbosity
     )
-    optimizer = select_optimizer(model, config["NeuralNetwork"]["Training"]["Optimizer"])
+    optimizer = select_optimizer(
+        model, config["NeuralNetwork"]["Training"]["Optimizer"]
+    )
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
@@ -323,7 +337,8 @@ def main(argv=None):
         "train",
         parents=[train],
         add_help=False,
-        help="train on a preprocessed ADIOS or pickle dataset",
+        help="train a homogeneous GNN on a preprocessed ADIOS or pickle dataset",
+        description="Train a homogeneous GNN. Heterogeneous graphs are not supported.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     ).add_argument(
         "--dataset",
