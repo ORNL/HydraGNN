@@ -14,7 +14,7 @@ import tarfile
 import pytest
 import torch
 
-from hydragnn.models.create import compute_forces_and_hessian
+from hydragnn.models.utils.derivatives import compute_forces_and_hessian
 
 from examples.pubchem_gaussian.pubchem_gaussian_hpo import (
     _trial_command,

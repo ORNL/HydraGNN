@@ -28,32 +28,6 @@ from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.train.precision import resolve_precision
 
 
-def compute_forces_and_hessian(
-    energy, positions, *, compute_hessian=False, create_graph=False
-):
-    """Differentiate scalar graph energy into forces and a Cartesian Hessian."""
-    forces = -torch.autograd.grad(
-        energy,
-        positions,
-        grad_outputs=torch.ones_like(energy),
-        retain_graph=create_graph or compute_hessian,
-        create_graph=create_graph or compute_hessian,
-    )[0]
-    if not compute_hessian:
-        return forces, None
-
-    rows = []
-    for component in forces.reshape(-1):
-        force_gradient = torch.autograd.grad(
-            component,
-            positions,
-            retain_graph=True,
-            create_graph=create_graph,
-        )[0]
-        rows.append(-force_gradient.reshape(-1))
-    return forces, torch.stack(rows)
-
-
 def create_model_config(
     config: dict,
     verbosity: int = 0,
