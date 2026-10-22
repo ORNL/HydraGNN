@@ -42,7 +42,7 @@ from torch_geometric.data import Data, Batch
 from torch_geometric.transforms import RadiusGraph
 
 from hydragnn.models.create import create_model_config
-from hydragnn.train.train_validate_test import (
+from hydragnn.train.precision import (
     resolve_precision,
     move_batch_to_device,
     get_autocast_and_scaler,

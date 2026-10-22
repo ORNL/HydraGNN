@@ -8,4 +8,5 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
-from .train_validate_test import train_validate_test, train, validate, test
+from .loops import train, validate, test
+from .train_validate_test import train_validate_test

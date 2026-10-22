@@ -23,7 +23,7 @@ from mpi4py import MPI
 
 import hydragnn
 from hydragnn.postprocess.postprocess import output_denormalize
-from hydragnn.train.train_validate_test import test
+from hydragnn.train.loops import test
 from hydragnn.data.hdf5dataset import HDF5Dataset
 from hydragnn.distributed import setup_ddp
 from hydragnn.config.config_utils import update_config

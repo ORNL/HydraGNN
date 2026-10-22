@@ -35,7 +35,7 @@ from hydragnn.config.config_utils import update_config
 from hydragnn.models.create import create_model_config
 from hydragnn.distributed import get_device
 from hydragnn.utils.print.print_utils import iterate_tqdm
-from hydragnn.train.train_validate_test import resolve_precision, move_batch_to_device
+from hydragnn.train.precision import resolve_precision, move_batch_to_device
 
 try:
     from .utils import (

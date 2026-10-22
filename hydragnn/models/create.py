@@ -25,7 +25,7 @@ from hydragnn.models.registry import get_model_builder
 
 from hydragnn.distributed import get_device
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-from hydragnn.train.train_validate_test import resolve_precision
+from hydragnn.train.precision import resolve_precision
 
 
 def compute_forces_and_hessian(

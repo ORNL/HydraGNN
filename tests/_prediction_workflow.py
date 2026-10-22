@@ -17,7 +17,7 @@ from hydragnn.config.config_utils import (
     parse_deepspeed_config,
 )
 from hydragnn.models.create import create_model_config
-from hydragnn.train.train_validate_test import test
+from hydragnn.train.loops import test
 from hydragnn.postprocess.postprocess import output_denormalize
 
 deepspeed_available = True

@@ -308,7 +308,7 @@ def test_prediction_target_pairs_follow_active_task_names(disabled, expected):
 
 
 def test_test_sampling_uses_active_interatomic_tasks(monkeypatch):
-    workflow = importlib.import_module("hydragnn.train.train_validate_test")
+    workflow = importlib.import_module("hydragnn.train.loops")
     monkeypatch.setattr(
         workflow, "iterate_tqdm", lambda iterator, *args, **kwargs: iterator
     )
