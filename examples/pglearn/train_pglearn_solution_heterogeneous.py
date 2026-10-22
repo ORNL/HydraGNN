@@ -19,11 +19,8 @@ from hydragnn.data.pickledataset import (
     SimplePickleDataset,
     SimplePickleWriter,
 )
-from hydragnn.config.config_utils import (
-    edge_type_dims,
-    update_config,
-)
-from hydragnn.utils.model import print_model
+from hydragnn.config import edge_type_dims, update_config
+from hydragnn.models.utils import print_model
 from hydragnn.utils.profiling_and_tracing import print_timers
 from hydragnn.utils.print import iterate_tqdm
 
@@ -786,7 +783,7 @@ def main():
 
     log_name = args.modelname
     hydragnn.utils.print.setup_log(log_name)
-    writer = hydragnn.utils.model.get_summary_writer(log_name)
+    writer = hydragnn.models.utils.get_summary_writer(log_name)
 
     train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
         trainset,
@@ -828,7 +825,7 @@ def main():
     )
 
     print_model(model)
-    hydragnn.utils.model.load_existing_model_config(
+    hydragnn.models.utils.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
 
@@ -847,7 +844,7 @@ def main():
         precision=config["NeuralNetwork"]["Training"].get("precision", "fp32"),
     )
 
-    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.models.utils.save_model(model, optimizer, log_name)
     print_timers(config["Verbosity"]["level"])
     if writer is not None:
         writer.close()

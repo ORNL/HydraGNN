@@ -246,7 +246,7 @@ def main(
     )
 
     # Run training with the given model and qm9 datasets.
-    writer = hydragnn.utils.model.model.get_summary_writer(log_name)
+    writer = hydragnn.models.utils.model.get_summary_writer(log_name)
     hydragnn.config.save_config(config, log_name)
 
     tr.initialize()

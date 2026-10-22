@@ -171,7 +171,7 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
     )
 
     # Run training with the given model and md17 dataset.
-    writer = hydragnn.utils.model.model.get_summary_writer(log_name)
+    writer = hydragnn.models.utils.model.get_summary_writer(log_name)
     hydragnn.config.save_config(config, log_name)
 
     hydragnn.train.train_validate_test(

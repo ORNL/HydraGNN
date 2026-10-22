@@ -13,12 +13,14 @@ from typing import Any
 
 import torch
 
-from hydragnn.globalAtt.equivariant_features import (
+from hydragnn.models.attention.equivariant_features import (
     IrrepsFeatureAdapter,
     ScalarVectorIrrepsAdapter,
     create_local_feature_adapter,
 )
-from hydragnn.globalAtt.equivariant_transformer import EquivariantTransformerLayer
+from hydragnn.models.attention.equivariant_transformer import (
+    EquivariantTransformerLayer,
+)
 
 
 class EquivariantLocalGlobalConv(torch.nn.Module):

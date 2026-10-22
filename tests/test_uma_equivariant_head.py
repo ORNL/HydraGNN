@@ -107,7 +107,7 @@ def _build_uma_with_vector_head():
     the equivariant vector head enabled. Skips if the vendored UMA backbone
     dependencies are unavailable."""
     from hydragnn.models.create import create_model
-    from hydragnn.utils.model.model import update_multibranch_heads
+    from hydragnn.models.utils.model import update_multibranch_heads
 
     output_heads = {
         "node": {

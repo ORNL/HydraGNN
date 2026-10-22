@@ -90,7 +90,7 @@ def create_mock_molecular_data(num_atoms=10, num_graphs=2):
 
 def create_interatomic_model(*terms):
     from hydragnn.models.create import create_model
-    from hydragnn.utils.model.model import update_multibranch_heads
+    from hydragnn.models.utils.model import update_multibranch_heads
 
     output_heads = {
         "node": {
@@ -283,7 +283,7 @@ def test_enabled_interatomic_loss_requires_its_label(term, missing, message):
 def test_model_creation_with_enhancement():
     """Test creating a model with interatomic potential enhancement."""
     from hydragnn.models.create import create_model
-    from hydragnn.utils.model.model import update_multibranch_heads
+    from hydragnn.models.utils.model import update_multibranch_heads
 
     # Basic model configuration
     output_heads = {
@@ -356,7 +356,7 @@ def test_model_creation_with_enhancement():
 def test_forward_pass():
     """Test the enhanced forward pass with molecular data."""
     from hydragnn.models.create import create_model
-    from hydragnn.utils.model.model import update_multibranch_heads
+    from hydragnn.models.utils.model import update_multibranch_heads
 
     # Create model with interatomic potential enhancement
     output_heads = {
@@ -435,7 +435,7 @@ def test_forward_pass():
 def test_energy_force_consistency():
     """Test that forces can be computed from energy gradients."""
     from hydragnn.models.create import create_model
-    from hydragnn.utils.model.model import update_multibranch_heads
+    from hydragnn.models.utils.model import update_multibranch_heads
 
     # Create model for energy prediction
     output_heads = {

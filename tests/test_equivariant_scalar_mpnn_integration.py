@@ -20,7 +20,7 @@ from hydragnn.models.create import create_model
 from hydragnn.config.config_utils import (
     validate_equivariant_transformer_config,
 )
-from hydragnn.utils.model import update_multibranch_heads
+from hydragnn.models.utils import update_multibranch_heads
 
 
 def _create_model(mpnn_type, **overrides):

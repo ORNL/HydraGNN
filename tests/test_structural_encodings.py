@@ -4,8 +4,8 @@ import pytest
 import torch
 from torch_geometric.data import Batch, HeteroData
 
-from hydragnn.globalAtt.HeteroGPS import HeteroGPSConv
-from hydragnn.globalAtt.structural import (
+from hydragnn.models.attention.HeteroGPS import HeteroGPSConv
+from hydragnn.models.attention.structural import (
     StructuralAttentionContext,
     StructuralEncodingProvider,
 )

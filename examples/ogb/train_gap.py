@@ -30,7 +30,7 @@ from hydragnn.data.pickledataset import (
     SimplePickleDataset,
 )
 from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
-from hydragnn.utils.model import print_model
+from hydragnn.models.utils import print_model
 from hydragnn.data.descriptors_and_embeddings.smiles_utils import (
     generate_graphdata_from_smilestr,
 )
@@ -328,7 +328,7 @@ if __name__ == "__main__":
 
     log_name = "ogb_" + inputfilesubstr
     hydragnn.utils.print.setup_log(log_name)
-    writer = hydragnn.utils.model.get_summary_writer(log_name)
+    writer = hydragnn.models.utils.get_summary_writer(log_name)
     hydragnn.config.save_config(config, log_name)
 
     modelname = "ogb_" + inputfilesubstr
@@ -480,7 +480,7 @@ if __name__ == "__main__":
         # Print details of neural network architecture
         print_model(model)
 
-        hydragnn.utils.model.load_existing_model_config(
+        hydragnn.models.utils.load_existing_model_config(
             model, config["NeuralNetwork"]["Training"], optimizer=optimizer
         )
 
@@ -508,7 +508,7 @@ if __name__ == "__main__":
             optimizer=optimizer,
         )  # scheduler is not managed by deepspeed because it is per-epoch instead of per-step
 
-        hydragnn.utils.model.load_existing_model_config(
+        hydragnn.models.utils.load_existing_model_config(
             model, config["NeuralNetwork"]["Training"], use_deepspeed=True
         )
 
@@ -529,7 +529,7 @@ if __name__ == "__main__":
         use_deepspeed=args.use_deepspeed,
     )
 
-    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.models.utils.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
     if writer is not None:
         writer.close()

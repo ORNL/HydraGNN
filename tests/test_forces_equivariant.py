@@ -114,7 +114,7 @@ def _retune_painn_dtype(model, dtype):
             module.register_forward_pre_hook(_pre_hook)
 
 
-from hydragnn.utils.model.model import update_multibranch_heads
+from hydragnn.models.utils.model import update_multibranch_heads
 
 
 def random_rotation_matrix():

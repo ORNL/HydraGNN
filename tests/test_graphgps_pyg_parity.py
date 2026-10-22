@@ -21,7 +21,7 @@ from torch_geometric.data import Data
 from torch_geometric.nn import GCNConv
 from torch_geometric.nn import GPSConv as PyGGPSConv
 
-from hydragnn.globalAtt.gps import (
+from hydragnn.models.attention.gps import (
     HydraGPSConv,
     redraw_performer_projections,
 )

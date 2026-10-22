@@ -20,7 +20,7 @@ from hydragnn.model_settings import (
     UMASettings,
 )
 from hydragnn.domain_losses import create_domain_loss
-from hydragnn.config.config_utils import edge_type_dims
+from hydragnn.config.variable_schema import edge_type_dims
 from hydragnn.models.registry import get_model_builder
 
 from hydragnn.distributed import get_device

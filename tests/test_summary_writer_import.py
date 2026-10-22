@@ -25,7 +25,7 @@ def test_import_does_not_load_tensorboard():
 
 @pytest.mark.parametrize("rank", [0, 1])
 def test_summary_writer_is_created_only_on_rank_zero(monkeypatch, tmp_path, rank):
-    import hydragnn.utils.model.model as model_utils
+    import hydragnn.models.utils.model as model_utils
 
     calls = []
     sentinel = object()

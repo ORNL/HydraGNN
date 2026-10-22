@@ -18,7 +18,7 @@ from hydragnn.train.train_validate_test import test
 from hydragnn.distributed import setup_ddp
 from hydragnn.config.config_utils import update_config
 from hydragnn.config import edge_type_dims, get_variable_schema
-from hydragnn.utils.model import load_existing_model
+from hydragnn.models.utils import load_existing_model
 
 from hydragnn.data.pickledataset import SimplePickleDataset
 from hydragnn.data.hdf5dataset import HDF5Dataset

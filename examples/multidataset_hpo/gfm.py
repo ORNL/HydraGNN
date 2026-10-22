@@ -19,7 +19,7 @@ import numpy as np
 
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-from hydragnn.utils.model import print_model
+from hydragnn.models.utils import print_model
 from hydragnn.data.distdataset import DistDataset
 from hydragnn.data.pickledataset import SimplePickleDataset
 
@@ -170,7 +170,7 @@ def main():
 
     log_name = "gfm_test" if args.log is None else args.log
     hydragnn.utils.print.setup_log(log_name)
-    writer = hydragnn.utils.model.get_summary_writer(log_name)
+    writer = hydragnn.models.utils.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
@@ -401,7 +401,7 @@ def main():
     # Print details of neural network architecture
     print_model(model)
 
-    hydragnn.utils.model.load_existing_model_config(
+    hydragnn.models.utils.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
 
@@ -421,7 +421,7 @@ def main():
         create_plots=False,
     )
 
-    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.models.utils.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
     if writer is not None:
         writer.close()

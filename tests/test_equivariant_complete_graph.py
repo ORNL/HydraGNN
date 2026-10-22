@@ -12,7 +12,7 @@
 import pytest
 import torch
 
-from hydragnn.globalAtt.complete_graph import complete_graph_edge_index
+from hydragnn.models.attention.complete_graph import complete_graph_edge_index
 
 
 def test_complete_graph_constructs_ordered_non_self_pairs():

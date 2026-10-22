@@ -110,12 +110,9 @@ from hydragnn.data.pickledataset import (
     SimplePickleDataset,
 )
 from hydragnn.distributed import nsplit
-from hydragnn.utils.model import print_model
+from hydragnn.models.utils import print_model
 from hydragnn.utils.print import iterate_tqdm
-from hydragnn.config.config_utils import (
-    edge_type_dims,
-    update_config,
-)
+from hydragnn.config import edge_type_dims, update_config
 
 from opf_solution_utils import (
     EdgeAttrDatasetAdapter,
@@ -785,7 +782,7 @@ if __name__ == "__main__":
 
     log_name = args.log if args.log is not None else args.modelname
     hydragnn.utils.print.setup_log(log_name)
-    writer = hydragnn.utils.model.get_summary_writer(log_name)
+    writer = hydragnn.models.utils.get_summary_writer(log_name)
 
     requested_num_groups = data_ops.parse_num_groups(args.num_groups)
     serialized_training_only = args.format in ("adios", "hdf5") and not args.preonly
@@ -1448,7 +1445,7 @@ if __name__ == "__main__":
     _diag("Exited print_model")
 
     _diag("Entering load_existing_model_config")
-    hydragnn.utils.model.load_existing_model_config(
+    hydragnn.models.utils.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
     _diag("Exited load_existing_model_config")
@@ -1512,7 +1509,7 @@ if __name__ == "__main__":
     elif hasattr(model, "module") and isinstance(model.module, OPFEnhancedModelWrapper):
         model.module.finalize_domain_state()
 
-    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.models.utils.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.print_timers(config["Verbosity"]["level"])
     if writer is not None:
         writer.close()

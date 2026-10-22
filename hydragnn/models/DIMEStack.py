@@ -28,7 +28,7 @@ from torch_geometric.nn.models.dimenet import (
 from torch_geometric.utils import scatter
 
 from .Base import Base
-from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
+from hydragnn.models.utils.operations import get_edge_vectors_and_lengths
 
 
 class DIMEStack(Base):

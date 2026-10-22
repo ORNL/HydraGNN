@@ -32,7 +32,7 @@ from e3nn import nn, o3
 from e3nn.util.jit import compile_mode
 
 from hydragnn.models.backends.mace_utils.tools.compile import simplify_if_compile
-from hydragnn.utils.model.irreps_tools import (
+from hydragnn.models.utils.irreps_tools import (
     reshape_irreps,
     tp_out_irreps_with_instructions,
     create_irreps_string,

@@ -26,7 +26,7 @@ import hydragnn
 from __init__ import data_ops
 from hydragnn.data.hdf5dataset import HDF5Dataset
 from hydragnn.config.config_utils import update_config
-from hydragnn.utils.model import print_model
+from hydragnn.models.utils import print_model
 from hydragnn.utils.profiling_and_tracing import print_timers
 
 
@@ -149,7 +149,7 @@ def main():
 
     log_name = args.modelname
     hydragnn.utils.print.setup_log(log_name)
-    writer = hydragnn.utils.model.get_summary_writer(log_name)
+    writer = hydragnn.models.utils.get_summary_writer(log_name)
 
     train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
         trainset,
@@ -178,7 +178,7 @@ def main():
     )
 
     print_model(model)
-    hydragnn.utils.model.load_existing_model_config(
+    hydragnn.models.utils.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
 
@@ -196,7 +196,7 @@ def main():
         create_plots=False,
     )
 
-    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.models.utils.save_model(model, optimizer, log_name)
     print_timers(config["Verbosity"]["level"])
     if writer is not None:
         writer.close()

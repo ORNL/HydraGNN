@@ -7,11 +7,11 @@ import pytest
 import torch
 from torch_geometric.data import Batch, HeteroData
 
-from hydragnn.globalAtt.HeteroGPS import (
+from hydragnn.models.attention.HeteroGPS import (
     StructuralCoordinatePerformerAttention,
     HeteroGPSConv,
 )
-from hydragnn.globalAtt.structural import StructuralAttentionContext
+from hydragnn.models.attention.structural import StructuralAttentionContext
 from hydragnn.models.heterogeneous.HeteroBase import HeteroBase
 from hydragnn.models.heterogeneous.HeteroSAGEStack import HeteroSAGEStack
 

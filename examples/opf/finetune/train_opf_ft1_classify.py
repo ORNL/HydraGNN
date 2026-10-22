@@ -39,8 +39,8 @@ from collections import OrderedDict
 from mpi4py import MPI
 
 import hydragnn
-import hydragnn.utils.model as model_utils
-from hydragnn.utils.model import print_model
+import hydragnn.models.utils as model_utils
+from hydragnn.models.utils import print_model
 from hydragnn.distributed import get_device
 from hydragnn.config.config_utils import update_config
 from hydragnn.config import edge_type_dims, save_config

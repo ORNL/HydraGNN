@@ -31,7 +31,7 @@ from torch_geometric.transforms import AddLaplacianEigenvectorPE
 import hydragnn
 from hydragnn.domain_losses import uses_interatomic_potential
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-from hydragnn.utils.model import print_model
+from hydragnn.models.utils import print_model
 from hydragnn.data.abstractbasedataset import AbstractBaseDataset
 from hydragnn.data.distdataset import DistDataset
 from hydragnn.data.pickledataset import (
@@ -358,7 +358,7 @@ if __name__ == "__main__":
 
     log_name = "ANI1x" if args.log is None else args.log
     hydragnn.utils.print.print_utils.setup_log(log_name)
-    writer = hydragnn.utils.model.get_summary_writer(log_name)
+    writer = hydragnn.models.utils.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
@@ -527,7 +527,7 @@ if __name__ == "__main__":
     # Print details of neural network architecture
     print_model(model)
 
-    hydragnn.utils.model.load_existing_model_config(
+    hydragnn.models.utils.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
 
@@ -548,7 +548,7 @@ if __name__ == "__main__":
         compute_grad_energy=uses_interatomic_potential(config),
     )
 
-    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.models.utils.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
     if writer is not None:
         writer.close()

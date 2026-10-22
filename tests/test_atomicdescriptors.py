@@ -16,9 +16,10 @@ from tests._script_runner import REPO_ROOT, run_script
 
 
 @pytest.mark.mpi_skip()
-def test_atomicdescriptors():
+def test_atomicdescriptors(tmp_path):
     run_script(
         os.path.join(
             REPO_ROOT, "hydragnn/data/descriptors_and_embeddings/atomicdescriptors.py"
-        )
+        ),
+        cwd=tmp_path,
     )

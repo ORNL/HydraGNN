@@ -923,7 +923,7 @@ model = create_model_config(
 )
 
 # Print model architecture
-from hydragnn.utils.model import print_model
+from hydragnn.models.utils import print_model
 print_model(model)
 ```
 
@@ -1301,7 +1301,7 @@ train_validate_test(
 #### Saving Models
 
 ```python
-from hydragnn.utils.model import save_model
+from hydragnn.models.utils import save_model
 
 # Save model and optimizer state
 save_model(model, optimizer, log_name)
@@ -1310,7 +1310,7 @@ save_model(model, optimizer, log_name)
 #### Loading Pre-trained Models
 
 ```python
-from hydragnn.utils.model import load_existing_model_config
+from hydragnn.models.utils import load_existing_model_config
 
 # Load existing model
 load_existing_model_config(model, config["Training"], optimizer=optimizer)

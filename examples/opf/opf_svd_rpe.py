@@ -36,7 +36,7 @@ import re
 
 import torch
 
-from hydragnn.globalAtt.structural import StructuralEncodingProvider
+from hydragnn.models.attention.structural import StructuralEncodingProvider
 
 _BUS_BRANCH_TYPES = (
     (("bus", "ac_line", "bus"), False),

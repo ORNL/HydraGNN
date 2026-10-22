@@ -22,12 +22,12 @@ from torch_geometric.nn import (
     global_mean_pool,
 )
 
-from hydragnn.utils.model import activation_function_selection, loss_function_selection
+from hydragnn.models.utils import activation_function_selection, loss_function_selection
 from hydragnn.distributed import get_device
 from hydragnn.models.Base import MLPNode
 from hydragnn.utils.print.print_utils import print_master
-from hydragnn.globalAtt.HeteroGPS import HeteroGPSConv
-from hydragnn.globalAtt.structural import StructuralAttentionContext
+from hydragnn.models.attention.HeteroGPS import HeteroGPSConv
+from hydragnn.models.attention.structural import StructuralAttentionContext
 from hydragnn.loss_reporting import supervised_loss_report
 
 

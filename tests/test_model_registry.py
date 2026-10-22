@@ -28,7 +28,7 @@ from hydragnn.models.registry import (
     get_model_builder,
     register_model,
 )
-from hydragnn.utils.model import update_multibranch_heads
+from hydragnn.models.utils import update_multibranch_heads
 
 pytestmark = pytest.mark.mpi_skip()
 

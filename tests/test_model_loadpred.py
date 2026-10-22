@@ -41,7 +41,7 @@ def unittest_model_prediction(config):
     )
 
     log_name = hydragnn.config.get_log_name_config(config)
-    hydragnn.utils.model.load_existing_model(model, log_name)
+    hydragnn.models.utils.load_existing_model(model, log_name)
 
     # The checkpoint may include graph conditioning weights; disable conditioning for this
     # dataset to avoid requiring graph_attr at inference time.

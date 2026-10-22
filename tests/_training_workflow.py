@@ -23,7 +23,7 @@ from hydragnn.distributed import (
     configure_local_sgd,
 )
 from hydragnn.distributed import print_peak_memory
-from hydragnn.utils.model import (
+from hydragnn.models.utils import (
     save_model,
     get_summary_writer,
     load_existing_model_config,

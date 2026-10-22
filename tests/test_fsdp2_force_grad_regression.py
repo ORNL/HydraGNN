@@ -21,7 +21,7 @@ from torch_geometric.loader import DataLoader
 from hydragnn.domain_losses import InteratomicPotentialDomainLoss
 from hydragnn.models.create import create_model
 from hydragnn.distributed import get_distributed_model
-from hydragnn.utils.model.model import update_multibranch_heads
+from hydragnn.models.utils.model import update_multibranch_heads
 
 tvt = import_module("hydragnn.train.train_validate_test")
 

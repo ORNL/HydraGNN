@@ -76,7 +76,7 @@ from hydragnn.data.pickledataset import (
     SimplePickleDataset,
 )
 from hydragnn.distributed import nsplit
-from hydragnn.utils.model import print_model
+from hydragnn.models.utils import print_model
 from hydragnn.config.config_utils import update_config
 
 try:
@@ -298,7 +298,7 @@ if __name__ == "__main__":
 
     log_name = args.modelname
     hydragnn.utils.print.setup_log(log_name)
-    writer = hydragnn.utils.model.get_summary_writer(log_name)
+    writer = hydragnn.models.utils.get_summary_writer(log_name)
 
     requested_num_groups = data_ops.parse_num_groups(args.num_groups)
 
@@ -632,7 +632,7 @@ if __name__ == "__main__":
 
     print_model(model)
 
-    hydragnn.utils.model.load_existing_model_config(
+    hydragnn.models.utils.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
 
@@ -651,7 +651,7 @@ if __name__ == "__main__":
         precision=precision,
     )
 
-    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.models.utils.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.print_timers(config["Verbosity"]["level"])
     if writer is not None:
         writer.close()

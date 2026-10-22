@@ -11,7 +11,7 @@ from torch_geometric.utils import degree
 
 from hydragnn.config import get_variable_schema
 from hydragnn.domain_losses import create_constraint_optimizer
-from hydragnn.utils.model.model import loss_function_selection
+from hydragnn.models.utils.model import loss_function_selection
 
 
 def info(*args, logtype="info", sep=" "):

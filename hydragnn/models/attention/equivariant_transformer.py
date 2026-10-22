@@ -12,9 +12,11 @@
 import torch
 from e3nn import nn, o3
 
-from hydragnn.globalAtt.complete_graph import complete_graph_edge_index
-from hydragnn.globalAtt.equivariant_attention import EquivariantAllToAllAttention
-from hydragnn.globalAtt.periodic_supercell import build_periodic_attention_sources
+from hydragnn.models.attention.complete_graph import complete_graph_edge_index
+from hydragnn.models.attention.equivariant_attention import EquivariantAllToAllAttention
+from hydragnn.models.attention.periodic_supercell import (
+    build_periodic_attention_sources,
+)
 
 
 class EquivariantRMSNorm(torch.nn.Module):

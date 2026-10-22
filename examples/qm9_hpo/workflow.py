@@ -144,7 +144,7 @@ def train_trial(base_config, splits, parameters, log_name):
     model, optimizer = hydragnn.distributed.distributed_model_wrapper(
         model, optimizer, verbosity
     )
-    writer = hydragnn.utils.model.model.get_summary_writer(log_name)
+    writer = hydragnn.models.utils.model.get_summary_writer(log_name)
     try:
         hydragnn.train.train_validate_test(
             model,
