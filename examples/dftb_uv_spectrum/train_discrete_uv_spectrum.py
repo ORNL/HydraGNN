@@ -41,7 +41,7 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 import numpy as np
 
 try:
-    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.data.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 

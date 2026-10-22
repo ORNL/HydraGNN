@@ -27,7 +27,7 @@ import hydragnn
 from hydragnn.utils.print.print_utils import print_distributed, iterate_tqdm, log
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 
-# from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+# from hydragnn.data.adiosdataset import AdiosWriter, AdiosDataset
 from hydragnn.data.descriptors_and_embeddings.smiles_utils import (
     generate_graphdata_from_rdkit_molecule,
 )
@@ -43,7 +43,7 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 import numpy as np
 
 try:
-    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.data.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
