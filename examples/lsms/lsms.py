@@ -16,16 +16,16 @@ import argparse
 
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-from hydragnn.utils.input_config_parsing.config_utils import get_log_name_config
+from hydragnn.config.config_utils import get_log_name_config
 from hydragnn.utils.model import print_model
-from hydragnn.utils.datasets.serializeddataset import SerializedDataset
+from hydragnn.data.serializeddataset import SerializedDataset
 from lsms_preprocess import (
     prepare_lsms_dataset,
     split_and_write_lsms_dataset,
 )
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosDataset, AdiosWriter
+    from hydragnn.data.adiosdataset import AdiosDataset, AdiosWriter
 except ImportError:
     pass
 
@@ -89,7 +89,7 @@ if __name__ == "__main__":
     hydragnn.utils.print.setup_log(get_log_name_config(config))
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
+    comm_size, rank = hydragnn.distributed.setup_ddp()
     ##################################################################################################################
     comm = MPI.COMM_WORLD
     ## Set up logging
@@ -178,7 +178,7 @@ if __name__ == "__main__":
     )
     timer.stop()
 
-    config = hydragnn.utils.input_config_parsing.update_config(
+    config = hydragnn.config.update_config(
         config, train_loader, val_loader, test_loader
     )
     config["Variables"].pop("minmax_node_feature", None)
@@ -199,7 +199,7 @@ if __name__ == "__main__":
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+    model, optimizer = hydragnn.distributed.distributed_model_wrapper(
         model, optimizer, verbosity, config=config
     )
 
@@ -212,7 +212,7 @@ if __name__ == "__main__":
     if dist.is_initialized():
         dist.barrier()
 
-    hydragnn.utils.input_config_parsing.save_config(config, log_name)
+    hydragnn.config.save_config(config, log_name)
 
     hydragnn.train.train_validate_test(
         model,

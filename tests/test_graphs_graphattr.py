@@ -15,7 +15,7 @@ import torch
 
 import hydragnn, tests
 from tests.deterministic_graph_data import DETERMINISTIC_GRAPH_DATA_VERSION
-from hydragnn.utils.input_config_parsing.config_utils import merge_config
+from hydragnn.config.config_utils import merge_config
 from mpi4py import MPI
 from tests._prediction_workflow import load_checkpoint_and_test
 from tests._training_workflow import train_and_checkpoint
@@ -33,7 +33,7 @@ def test_named_graph_conditioning_preserves_original_two_components(tmp_path):
     sample = torch.load(sample_path, weights_only=False)
     expected_count = (sample.node_features == sample.node_features[0]).sum().float()
     expected = torch.stack((expected_count, expected_count.new_tensor(1.0))).view(1, 2)
-    schema = hydragnn.utils.input_config_parsing.parse_variable_schema(
+    schema = hydragnn.config.parse_variable_schema(
         {
             "graph_type": "homogeneous",
             "inputs": [
@@ -44,7 +44,7 @@ def test_named_graph_conditioning_preserves_original_two_components(tmp_path):
         }
     )
 
-    hydragnn.utils.input_config_parsing.prepare_data_from_schema(sample, schema)
+    hydragnn.config.prepare_data_from_schema(sample, schema)
 
     torch.testing.assert_close(sample.graph_attr, expected)
     torch.testing.assert_close(sample.edge_lengths.max(), torch.tensor(1.0))
@@ -78,7 +78,7 @@ def unittest_train_model_graphattr(
     graph_attr_conditioning_mode="concat_node",
 ):
     """Replicates test_graphs flow while relying on graph_attr conditioning."""
-    world_size, rank = hydragnn.utils.distributed.get_comm_size_and_rank()
+    world_size, rank = hydragnn.distributed.get_comm_size_and_rank()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 

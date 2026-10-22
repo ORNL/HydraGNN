@@ -9,7 +9,7 @@ from hydragnn.loss_reporting import (
     finalize_loss_report,
     reset_loss_report,
 )
-from hydragnn.utils.distributed import setup_ddp
+from hydragnn.distributed import setup_ddp
 
 pytestmark = pytest.mark.mpi
 

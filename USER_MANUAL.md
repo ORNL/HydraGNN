@@ -272,7 +272,7 @@ named variables, normalizing features, or regenerating descriptors.
 **ADIOS2 Format**: High-performance binary format for large datasets
 ```python
 # Loading ADIOS datasets
-from hydragnn.utils.datasets.adiosdataset import AdiosDataset
+from hydragnn.data.adiosdataset import AdiosDataset
 dataset = AdiosDataset(filename, "trainset", comm)
 ```
 
@@ -364,11 +364,11 @@ sample = Data(
 #### Data Serialization for Performance
 
 ```python
-from hydragnn.utils.input_config_parsing.variable_schema import (
+from hydragnn.config.variable_schema import (
     parse_variable_schema,
     prepare_data_from_schema,
 )
-from hydragnn.utils.datasets.serializeddataset import SerializedWriter
+from hydragnn.data.serializeddataset import SerializedWriter
 
 # Compile named source attributes before writing a training-ready artifact.
 schema = parse_variable_schema(config["Variables"])
@@ -939,7 +939,7 @@ HydraGNN is designed for large-scale distributed computing environments.
 
 ```python
 from mpi4py import MPI
-from hydragnn.utils.datasets.adiosdataset import AdiosDataset
+from hydragnn.data.adiosdataset import AdiosDataset
 
 # Initialize MPI communicator
 comm = MPI.COMM_WORLD
@@ -966,7 +966,7 @@ dataset = AdiosDataset(filename, "trainset", comm, **opt)
 #### Writing Large Datasets
 
 ```python
-from hydragnn.utils.datasets.adiosdataset import AdiosWriter
+from hydragnn.data.adiosdataset import AdiosWriter
 
 # Create ADIOS writer for large datasets
 writer = AdiosWriter(filename, comm)
@@ -1072,7 +1072,7 @@ HydraGNN provides a complete training pipeline with extensive configuration opti
 import hydragnn
 
 # Initialize distributed execution before constructing the distributed model.
-world_size, rank = hydragnn.utils.distributed.setup_ddp()
+world_size, rank = hydragnn.distributed.setup_ddp()
 ```
 
 #### MPI Execution
@@ -1456,7 +1456,7 @@ Pass the full configuration to the distributed wrapper so it can configure the
 DDP communication hook before checkpoint loading:
 
 ```python
-model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+model, optimizer = hydragnn.distributed.distributed_model_wrapper(
     model, optimizer, verbosity, config=config
 )
 ```
@@ -1928,7 +1928,7 @@ opt = {"preload": True, "shmem": True}
 **Solutions**:
 ```python
 # Update configuration with defaults for missing fields
-from hydragnn.utils.input_config_parsing.config_utils import update_config
+from hydragnn.config.config_utils import update_config
 update_config(config, train_loader, val_loader, test_loader)
 
 # Check required fields
@@ -1952,7 +1952,7 @@ for field in required_fields:
 #### Memory Profiling
 
 ```python
-from hydragnn.utils.distributed import print_peak_memory
+from hydragnn.distributed import print_peak_memory
 
 # Monitor memory usage
 print_peak_memory(verbosity_level, "After model creation")

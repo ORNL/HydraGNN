@@ -17,8 +17,8 @@ import torch
 import numpy as np
 
 import hydragnn
-from hydragnn.utils.distributed import nsplit
-from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
+from hydragnn.distributed import nsplit
+from hydragnn.data.adiosdataset import AdiosWriter, AdiosDataset
 from tqdm import tqdm
 
 # This import requires having installed the package mpi_list

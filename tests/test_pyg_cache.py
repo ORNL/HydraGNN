@@ -8,7 +8,7 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
-from hydragnn.utils.datasets import mark_pyg_cache_current, prepare_pyg_cache
+from hydragnn.data import mark_pyg_cache_current, prepare_pyg_cache
 
 
 def test_pyg_cache_migrates_raw_and_discards_legacy_processed_data(tmp_path):

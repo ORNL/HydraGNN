@@ -16,8 +16,8 @@
 """
 HydraGNN integration of FairChem's AllScAIP model.
 
-The vendored FairChem code lives under ``hydragnn.utils.model.allscaip``
-(and its EScAIP utility deps under ``hydragnn.utils.model.escaip.utils``).
+The vendored FairChem code lives under ``hydragnn.models.backends.allscaip``
+(and its EScAIP utility deps under ``hydragnn.models.backends.escaip.utils``).
 This stack wraps the vendored :class:`AllScAIPBackbone` so it composes with
 HydraGNN's ``Base`` model machinery (multi-head decoders, graph
 conditioning, and the interatomic-potential training loop).
@@ -134,13 +134,13 @@ from typing import Any, Dict, List, Optional
 import torch
 from torch.nn import Identity, ModuleList
 
-from hydragnn.utils.model.escaip.utils.nn_utils import (
+from hydragnn.models.backends.escaip.utils.nn_utils import (
     NormalizationType,
     get_normalization_layer,
 )
 
 from hydragnn.models.Base import Base
-from hydragnn.utils.model.allscaip.AllScAIP import AllScAIPBackbone
+from hydragnn.models.backends.allscaip.AllScAIP import AllScAIPBackbone
 
 # Map HydraGNN activation-function names to AllScAIP-supported ones.
 # AllScAIP accepts: squared_relu, gelu, leaky_relu, relu, smelu, star_relu.

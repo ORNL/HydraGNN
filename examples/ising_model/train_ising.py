@@ -23,18 +23,18 @@ import argparse
 import hydragnn
 from hydragnn.utils.print.print_utils import log
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-from hydragnn.utils.input_config_parsing.config_utils import get_log_name_config
+from hydragnn.config.config_utils import get_log_name_config
 from hydragnn.preprocess.load_data import split_dataset
 from hydragnn.utils.model import print_model
-from hydragnn.utils.datasets.distdataset import DistDataset
-from hydragnn.utils.datasets.pickledataset import (
+from hydragnn.data.distdataset import DistDataset
+from hydragnn.data.pickledataset import (
     SimplePickleWriter,
     SimplePickleDataset,
 )
 from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.data.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
@@ -109,7 +109,7 @@ if __name__ == "__main__":
     hydragnn.utils.print.print_utils.setup_log(log_name)
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
+    comm_size, rank = hydragnn.distributed.setup_ddp()
     ##################################################################################################################
 
     comm = MPI.COMM_WORLD
@@ -249,7 +249,7 @@ if __name__ == "__main__":
     )
     timer.stop()
 
-    config = hydragnn.utils.input_config_parsing.update_config(
+    config = hydragnn.config.update_config(
         config, train_loader, val_loader, test_loader
     )
     ## Good to sync with everyone right after DDStore setup
@@ -270,7 +270,7 @@ if __name__ == "__main__":
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+    model, optimizer = hydragnn.distributed.distributed_model_wrapper(
         model, optimizer, verbosity, config=config
     )
 

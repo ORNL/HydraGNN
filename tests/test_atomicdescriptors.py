@@ -19,6 +19,6 @@ from tests._script_runner import REPO_ROOT, run_script
 def test_atomicdescriptors():
     run_script(
         os.path.join(
-            REPO_ROOT, "hydragnn/utils/descriptors_and_embeddings/atomicdescriptors.py"
+            REPO_ROOT, "hydragnn/data/descriptors_and_embeddings/atomicdescriptors.py"
         )
     )

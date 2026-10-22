@@ -17,7 +17,7 @@ import torch.distributed as dist
 from torch_geometric.utils import degree
 from hydragnn.utils.print.print_utils import print_master, iterate_tqdm
 
-from hydragnn.utils.distributed import (
+from hydragnn.distributed import (
     get_comm_size_and_rank,
     get_device,
     get_device_name,

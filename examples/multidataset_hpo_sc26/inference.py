@@ -21,8 +21,8 @@ import torch.distributed as dist
 import hydragnn
 from hydragnn.models.create import create_model_config
 from hydragnn.train.train_validate_test import move_batch_to_device, resolve_precision
-from hydragnn.utils.distributed import get_device
-from hydragnn.utils.input_config_parsing.config_utils import update_config
+from hydragnn.distributed import get_device
+from hydragnn.config.config_utils import update_config
 from hydragnn.utils.print.print_utils import iterate_tqdm
 
 try:
@@ -221,7 +221,7 @@ def main():
     configure_variable_names(config)
     var_config = config["Variables"]
 
-    hydragnn.utils.distributed.setup_ddp()
+    hydragnn.distributed.setup_ddp()
 
     train_loader, val_loader, test_loader = load_multidataset_dataloaders(
         args, config, var_config

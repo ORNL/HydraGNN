@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from hydragnn.utils.input_config_parsing import get_variable_schema
+from hydragnn.config import get_variable_schema
 
 EXAMPLES = Path(__file__).parents[1] / "examples"
 INTERATOMIC_TERMS = {"energy", "energy_per_atom", "forces", "hessian"}

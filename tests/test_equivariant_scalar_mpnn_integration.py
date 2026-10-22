@@ -17,7 +17,7 @@ from e3nn import o3
 from torch_geometric.data import Data
 
 from hydragnn.models.create import create_model
-from hydragnn.utils.input_config_parsing.config_utils import (
+from hydragnn.config.config_utils import (
     validate_equivariant_transformer_config,
 )
 from hydragnn.utils.model import update_multibranch_heads

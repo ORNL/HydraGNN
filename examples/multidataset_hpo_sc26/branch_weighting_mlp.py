@@ -31,9 +31,9 @@ from mpi4py import MPI
 
 import hydragnn
 from hydragnn.preprocess import create_dataloaders
-from hydragnn.utils.input_config_parsing.config_utils import update_config
+from hydragnn.config.config_utils import update_config
 from hydragnn.models.create import create_model_config
-from hydragnn.utils.distributed import get_device
+from hydragnn.distributed import get_device
 from hydragnn.utils.print.print_utils import iterate_tqdm
 from hydragnn.train.train_validate_test import resolve_precision, move_batch_to_device
 
@@ -63,13 +63,13 @@ except ImportError:
     )
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosDataset, adios2_open
+    from hydragnn.data.adiosdataset import AdiosDataset, adios2_open
 except ImportError:
     AdiosDataset = None
     adios2_open = None
 
-from hydragnn.utils.datasets.distdataset import DistDataset
-from hydragnn.utils.datasets.pickledataset import SimplePickleDataset
+from hydragnn.data.distdataset import DistDataset
+from hydragnn.data.pickledataset import SimplePickleDataset
 
 
 def _load_single_dataset_dataloaders(args, config, var_config):
@@ -540,7 +540,7 @@ def main():
     configure_variable_names(config)
     var_config = config["Variables"]
 
-    hydragnn.utils.distributed.setup_ddp()
+    hydragnn.distributed.setup_ddp()
 
     if args.multi_model_list:
         train_loader, val_loader, _ = load_multidataset_dataloaders(

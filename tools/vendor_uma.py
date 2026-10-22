@@ -12,7 +12,7 @@
 """Vendor fairchem.core UMA closure into HydraGNN.
 
 Copies the enumerated closure under
-  hydragnn/utils/model/uma/_vendored/fairchem/core/**
+  hydragnn/third_party/uma/fairchem/core/**
 then rewrites all `from fairchem.core.X` / `import fairchem.core.X`
 occurrences to point at the vendored location and prepends the combined
 MIT/BSD-3-Clause copyright and SPDX header.
@@ -38,7 +38,7 @@ from collections import deque
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-VENDOR_ROOT = REPO / "hydragnn" / "utils" / "model" / "uma" / "_vendored"
+VENDOR_ROOT = REPO / "hydragnn" / "third_party" / "uma"
 
 SEEDS = [
     "fairchem.core.models.uma.escn_md",
@@ -208,7 +208,7 @@ def copy_and_rewrite(src: Path, fairchem_root: Path) -> Path:
             )
             return dst
         text = src.read_text()
-        text = IMPORT_RE.sub("hydragnn.utils.model.uma._vendored.fairchem.core", text)
+        text = IMPORT_RE.sub("hydragnn.third_party.uma.fairchem.core", text)
         dst.write_text(DUAL_LICENSE_HEADER + text)
     else:
         shutil.copy2(src, dst)
@@ -235,7 +235,7 @@ PATCHES: list[tuple[str, str, str]] = [
     # escn_md: defer OutputSpec/Task import (drags in the whole mlip_unit infra)
     (
         "models/uma/escn_md.py",
-        "from hydragnn.utils.model.uma._vendored.fairchem.core.units.mlip_unit.mlip_unit import OutputSpec, Task\n\nfrom .escn_md_block import eSCNMD_Block",
+        "from hydragnn.third_party.uma.fairchem.core.units.mlip_unit.mlip_unit import OutputSpec, Task\n\nfrom .escn_md_block import eSCNMD_Block",
         "from .escn_md_block import eSCNMD_Block",
     ),
     (
@@ -252,7 +252,7 @@ PATCHES: list[tuple[str, str, str]] = [
         "        # Imported lazily: mlip_unit pulls the fairchem training/inference\n"
         "        # infra (torchtnt/ray/wandb); this method is only reached for\n"
         "        # checkpoint-based inference, never during construct/forward.\n"
-        "        from hydragnn.utils.model.uma._vendored.fairchem.core.units.mlip_unit.mlip_unit import (\n"
+        "        from hydragnn.third_party.uma.fairchem.core.units.mlip_unit.mlip_unit import (\n"
         "            OutputSpec,\n"
         "            Task,\n"
         "        )\n"

@@ -16,13 +16,13 @@ import argparse
 
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-from hydragnn.utils.input_config_parsing.config_utils import get_log_name_config
+from hydragnn.config.config_utils import get_log_name_config
 from hydragnn.utils.model import print_model
-from hydragnn.utils.datasets.serializeddataset import SerializedDataset
+from hydragnn.data.serializeddataset import SerializedDataset
 from eam_preprocess import prepare_eam_dataset, split_and_write_eam_dataset
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosDataset, AdiosWriter
+    from hydragnn.data.adiosdataset import AdiosDataset, AdiosWriter
 except ImportError:
     pass
 
@@ -81,7 +81,7 @@ if __name__ == "__main__":
     hydragnn.utils.print.setup_log(get_log_name_config(config))
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
+    comm_size, rank = hydragnn.distributed.setup_ddp()
     ##################################################################################################################
     comm = MPI.COMM_WORLD
     ## Set up logging
@@ -168,7 +168,7 @@ if __name__ == "__main__":
     )
     timer.stop()
 
-    config = hydragnn.utils.input_config_parsing.update_config(
+    config = hydragnn.config.update_config(
         config, train_loader, val_loader, test_loader
     )
     config["Variables"].pop("minmax_node_feature", None)
@@ -183,7 +183,7 @@ if __name__ == "__main__":
         print_model(model)
     comm.Barrier()
 
-    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
+    model = hydragnn.distributed.get_distributed_model(model, verbosity)
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
@@ -197,7 +197,7 @@ if __name__ == "__main__":
     if dist.is_initialized():
         dist.barrier()
 
-    hydragnn.utils.input_config_parsing.save_config(config, log_name)
+    hydragnn.config.save_config(config, log_name)
 
     hydragnn.train.train_validate_test(
         model,

@@ -29,10 +29,10 @@ from hydragnn.preprocess.batch_sampler import (
     CostAwareBatchSampler,
     DistributedCostAwareBatchSampler,
 )
-from hydragnn.utils.datasets.compositional_data_splitting import (
+from hydragnn.data.compositional_data_splitting import (
     compositional_stratified_splitting,
 )
-from hydragnn.utils.distributed import get_comm_size_and_rank
+from hydragnn.distributed import get_comm_size_and_rank
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 import pickle
 
@@ -42,7 +42,7 @@ from torch_geometric.data import Batch
 from torch.utils.data import Dataset
 from torch.utils.data.dataloader import _DatasetKind
 
-from hydragnn.utils.input_config_parsing.variable_schema import (
+from hydragnn.config.variable_schema import (
     VariableSchema,
     parse_variable_schema,
     prepare_data_from_schema,

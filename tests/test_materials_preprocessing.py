@@ -13,8 +13,8 @@ import pytest
 import torch
 from torch_geometric.data import Data
 
-from hydragnn.utils.materials import normalize_stress, validate_materials_sample
-from hydragnn.utils.materials.preprocessing import (
+from hydragnn.data.materials import normalize_stress, validate_materials_sample
+from hydragnn.data.materials.preprocessing import (
     GPA_PER_EV_PER_ANGSTROM_CUBED,
 )
 

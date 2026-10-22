@@ -9,7 +9,7 @@ import torch
 from mpi4py import MPI
 from torch_geometric.data import Data
 
-from hydragnn.utils.datasets.hdf5dataset import HDF5Writer
+from hydragnn.data.hdf5dataset import HDF5Writer
 
 INPUT_SUFFIXES = {"pl", "ql"}
 OUTPUT_SUFFIXES = {

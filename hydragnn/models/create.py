@@ -20,10 +20,10 @@ from hydragnn.model_settings import (
     UMASettings,
 )
 from hydragnn.domain_losses import create_domain_loss
-from hydragnn.utils.input_config_parsing.config_utils import edge_type_dims
+from hydragnn.config.config_utils import edge_type_dims
 from hydragnn.models.registry import get_model_builder
 
-from hydragnn.utils.distributed import get_device
+from hydragnn.distributed import get_device
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.train.train_validate_test import resolve_precision
 

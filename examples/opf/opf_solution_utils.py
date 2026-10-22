@@ -9,7 +9,7 @@ import torch.distributed as dist
 import torch.nn.functional as F
 from torch_geometric.utils import degree
 
-from hydragnn.utils.input_config_parsing import get_variable_schema
+from hydragnn.config import get_variable_schema
 from hydragnn.domain_losses import create_constraint_optimizer
 from hydragnn.utils.model.model import loss_function_selection
 

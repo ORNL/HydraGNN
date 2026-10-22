@@ -14,12 +14,12 @@ from torch_geometric.data import HeteroData
 
 import hydragnn
 from __init__ import data_ops
-from hydragnn.utils.datasets.hdf5dataset import HDF5Dataset, HDF5Writer
-from hydragnn.utils.datasets.pickledataset import (
+from hydragnn.data.hdf5dataset import HDF5Dataset, HDF5Writer
+from hydragnn.data.pickledataset import (
     SimplePickleDataset,
     SimplePickleWriter,
 )
-from hydragnn.utils.input_config_parsing.config_utils import (
+from hydragnn.config.config_utils import (
     edge_type_dims,
     update_config,
 )
@@ -28,7 +28,7 @@ from hydragnn.utils.profiling_and_tracing import print_timers
 from hydragnn.utils.print import iterate_tqdm
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosDataset, AdiosWriter
+    from hydragnn.data.adiosdataset import AdiosDataset, AdiosWriter
 except ImportError:
     AdiosDataset = None
     AdiosWriter = None
@@ -695,7 +695,7 @@ def main():
     )
     _validate_task_and_formulation(task, args.formulation)
 
-    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
+    comm_size, rank = hydragnn.distributed.setup_ddp()
     comm = MPI.COMM_WORLD
 
     logging.basicConfig(
@@ -805,7 +805,7 @@ def main():
 
     config = update_config(config, train_loader, val_loader, test_loader)
     config = _to_jsonable(config)
-    hydragnn.utils.input_config_parsing.save_config(config, log_name)
+    hydragnn.config.save_config(config, log_name)
 
     model = hydragnn.models.create_model_config(
         config=config["NeuralNetwork"],
@@ -820,7 +820,7 @@ def main():
         optimizer, mode="min", factor=0.5, patience=5, min_lr=1e-5
     )
 
-    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+    model, optimizer = hydragnn.distributed.distributed_model_wrapper(
         model,
         optimizer,
         config["Verbosity"]["level"],

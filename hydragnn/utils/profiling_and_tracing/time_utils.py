@@ -11,7 +11,7 @@
 
 import time
 import torch
-from hydragnn.utils.distributed import get_comm_size_and_rank, get_device
+from hydragnn.distributed import get_comm_size_and_rank, get_device
 from hydragnn.utils.print.print_utils import print_distributed
 
 

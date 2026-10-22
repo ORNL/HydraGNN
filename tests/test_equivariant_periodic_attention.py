@@ -16,7 +16,7 @@ from hydragnn.globalAtt.equivariant_transformer import EquivariantTransformerLay
 from hydragnn.globalAtt.periodic_supercell import (
     build_periodic_attention_sources,
 )
-from hydragnn.utils.input_config_parsing.config_utils import (
+from hydragnn.config.config_utils import (
     validate_equivariant_transformer_config,
 )
 

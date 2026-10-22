@@ -23,15 +23,15 @@ from hydragnn.preprocess.load_data import (
     create_dataloaders,
 )
 import hydragnn.preprocess.load_data as load_data_module
-from hydragnn.utils.input_config_parsing import (
+from hydragnn.config import (
     edge_type_dims,
     validate_edge_type_contract,
 )
-from hydragnn.utils.input_config_parsing.config_utils import (
+from hydragnn.config.config_utils import (
     update_config,
     update_config_edge_dim,
 )
-from hydragnn.utils.input_config_parsing.variable_schema import (
+from hydragnn.config.variable_schema import (
     encoded_schema_dimensions,
     get_variable_schema,
     node_type_feature_dims,

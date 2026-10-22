@@ -25,17 +25,17 @@ import numpy as np
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.model import print_model, print_optimizer
-from hydragnn.utils.datasets.distdataset import DistDataset
-from hydragnn.utils.datasets.pickledataset import SimplePickleDataset
+from hydragnn.data.distdataset import DistDataset
+from hydragnn.data.pickledataset import SimplePickleDataset
 
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 from hydragnn.utils.print.print_utils import log, log0
-from hydragnn.utils.distributed import nsplit
-from hydragnn.utils.distributed import get_device
+from hydragnn.distributed import nsplit
+from hydragnn.distributed import get_device
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosDataset, adios2_open
+    from hydragnn.data.adiosdataset import AdiosDataset, adios2_open
 except ImportError:
     pass
 
@@ -192,7 +192,7 @@ if __name__ == "__main__":
 
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
+    comm_size, rank = hydragnn.distributed.setup_ddp()
     ##################################################################################################################
 
     if rank == 0:
@@ -547,7 +547,7 @@ if __name__ == "__main__":
 
     if args.ddstore:
         train_loader.dataset.ddstore.epoch_begin()
-    config = hydragnn.utils.input_config_parsing.update_config(
+    config = hydragnn.config.update_config(
         config, train_loader, val_loader, test_loader
     )
     if args.ddstore:
@@ -555,7 +555,7 @@ if __name__ == "__main__":
     ## Good to sync with everyone right after DDStore setup
     comm.Barrier()
 
-    hydragnn.utils.input_config_parsing.save_config(config, log_name)
+    hydragnn.config.save_config(config, log_name)
 
     timer.stop()
 
@@ -583,7 +583,7 @@ if __name__ == "__main__":
         )
     else:
         ## Wrap the model with DDP
-        model = hydragnn.utils.distributed.get_distributed_model(
+        model = hydragnn.distributed.get_distributed_model(
             model, verbosity, find_unused_parameters=True
         )
         optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)

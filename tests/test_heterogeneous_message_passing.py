@@ -18,7 +18,7 @@ import hydragnn
 from hydragnn.models.create import create_model
 from hydragnn.utils.model.model import load_existing_model, update_multibranch_heads
 from hydragnn.preprocess.load_data import split_dataset
-from hydragnn.utils.distributed import setup_ddp, get_distributed_model
+from hydragnn.distributed import setup_ddp, get_distributed_model
 from examples.pglearn.download_and_uncompress_data import _validate_path_component
 
 

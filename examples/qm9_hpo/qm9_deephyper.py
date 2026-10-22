@@ -28,7 +28,7 @@ def _context():
     global _worker_context
     if _worker_context is None:
         os.environ.setdefault("SERIALIZED_DATA_PATH", os.getcwd())
-        hydragnn.utils.distributed.setup_ddp()
+        hydragnn.distributed.setup_ddp()
         config = load_base_config()
         _worker_context = config, prepare_splits(config)
     return _worker_context

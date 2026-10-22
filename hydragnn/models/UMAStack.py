@@ -19,7 +19,7 @@ HydraGNN integration of FairChem's UMA model.
 The upstream ``eSCNMDBackbone`` (and all of its transitive fairchem-core
 dependencies -- SO(3)/SO(2) primitives, Wigner-D tables, rotation and
 radial modules) is vendored with documented namespace/import transformations under
-``hydragnn/utils/model/uma/_vendored/fairchem/core/**`` (Meta MIT licence
+``hydragnn/third_party/uma/fairchem/core/**`` (Meta MIT licence
 preserved). ``UMAStack`` imports the vendored class directly, so there
 is no runtime dependency on the external ``fairchem-core`` distribution.
 
@@ -151,10 +151,10 @@ def _load_uma_backbones():
     otherwise surface deep inside the vendored fairchem-core tree.
     """
     try:
-        from hydragnn.utils.model.uma._vendored.fairchem.core.models.uma.escn_md import (
+        from hydragnn.third_party.uma.fairchem.core.models.uma.escn_md import (
             eSCNMDBackbone,
         )
-        from hydragnn.utils.model.uma._vendored.fairchem.core.models.uma.escn_moe import (
+        from hydragnn.third_party.uma.fairchem.core.models.uma.escn_moe import (
             eSCNMDMoeBackbone,
         )
     except ImportError as exc:  # pragma: no cover
@@ -221,7 +221,7 @@ class _UMAEquivariantVectorHead(torch.nn.Module):
         # the UMA integration (the vendored fairchem tree is only touched when
         # a UMA model is actually built). ``so3_layers`` itself only imports
         # ``math``/``torch``.
-        from hydragnn.utils.model.uma._vendored.fairchem.core.models.uma.nn.so3_layers import (  # noqa: E501
+        from hydragnn.third_party.uma.fairchem.core.models.uma.nn.so3_layers import (  # noqa: E501
             SO3_Linear,
         )
 

@@ -71,16 +71,16 @@ def _patch_fast_tar_extraction():
 
 
 import hydragnn
-from hydragnn.utils.datasets.pickledataset import (
+from hydragnn.data.pickledataset import (
     SimplePickleWriter,
     SimplePickleDataset,
 )
-from hydragnn.utils.distributed import nsplit
+from hydragnn.distributed import nsplit
 from hydragnn.utils.model import print_model
-from hydragnn.utils.input_config_parsing.config_utils import update_config
+from hydragnn.config.config_utils import update_config
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.data.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     AdiosWriter = None
     AdiosDataset = None
@@ -287,7 +287,7 @@ if __name__ == "__main__":
     if args.num_epoch is not None:
         config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
 
-    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
+    comm_size, rank = hydragnn.distributed.setup_ddp()
     comm = MPI.COMM_WORLD
 
     logging.basicConfig(
@@ -612,7 +612,7 @@ if __name__ == "__main__":
 
     config = update_config(config, train_loader, val_loader, test_loader)
     config = _to_jsonable(config)
-    hydragnn.utils.input_config_parsing.save_config(config, log_name)
+    hydragnn.config.save_config(config, log_name)
 
     precision = config["NeuralNetwork"]["Training"].get("precision", "fp32")
     model = hydragnn.models.create_model_config(
@@ -626,7 +626,7 @@ if __name__ == "__main__":
         optimizer, mode="min", factor=0.5, patience=5, min_lr=1e-5
     )
 
-    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+    model, optimizer = hydragnn.distributed.distributed_model_wrapper(
         model, optimizer, config["Verbosity"]["level"]
     )
 

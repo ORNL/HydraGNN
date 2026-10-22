@@ -17,12 +17,12 @@ import torch.distributed as dist
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from hydragnn.domain_losses import uses_interatomic_potential
 
-from hydragnn.utils.distributed import (
+from hydragnn.distributed import (
     setup_ddp,
     get_distributed_model,
     configure_local_sgd,
 )
-from hydragnn.utils.distributed import print_peak_memory
+from hydragnn.distributed import print_peak_memory
 from hydragnn.utils.model import (
     save_model,
     get_summary_writer,
@@ -30,7 +30,7 @@ from hydragnn.utils.model import (
 )
 from hydragnn.utils.print.print_utils import print_distributed, setup_log
 from hydragnn.utils.profiling_and_tracing.time_utils import print_timers
-from hydragnn.utils.input_config_parsing.config_utils import (
+from hydragnn.config.config_utils import (
     update_config,
     get_log_name_config,
     save_config,

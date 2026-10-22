@@ -47,7 +47,7 @@ from hydragnn.train.train_validate_test import (
     move_batch_to_device,
     get_autocast_and_scaler,
 )
-from hydragnn.utils.distributed import get_device
+from hydragnn.distributed import get_device
 
 # ---------------------------------------------------------------------------
 # Helpers

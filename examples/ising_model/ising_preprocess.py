@@ -23,7 +23,7 @@ try:
 except ImportError:  # Direct execution from the example directory.
     from create_configurations import E_dimensionless
 from hydragnn.preprocess import get_radius_graph
-from hydragnn.utils.input_config_parsing.variable_schema import (
+from hydragnn.config.variable_schema import (
     parse_variable_schema,
     prepare_data_from_schema,
 )

@@ -12,7 +12,7 @@
 
 import h5py
 
-from hydragnn.utils.distributed import nsplit
+from hydragnn.distributed import nsplit
 from hydragnn.utils.print.print_utils import iterate_tqdm
 
 REFERENCE_ENERGIES = {

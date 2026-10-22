@@ -25,10 +25,10 @@ import numpy as np
 
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-from hydragnn.utils.distributed import get_device, setup_ddp, nsplit
+from hydragnn.distributed import get_device, setup_ddp, nsplit
 from hydragnn.utils.model import load_existing_model
-from hydragnn.utils.datasets.pickledataset import SimplePickleDataset
-from hydragnn.utils.input_config_parsing.config_utils import (
+from hydragnn.data.pickledataset import SimplePickleDataset
+from hydragnn.config.config_utils import (
     update_config,
 )
 from hydragnn.utils.print import setup_log
@@ -38,7 +38,7 @@ from hydragnn.preprocess import create_dataloaders
 from scipy.interpolate import griddata
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.data.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
@@ -167,7 +167,7 @@ if __name__ == "__main__":
 
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
+    comm_size, rank = hydragnn.distributed.setup_ddp()
     ##################################################################################################################
 
     comm = MPI.COMM_WORLD

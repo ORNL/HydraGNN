@@ -14,14 +14,14 @@ from mpi4py import MPI
 import hydragnn
 from hydragnn.postprocess.postprocess import output_denormalize
 from hydragnn.train.train_validate_test import test
-from hydragnn.utils.datasets.hdf5dataset import HDF5Dataset
-from hydragnn.utils.datasets.pickledataset import SimplePickleDataset
-from hydragnn.utils.distributed import setup_ddp
-from hydragnn.utils.input_config_parsing.config_utils import update_config
+from hydragnn.data.hdf5dataset import HDF5Dataset
+from hydragnn.data.pickledataset import SimplePickleDataset
+from hydragnn.distributed import setup_ddp
+from hydragnn.config.config_utils import update_config
 from hydragnn.utils.model import load_existing_model
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosDataset
+    from hydragnn.data.adiosdataset import AdiosDataset
 except ImportError:
     AdiosDataset = None
 
@@ -130,7 +130,7 @@ def main():
         config=config["NeuralNetwork"],
         verbosity=config["Verbosity"]["level"],
     )
-    model = hydragnn.utils.distributed.distributed_model_wrapper(
+    model = hydragnn.distributed.distributed_model_wrapper(
         model, None, config["Verbosity"]["level"]
     )[0]
 

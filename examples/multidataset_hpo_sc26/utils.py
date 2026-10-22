@@ -22,7 +22,7 @@ from mpi4py import MPI
 from hydragnn.preprocess import create_dataloaders
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosDataset, adios2_open
+    from hydragnn.data.adiosdataset import AdiosDataset, adios2_open
 except ImportError:
     AdiosDataset = None
     adios2_open = None

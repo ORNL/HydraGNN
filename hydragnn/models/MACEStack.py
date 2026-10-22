@@ -42,7 +42,7 @@ from torch_geometric.nn import (
 )  # This naming is because there is torch.nn.Sequential and torch_geometric.nn.Sequential
 
 # MACE
-from hydragnn.utils.model.mace_utils.modules.blocks import (
+from hydragnn.models.backends.mace_utils.modules.blocks import (
     EquivariantProductBasisBlock,
     LinearNodeEmbeddingBlock,
     RadialEmbeddingBlock,
@@ -57,7 +57,7 @@ from e3nn.util.jit import compile_mode
 from .Base import Base
 from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 from hydragnn.utils.model.irreps_tools import create_irreps_string
-from hydragnn.utils.model.mace_utils.modules.blocks import (
+from hydragnn.models.backends.mace_utils.modules.blocks import (
     CombineBlock,
     SplitBlock,
     NonLinearMultiheadDecoderBlock,
@@ -146,6 +146,11 @@ class MACEStack(Base):
             self.correlation = list(correlation)
             if len(self.correlation) == 1:
                 self.correlation = self.correlation * num_interactions
+            elif len(self.correlation) != num_interactions:
+                raise ValueError(
+                    f"correlation must have one value or one value per interaction "
+                    f"layer ({num_interactions}), got {len(self.correlation)}"
+                )
         else:
             raise TypeError("correlation must be int, list, tuple, or None")
         radial_type = "bessel" if radial_type is None else radial_type
@@ -242,6 +247,7 @@ class MACEStack(Base):
             self.hidden_dim,
             first_layer=True,
             last_layer=last_layer,
+            layer_index=0,
         )  # Node features are already converted to hidden_dim via one-hot embedding
         self.graph_convs.append(
             first_conv
@@ -267,7 +273,10 @@ class MACEStack(Base):
         for i in range(self.num_conv_layers - 1):
             last_layer = i == self.num_conv_layers - 2
             conv = self.get_conv(
-                self.hidden_dim, self.hidden_dim, last_layer=last_layer
+                self.hidden_dim,
+                self.hidden_dim,
+                last_layer=last_layer,
+                layer_index=i + 1,
             )
             self.graph_convs.append(
                 conv
@@ -289,7 +298,14 @@ class MACEStack(Base):
                 )
             )  # Last layer will be nonlinear node decoding
 
-    def get_conv(self, input_dim, output_dim, first_layer=False, last_layer=False):
+    def get_conv(
+        self,
+        input_dim,
+        output_dim,
+        first_layer=False,
+        last_layer=False,
+        layer_index=0,
+    ):
         hidden_dim = output_dim if input_dim == 1 else input_dim
 
         # NOTE All of these should be constructed with HYDRA dimensional arguments
@@ -352,7 +368,7 @@ class MACEStack(Base):
         prod = EquivariantProductBasisBlock(
             node_feats_irreps=interaction_irreps,
             target_irreps=hidden_irreps,
-            correlation=self.correlation[0],  # Currently uniform across all layers
+            correlation=self.correlation[layer_index],
             num_elements=self.num_elements,
             use_sc=use_sc,
         )

@@ -1,0 +1,970 @@
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
+
+import os
+import re
+import warnings
+import hashlib
+
+import torch
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, MixedPrecision
+from torch.distributed.fsdp import ShardingStrategy
+from torch.distributed.optim import PostLocalSGDOptimizer
+
+from hydragnn.utils.print.print_utils import print_distributed
+
+import psutil
+import socket
+from datetime import timedelta
+import time
+import subprocess
+
+deepspeed_available = True
+try:
+    import deepspeed
+except:
+    deepspeed_available = False
+
+
+class ModuleCompat(torch.nn.Module):
+    """
+    Wrapper that provides .module (DDP/FSDP1-style) for backward compatibility.
+    Forward calls into the wrapped module.
+    Attribute access falls back to the wrapped module.
+    """
+
+    def __init__(self, module: torch.nn.Module):
+        super().__init__()
+        self.module = module
+
+    def forward(self, *args, **kwargs):
+        return self.module(*args, **kwargs)
+
+    def __getattr__(self, name):
+        if name != "module":
+            try:
+                return super().__getattr__(name)
+            except AttributeError:
+                return getattr(self.module, name)
+        return super().__getattr__(name)
+
+
+def find_ifname(myaddr):
+    """
+    Find socket ifname for a given ip adress. This is for "GLOO" ddp setup.
+    Usage example:
+        find_ifname("127.0.0.1") will return a network interface name, such as "lo". "lo0", etc.
+    """
+    ipaddr = socket.gethostbyname(myaddr)
+    ifname = None
+    for nic, addrs in psutil.net_if_addrs().items():
+        for addr in addrs:
+            if addr.address == ipaddr:
+                ifname = nic
+                break
+        if ifname is not None:
+            break
+
+    return ifname
+
+
+def _resolve_ipv4_addr(host: str) -> str:
+    try:
+        return socket.gethostbyname(host)
+    except socket.gaierror:
+        return host
+
+
+def parse_slurm_nodelist(nodelist):
+    """
+    Parse SLURM_NODELIST env string to get list of nodes.
+    Usage example:
+        parse_slurm_nodelist(os.environ["SLURM_NODELIST"])
+    Input examples:
+        "or-condo-g04"
+        "or-condo-g[05,07-08,13]"
+        "or-condo-g[05,07-08,13],or-condo-h[01,12]"
+    """
+    nlist = list()
+    for block, _ in re.findall(r"([\w-]+(\[[\d\-,]+\])*)", nodelist):
+        m = re.match(r"^(?P<prefix>[\w\-]+)\[(?P<group>.*)\]", block)
+        if m is None:
+            ## single node
+            nlist.append(block)
+        else:
+            ## multiple nodes
+            g = m.groups()
+            prefix = g[0]
+            for sub in g[1].split(","):
+                if "-" in sub:
+                    start, end = re.match(r"(\d+)-(\d+)", sub).groups()
+                    fmt = "%%0%dd" % (len(start))
+                    for i in range(int(start), int(end) + 1):
+                        node = prefix + fmt % i
+                        nlist.append(node)
+                else:
+                    node = prefix + sub
+                    nlist.append(node)
+
+    return nlist
+
+
+def init_comm_size_and_rank():
+    world_size = None
+    world_rank = 0
+
+    if os.getenv("OMPI_COMM_WORLD_SIZE") and os.getenv("OMPI_COMM_WORLD_RANK"):
+        ## Summit
+        world_size = int(os.environ["OMPI_COMM_WORLD_SIZE"])
+        world_rank = int(os.environ["OMPI_COMM_WORLD_RANK"])
+    elif os.getenv("SLURM_NPROCS") and os.getenv("SLURM_PROCID"):
+        ## CADES
+        world_size = int(os.environ["SLURM_NPROCS"])
+        world_rank = int(os.environ["SLURM_PROCID"])
+    else:
+        from mpi4py import MPI
+
+        world_size = MPI.COMM_WORLD.Get_size()
+        world_rank = MPI.COMM_WORLD.Get_rank()
+
+    ## Fall back to default
+    if world_size is None:
+        world_size = 1
+
+    return int(world_size), int(world_rank)
+
+
+def get_comm_size_and_rank():
+    world_size = None
+    world_rank = 0
+
+    if dist.is_initialized():
+        world_size = dist.get_world_size()
+        world_rank = dist.get_rank()
+    else:
+        world_size = 1
+
+    return int(world_size), int(world_rank)
+
+
+def setup_ddp(use_deepspeed=False):
+    """ "Initialize DDP"""
+
+    if dist.is_initialized():
+        world_size, world_rank = init_comm_size_and_rank()
+        return world_size, world_rank
+
+    if os.getenv("HYDRAGNN_BACKEND") is not None:
+        backend = os.environ["HYDRAGNN_BACKEND"]
+    elif dist.is_nccl_available() and torch.cuda.is_available():
+        backend = "nccl"
+    elif hasattr(torch, "xpu") and torch.xpu.is_available():
+        backend = "xccl"
+    elif torch.distributed.is_gloo_available():
+        backend = "gloo"
+    else:
+        raise RuntimeError("No parallel backends available")
+
+    world_size, world_rank = init_comm_size_and_rank()
+
+    def _derive_master_port(default_port: int = 8889) -> str:
+        user_port = os.getenv("HYDRAGNN_MASTER_PORT")
+        if user_port is not None:
+            return user_port
+
+        for var in ["SLURM_JOB_ID", "PBS_JOBID", "LSB_JOBID"]:
+            value = os.getenv(var)
+            if not value:
+                continue
+            digits = "".join(ch for ch in value if ch.isdigit())
+            if not digits:
+                continue
+            return str(10000 + (int(digits) % 50000))
+
+        return str(default_port)
+
+    ## Default setting
+    master_addr = "127.0.0.1"
+    master_port = _derive_master_port()
+
+    if os.getenv("HYDRAGNN_MASTER_ADDR") is not None:
+        master_addr = os.environ["HYDRAGNN_MASTER_ADDR"]
+    elif os.getenv("LSB_HOSTS") is not None:
+        ## source: https://www.olcf.ornl.gov/wp-content/uploads/2019/12/Scaling-DL-on-Summit.pdf
+        ## The following is Summit specific
+        master_addr = os.environ["LSB_HOSTS"].split()[1]
+    elif os.getenv("LSB_MCPU_HOSTS") is not None:
+        master_addr = os.environ["LSB_MCPU_HOSTS"].split()[2]
+    elif os.getenv("SLURM_STEP_NODELIST") is not None:
+        ## The following is CADES/Frontier/Perlmutter specific with job steps
+        master_addr = parse_slurm_nodelist(os.environ["SLURM_STEP_NODELIST"])[0]
+    elif os.getenv("SLURM_NODELIST") is not None:
+        ## The following is CADES specific
+        master_addr = parse_slurm_nodelist(os.environ["SLURM_NODELIST"])[0]
+    elif os.getenv("PBS_O_HOST") is not None:
+        if os.environ["PBS_O_HOST"][-19:] == "aurora.alcf.anl.gov":
+            from mpi4py import MPI
+
+            RANK = MPI.COMM_WORLD.Get_rank()
+            MASTER_ADDR = socket.gethostname() if RANK == 0 else None
+            MASTER_ADDR = MPI.COMM_WORLD.bcast(MASTER_ADDR, root=0)
+            master_addr = f"{MASTER_ADDR}.hsn.cm.aurora.alcf.anl.gov"
+        else:
+            ## The following is CADES specific
+            master_addr = parse_slurm_nodelist(os.environ["PBS_O_HOST"])[0]
+
+    if os.getenv("HYDRAGNN_PREFER_IPV4", "1") == "1":
+        master_addr = _resolve_ipv4_addr(master_addr)
+
+    try:
+        port_retries = int(os.getenv("HYDRAGNN_MASTER_PORT_RETRIES", "8"))
+        explicit_port = os.getenv("HYDRAGNN_MASTER_PORT") is not None
+        base_port = int(master_port)
+
+        for attempt in range(port_retries + 1):
+            selected_port = str(base_port + attempt)
+
+            if backend in ["nccl", "gloo", "xccl"]:
+                os.environ["MASTER_ADDR"] = master_addr
+                os.environ["MASTER_PORT"] = selected_port
+                os.environ["WORLD_SIZE"] = str(world_size)
+                os.environ["RANK"] = str(world_rank)
+                ## Setting LOCAL_RANK complicts with DeviceMesh when using the srun "--gpus-per-task=1" option
+                # os.environ["LOCAL_RANK"] = str(get_local_rank())
+
+            if backend == "nccl" and torch.cuda.is_available():
+                local_rank = get_local_rank()
+                if local_rank < torch.cuda.device_count():
+                    torch.cuda.set_device(local_rank)
+
+            if (backend == "gloo") and ("GLOO_SOCKET_IFNAME" not in os.environ):
+                ifname = find_ifname(master_addr)
+                if ifname is not None:
+                    os.environ["GLOO_SOCKET_IFNAME"] = ifname
+
+            if world_rank == 0:
+                print(
+                    "Distributed data parallel: %s master at %s:%s"
+                    % (backend, master_addr, selected_port),
+                )
+
+            try:
+                if not dist.is_initialized():
+                    if use_deepspeed:
+                        assert deepspeed_available, "deepspeed package not installed"
+                        deepspeed.init_distributed(
+                            dist_backend=backend,
+                            init_method="env://",
+                            timeout=timedelta(seconds=1800),
+                        )
+                    else:
+                        dist.init_process_group(
+                            backend=backend,
+                            init_method="env://",
+                            timeout=timedelta(seconds=1800),
+                        )
+                break
+            except Exception as exc:
+                err = str(exc)
+                should_retry = (
+                    ("EADDRINUSE" in err or "address already in use" in err.lower())
+                    and (not explicit_port)
+                    and (attempt < port_retries)
+                )
+                if should_retry:
+                    if world_rank == 0:
+                        print(
+                            "MASTER_PORT collision on %s. Retrying with next port."
+                            % selected_port
+                        )
+                    time.sleep(0.5)
+                    continue
+                raise
+
+    except KeyError:
+        print("DDP has to be initialized within a job - Running in sequential mode")
+
+    return world_size, world_rank
+
+
+def get_device_list():
+    # [MODIFIED for Intel XPU]
+    if hasattr(torch, "xpu") and torch.xpu.is_available():
+        return [i for i in range(torch.xpu.device_count())]
+    elif torch.cuda.is_available():
+        return [i for i in range(torch.cuda.device_count())]
+    else:
+        return []
+
+
+def get_device_name(use_gpu=True, rank_per_model=1, verbosity_level=0, no_prefix=False):
+
+    available_gpus = get_device_list()
+    if not use_gpu or not available_gpus:
+        print_distributed(verbosity_level, "Using CPU")
+        return "cpu"
+
+    world_size, world_rank = get_comm_size_and_rank()
+    if rank_per_model != 1:
+        raise ValueError("Exactly 1 rank per device currently supported")
+
+    if torch.cuda.is_available():
+        print_distributed(verbosity_level, "Using GPU")
+    elif hasattr(torch, "xpu") and torch.xpu.is_available():
+        print_distributed(verbosity_level, "Using XPU")
+    ## We need to ge a local rank if there are multiple GPUs available.
+    localrank = 0
+    if torch.cuda.device_count() > 1 or (
+        hasattr(torch, "xpu") and torch.xpu.device_count() > 1
+    ):
+        if os.getenv("OMPI_COMM_WORLD_LOCAL_RANK"):
+            ## Summit
+            localrank = int(os.environ["OMPI_COMM_WORLD_LOCAL_RANK"])
+        elif os.getenv("SLURM_LOCALID"):
+            ## CADES
+            localrank = int(os.environ["SLURM_LOCALID"])
+        elif os.getenv("PALS_LOCAL_RANKID"):
+            ## Aurora
+            localrank = int(os.environ.get("PALS_LOCAL_RANKID"))
+
+        if localrank >= torch.cuda.device_count() and torch.cuda.is_available():
+            print(
+                "WARN: localrank is greater than the available device count - %d %d"
+                % (localrank, torch.cuda.device_count())
+            )
+        elif (
+            hasattr(torch, "xpu")
+            and localrank >= torch.xpu.device_count()
+            and torch.xpu.is_available()
+        ):
+            print(
+                "WARN: localrank is greater than the available device count - %d %d"
+                % (localrank, torch.xpu.device_count())
+            )
+
+    if no_prefix:
+        device_name = str(localrank)
+    elif torch.cuda.is_available():
+        device_name = "cuda:" + str(localrank)
+    elif hasattr(torch, "xpu") and torch.xpu.is_available():
+        ## (2025/05) jyc: Getting error with xpu:n format. Use only "xpu" with set_device
+        # device_name = "xpu:" + str(localrank)
+        device_name = "xpu"
+        torch.xpu.set_device(localrank)
+
+    return device_name
+
+
+def get_deepspeed_init_args():
+    class Obj(object):
+        pass
+
+    obj = Obj()
+    obj.device_rank = int(get_device_name(no_prefix=True))
+    return obj
+
+
+def get_local_rank():
+    localrank = 0
+    if os.getenv("OMPI_COMM_WORLD_LOCAL_RANK"):
+        ## Summit
+        localrank = int(os.environ["OMPI_COMM_WORLD_LOCAL_RANK"])
+    elif os.getenv("SLURM_LOCALID"):
+        ## CADES
+        localrank = int(os.environ["SLURM_LOCALID"])
+    elif os.getenv("PALS_LOCAL_RANKID"):
+        localrank = int(os.environ.get("PALS_LOCAL_RANKID"))
+
+    return localrank
+
+
+def get_device_from_name(name: str):
+    # [MODIFIED for Intel XPU]
+    # If name starts with xpu, return torch.device("xpu", index)
+    if name.startswith("xpu"):
+        # e.g. "xpu:0"
+        return torch.device(name)
+    elif name.startswith("cuda"):
+        return torch.device(name)
+    else:
+        return torch.device("cpu")
+
+
+def get_device(use_gpu=True, rank_per_model=1, verbosity_level=0):
+
+    name = get_device_name(use_gpu, rank_per_model, verbosity_level)
+    return get_device_from_name(name)
+
+
+def is_model_distributed(model):
+    return isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel)
+
+
+def _local_sgd_training_config(config):
+    """Return the Local-SGD subsection from a full or neural-network config."""
+    if config is None:
+        return {"enabled": False}
+    neural_network = config.get("NeuralNetwork", config)
+    training = neural_network.get("Training", {})
+    from hydragnn.config.config_utils import (
+        validate_local_sgd_config,
+    )
+
+    validate_local_sgd_config(training)
+    local_sgd = training.get("LocalSGD", {})
+    return local_sgd
+
+
+_OPTIMIZER_STATE_REDUCTIONS = {
+    torch.optim.SGD: {"momentum_buffer": "mean"},
+    torch.optim.Adam: {"exp_avg": "mean", "exp_avg_sq": "mean"},
+    torch.optim.AdamW: {"exp_avg": "mean", "exp_avg_sq": "mean"},
+    torch.optim.Adamax: {"exp_avg": "mean", "exp_inf": "max"},
+    torch.optim.Adagrad: {"sum": "mean"},
+    torch.optim.Adadelta: {"square_avg": "mean", "acc_delta": "mean"},
+    torch.optim.RMSprop: {
+        "square_avg": "mean",
+        "momentum_buffer": "mean",
+        "grad_avg": "mean",
+    },
+}
+
+
+def _optimizer_state_reductions(optimizer):
+    reductions = _OPTIMIZER_STATE_REDUCTIONS.get(type(optimizer))
+    if reductions is None:
+        raise ValueError(
+            "synchronized LocalSGD optimizer state is unsupported for "
+            f"{type(optimizer).__name__}; use optimizer_state_policy='local'"
+        )
+    return reductions
+
+
+def _reduce_optimizer_tensor_bucket(tensors, operation, process_group, bucket_bytes):
+    """Reduce state tensors in bounded flat buckets and copy results in place.
+
+    A bucket must hold at least one tensor element, so the effective byte bound
+    is clamped to the element size when a smaller value is requested.
+    """
+    if not tensors:
+        return
+    world_size = dist.get_world_size(process_group)
+    current = []
+    current_bytes = 0
+
+    def reduce_current():
+        nonlocal current, current_bytes
+        if not current:
+            return
+        flat = torch.cat(current)
+        reduce_op = dist.ReduceOp.SUM if operation == "mean" else dist.ReduceOp.MAX
+        dist.all_reduce(flat, op=reduce_op, group=process_group)
+        if operation == "mean":
+            flat.div_(world_size)
+        offset = 0
+        for view in current:
+            count = view.numel()
+            view.copy_(flat[offset : offset + count])
+            offset += count
+        current = []
+        current_bytes = 0
+
+    for tensor in tensors:
+        if not tensor.is_contiguous():
+            raise ValueError("optimizer state tensors must be contiguous")
+        flat_tensor = tensor.view(-1)
+        effective_bucket_bytes = max(bucket_bytes, tensor.element_size())
+        max_elements = effective_bucket_bytes // tensor.element_size()
+        for start in range(0, flat_tensor.numel(), max_elements):
+            view = flat_tensor[start : start + max_elements]
+            view_bytes = view.numel() * view.element_size()
+            if current and current_bytes + view_bytes > effective_bucket_bytes:
+                reduce_current()
+            current.append(view)
+            current_bytes += view_bytes
+    reduce_current()
+
+
+def _synchronize_optimizer_state(optimizer):
+    """Apply the registered optimizer-specific state synchronization policy."""
+    if optimizer.optimizer_state_policy != "synchronize":
+        return
+
+    base_optimizer = optimizer.optim
+    reductions = _optimizer_state_reductions(base_optimizer)
+    process_group = (
+        optimizer.averager.process_group
+        if optimizer.averager.process_group is not None
+        else dist.group.WORLD
+    )
+    parameters = [
+        parameter
+        for group in base_optimizer.param_groups
+        for parameter in group["params"]
+    ]
+    if not parameters:
+        return
+
+    signature = []
+    step_values = []
+    tensors = {}
+    for parameter_index, parameter in enumerate(parameters):
+        state = base_optimizer.state.get(parameter, {})
+        entries = []
+        for key in sorted(state):
+            value = state[key]
+            if torch.is_tensor(value):
+                entries.append((key, tuple(value.shape), str(value.dtype)))
+            else:
+                entries.append((key, type(value).__name__))
+            if key == "step":
+                if not torch.is_tensor(value) or value.numel() != 1:
+                    raise ValueError("optimizer step state must be a scalar tensor")
+                step_values.append(int(value.item()))
+            elif key in reductions:
+                if not torch.is_tensor(value):
+                    raise TypeError(f"optimizer state {key!r} must be a tensor")
+                bucket_key = (reductions[key], value.device, value.dtype)
+                tensors.setdefault(bucket_key, []).append(value)
+        signature.append((parameter_index, tuple(entries)))
+
+    signature_hash = int.from_bytes(
+        hashlib.sha256(repr(signature).encode("utf-8")).digest()[:8], "big"
+    ) & ((1 << 62) - 1)
+    local_step_min = min(step_values, default=-1)
+    local_step_max = max(step_values, default=-1)
+    probe = torch.tensor(
+        [signature_hash, -signature_hash, local_step_max, -local_step_min],
+        dtype=torch.int64,
+        device=parameters[0].device,
+    )
+    dist.all_reduce(probe, op=dist.ReduceOp.MAX, group=process_group)
+    if int(probe[0]) != -int(probe[1]):
+        raise RuntimeError("optimizer state structure differs across ranks")
+    if int(probe[2]) != -int(probe[3]):
+        raise RuntimeError("optimizer step counters differ across ranks")
+
+    allowed_keys = set(reductions) | {"step"}
+    for _, entries in signature:
+        unknown = {entry[0] for entry in entries} - allowed_keys
+        if unknown:
+            raise ValueError(
+                f"unsupported state keys for {type(base_optimizer).__name__}: "
+                f"{sorted(unknown)}"
+            )
+
+    for (operation, _, _), values in tensors.items():
+        _reduce_optimizer_tensor_bucket(
+            values,
+            operation,
+            process_group,
+            optimizer.optimizer_state_bucket_bytes,
+        )
+
+
+class HydraPostLocalSGDOptimizer(PostLocalSGDOptimizer):
+    """Post-local-SGD optimizer with optional strict state synchronization."""
+
+    def __init__(
+        self,
+        optim,
+        averager,
+        optimizer_state_policy="local",
+        optimizer_state_bucket_bytes=25 * 1024 * 1024,
+    ):
+        super().__init__(optim=optim, averager=averager)
+        self.optimizer_state_policy = optimizer_state_policy
+        self.optimizer_state_bucket_bytes = optimizer_state_bucket_bytes
+
+    def step(self, *args, **kwargs):
+        averaging_step = self.averager.step
+        loss = super().step(*args, **kwargs)
+        parameters_were_averaged = (
+            averaging_step >= self.averager.warmup_steps
+            and (averaging_step - self.averager.warmup_steps) % self.averager.period
+            == 0
+        )
+        if parameters_were_averaged:
+            _synchronize_optimizer_state(self)
+        return loss
+
+
+def configure_local_sgd(model, optimizer, config, *, use_deepspeed=False, verbosity=0):
+    """Enable PyTorch post-local SGD for an ordinary DDP model.
+
+    During ``warmup_steps``, DDP averages gradients globally on every backward
+    pass. Afterwards, gradient all-reduce is disabled so each rank takes local
+    optimizer steps, while ``PostLocalSGDOptimizer`` averages model parameters
+    globally every ``synchronization_period`` steps. Optimizer state remains
+    rank-local by default; the optional synchronized policy applies explicit
+    optimizer-specific reductions at the same synchronization points.
+
+    The function is deliberately restricted to ordinary DDP. FSDP, DeepSpeed,
+    model-parallel wrappers, SyncBatchNorm, and ZeroRedundancyOptimizer have
+    different collective/state semantics and must not silently enter this mode.
+    """
+    local_sgd = _local_sgd_training_config(config)
+    if not local_sgd.get("enabled", False):
+        return model, optimizer
+
+    if use_deepspeed:
+        raise ValueError("Training.LocalSGD is not supported with DeepSpeed")
+    if bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0"))):
+        raise ValueError("Training.LocalSGD is not supported with FSDP")
+    if not dist.is_initialized() or dist.get_world_size() < 2:
+        raise ValueError("Training.LocalSGD requires at least two distributed ranks")
+    if not isinstance(model, DDP):
+        raise TypeError("Training.LocalSGD requires an ordinary PyTorch DDP model")
+
+    neural_network = config.get("NeuralNetwork", config)
+    if neural_network.get("Architecture", {}).get("SyncBatchNorm", False):
+        raise ValueError("Training.LocalSGD is not supported with SyncBatchNorm")
+
+    from torch.distributed.optim import ZeroRedundancyOptimizer
+
+    if isinstance(optimizer, ZeroRedundancyOptimizer):
+        raise ValueError(
+            "Training.LocalSGD is not supported with ZeroRedundancyOptimizer"
+        )
+    optimizer_state_policy = local_sgd["optimizer_state_policy"]
+    if optimizer_state_policy == "synchronize":
+        _optimizer_state_reductions(optimizer)
+
+    from torch.distributed.algorithms.ddp_comm_hooks import post_localSGD_hook
+    from torch.distributed.algorithms.model_averaging.averagers import (
+        PeriodicModelAverager,
+    )
+
+    warmup_steps = local_sgd["warmup_steps"]
+    synchronization_period = local_sgd["synchronization_period"]
+    state = post_localSGD_hook.PostLocalSGDState(
+        process_group=None,
+        subgroup=None,
+        start_localSGD_iter=warmup_steps,
+        post_local_gradient_allreduce=False,
+    )
+    model.register_comm_hook(state, post_localSGD_hook.post_localSGD_hook)
+
+    averager = PeriodicModelAverager(
+        period=synchronization_period,
+        warmup_steps=warmup_steps,
+        process_group=None,
+    )
+    optimizer = HydraPostLocalSGDOptimizer(
+        optim=optimizer,
+        averager=averager,
+        optimizer_state_policy=optimizer_state_policy,
+        optimizer_state_bucket_bytes=local_sgd["optimizer_state_bucket_bytes"],
+    )
+    print_distributed(
+        verbosity,
+        "Post-local SGD enabled: "
+        f"warmup_steps={warmup_steps}, "
+        f"synchronization_period={synchronization_period}, "
+        f"optimizer_state_policy={optimizer_state_policy}",
+    )
+    return model, optimizer
+
+
+def synchronize_local_sgd_parameters(optimizer):
+    """Average replicas at an epoch boundary when an average is still pending."""
+    if not isinstance(optimizer, PostLocalSGDOptimizer):
+        return False
+
+    averager = optimizer.averager
+    # DDP globally averages gradients throughout warm-up, so replicas are
+    # already identical and an additional parameter collective is redundant.
+    if averager.step <= averager.warmup_steps:
+        return False
+    if getattr(optimizer, "_hydragnn_last_forced_sync_step", None) == averager.step:
+        return False
+    last_step = averager.step - 1
+    last_step_was_averaged = last_step >= averager.warmup_steps and (
+        (last_step - averager.warmup_steps) % averager.period == 0
+    )
+    if last_step_was_averaged:
+        return False
+
+    from torch.distributed.algorithms.model_averaging import utils
+
+    process_group = (
+        averager.process_group
+        if averager.process_group is not None
+        else dist.group.WORLD
+    )
+    utils.average_parameters_or_parameter_groups(optimizer.param_groups, process_group)
+    if isinstance(optimizer, HydraPostLocalSGDOptimizer):
+        _synchronize_optimizer_state(optimizer)
+    optimizer._hydragnn_last_forced_sync_step = averager.step
+    return True
+
+
+def get_distributed_model(
+    model,
+    verbosity=0,
+    sync_batch_norm=False,
+    find_unused_parameters=False,
+    enhanced_model=False,
+):
+    device_name = get_device_name(verbosity_level=verbosity)
+
+    if dist.is_initialized():
+        if device_name == "cpu":
+            ddp_kwargs = {
+                "find_unused_parameters": find_unused_parameters,
+                "gradient_as_bucket_view": not enhanced_model,
+            }
+            # Add static_graph=False for enhanced models with dynamic computation
+            if enhanced_model:
+                ddp_kwargs["static_graph"] = False
+        else:
+            if sync_batch_norm:
+                model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+            device = get_device_from_name(device_name)
+
+            ddp_kwargs = {
+                "device_ids": [device],
+                "find_unused_parameters": find_unused_parameters,
+                "gradient_as_bucket_view": not enhanced_model,
+            }
+            # Add static_graph=False for enhanced models with dynamic computation
+            if enhanced_model:
+                ddp_kwargs["static_graph"] = False
+
+        ## check if FSDP is to be used
+        use_fsdp = bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
+        fsdp_version = int(os.getenv("HYDRAGNN_FSDP_VERSION", "1"))
+        if fsdp_version not in [1, 2]:
+            raise ValueError(
+                f"Unsupported HYDRAGNN_FSDP_VERSION={fsdp_version}. Supported values are 1 or 2."
+            )
+        ## List of ShardingStrategy: FULL_SHARD, SHARD_GRAD_OP, NO_SHARD, HYBRID_SHARD, HYBRID_SHARD_ZERO2
+        fsdp_strategy = os.getenv("HYDRAGNN_FSDP_STRATEGY", "FULL_SHARD")
+        sharding_strategy = eval(f"ShardingStrategy.{fsdp_strategy}")
+        print(
+            "Using FSDP:",
+            use_fsdp,
+            "Version:",
+            fsdp_version,
+            "Sharding:",
+            sharding_strategy,
+        )
+
+        if use_fsdp:
+            if fsdp_version == 1:
+                print_distributed(verbosity, "Using FSDP v1 wrapper")
+                model = FSDP(model, sharding_strategy=sharding_strategy)
+            else:
+                if fsdp_strategy not in ["FULL_SHARD", "SHARD_GRAD_OP"]:
+                    raise ValueError(
+                        "FSDP v2 currently supports HYDRAGNN_FSDP_STRATEGY in {FULL_SHARD, SHARD_GRAD_OP}."
+                    )
+                try:
+                    from torch.distributed.fsdp import fully_shard
+                except (ImportError, AttributeError):
+                    from torch.distributed._composable.fsdp import fully_shard
+
+                if fsdp_strategy == "SHARD_GRAD_OP":
+                    warnings.warn(
+                        "Using HYDRAGNN_FSDP_STRATEGY=SHARD_GRAD_OP with FSDP v2 maps to "
+                        "reshard_after_forward=False for approximate behavior.",
+                        RuntimeWarning,
+                    )
+
+                reshard_after_forward = fsdp_strategy == "FULL_SHARD"
+                print_distributed(
+                    verbosity,
+                    f"Using FSDP v2 composable wrapper (reshard_after_forward={reshard_after_forward})",
+                )
+                model = fully_shard(
+                    model,
+                    reshard_after_forward=reshard_after_forward,
+                )
+                model = ModuleCompat(model)
+        else:
+            model = DDP(model, **ddp_kwargs)
+
+    return model
+
+
+def distributed_model_wrapper(
+    model,
+    optimizer,
+    verbosity=0,
+    sync_batch_norm=False,
+    find_unused_parameters=False,
+    use_deepspeed=False,
+    config=None,
+    zero_opt=False,
+    bf16=False,
+    precision="fp32",
+):
+    local_sgd = _local_sgd_training_config(config)
+    if local_sgd.get("enabled", False) and use_deepspeed:
+        raise ValueError("Training.LocalSGD is not supported with DeepSpeed")
+
+    if hasattr(torch, "xpu") and torch.xpu.is_available():
+        print_distributed(
+            verbosity,
+            "Using native torch optimizer path for XPU.",
+        )
+    else:
+        print_distributed(
+            verbosity, "CPUs, NVIDIA, and AMD GPUs do not need optimize wrapper"
+        )
+
+    if use_deepspeed:
+        assert deepspeed_available, "deepspeed package not available"
+        assert config is not None, "config is required for deepspeed"
+
+        # create temporary deepspeed configuration
+        from hydragnn.config import parse_deepspeed_config
+
+        ds_config = parse_deepspeed_config(config)
+
+        if zero_opt:
+            ds_config["zero_optimization"] = {"stage": 1}
+
+        if bf16:
+            ## We should choose only one of the following two
+            ds_config["bf16"] = {"enabled": False}
+            ds_config["torch_autocast"] = {
+                "enabled": True,
+                "dtype": "bfloat16",
+                "lower_precision_safe_modules": ["torch.nn.Linear", "torch.nn.Conv2d"],
+            }
+
+        # create deepspeed model
+        # FIXME: need to check if it also works on ALCF-Aurora with Intel GPUs
+        model, optimizer, _, _ = deepspeed.initialize(
+            args=get_deepspeed_init_args(),
+            model=model,
+            config=ds_config,
+            dist_init_required=False,
+            optimizer=optimizer,  # optimizer is managed by deepspeed
+        )  # scheduler is not managed by deepspeed because it is per-epoch instead of per-step
+    else:
+        # Force-gradient objectives can legitimately leave architecture-specific
+        # parameters outside a particular backward graph. Their provider declares
+        # that requirement explicitly instead of relying on a wrapper class name.
+        enhanced_model_detected = bool(
+            getattr(model, "requires_find_unused_parameters", False)
+        ) or (
+            hasattr(model, "__class__")
+            and "EnhancedModelWrapper" in model.__class__.__name__
+        )
+
+        if enhanced_model_detected:
+            print_distributed(
+                verbosity,
+                f"Dynamic-gradient model detected: {model.__class__.__name__}",
+            )
+            print_distributed(
+                verbosity,
+                "Applying DDP optimizations: find_unused_parameters=True, gradient_as_bucket_view=False",
+            )
+            find_unused_parameters = True
+
+        model = get_distributed_model(
+            model,
+            verbosity=verbosity,
+            sync_batch_norm=sync_batch_norm,
+            find_unused_parameters=find_unused_parameters,
+            enhanced_model=enhanced_model_detected,
+        )
+
+        model, optimizer = configure_local_sgd(
+            model,
+            optimizer,
+            config,
+            use_deepspeed=use_deepspeed,
+            verbosity=verbosity,
+        )
+
+    return model, optimizer
+
+
+def print_peak_memory(verbosity_level, prefix):
+    # FIXME: this will have to change when the code can run on AMD gpus
+    if torch.cuda.is_available():
+        device = get_device()
+        print_distributed(
+            verbosity_level,
+            f"{prefix}: {torch.cuda.max_memory_allocated(device)/1e9} GB",
+            f"{torch.cuda.max_memory_reserved()/1e9} GB",
+        )
+    elif hasattr(torch, "xpu") and torch.xpu.is_available():
+        device = get_device()
+        print_distributed(
+            verbosity_level,
+            f"{prefix}: {torch.xpu.max_memory_allocated(device)/1e9} GB",
+            f"{torch.xpu.max_memory_reserved()/1e9} GB",
+        )
+
+
+def nsplit(a, n):
+    k, m = divmod(len(a), n)
+    return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
+
+
+def comm_reduce(x, op):
+    """
+    All-reduce with numpy array
+    """
+    tx = torch.tensor(x, requires_grad=True).to(get_device())
+    torch.distributed.all_reduce(tx, op=op)
+    y = tx.detach().cpu().numpy()
+    return y
+
+
+## For early stop
+def timedelta_parse(text):
+    """
+    Convert input string to timedelta.
+    format: [[[d-]h:]m:]s
+    """
+    tokens = text.replace("-", ":").split(":")
+    return timedelta(
+        **{
+            key: float(val)
+            for val, key in zip(tokens[::-1], ("seconds", "minutes", "hours", "days"))
+        }
+    )
+
+
+def check_remaining(t0):
+    ## Early stop
+    world_size, world_rank = get_comm_size_and_rank()
+    jobid = os.getenv("SLURM_JOB_ID", None)
+    should_stop = False
+    device = get_device()
+    if jobid is not None:
+        if world_rank == 0:
+            try:
+                cmd = f"squeue -h -j {jobid} -o %L"
+                proc = subprocess.run(cmd.split(), stdout=subprocess.PIPE)
+                timestr = proc.stdout.decode("utf-8").strip()
+                left = timedelta_parse(timestr).total_seconds()
+                esitmated = time.time() - t0
+                should_stop = torch.tensor(left < esitmated, dtype=torch.bool).to(
+                    device
+                )
+                print("should_stop:", left, esitmated, should_stop.item())
+            except:
+                should_stop = torch.tensor(False, dtype=torch.bool).to(device)
+        else:
+            should_stop = torch.tensor(False, dtype=torch.bool).to(device)
+
+        dist.broadcast(should_stop, src=0)
+        should_stop = should_stop.item()
+    return should_stop

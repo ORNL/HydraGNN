@@ -12,7 +12,7 @@ import argparse
 import logging
 import os
 
-from hydragnn.utils.datasets.download import download_file, safe_extract_tar
+from hydragnn.data.download import download_file, safe_extract_tar
 
 DOWNLOAD_LINKS = {
     "train": {

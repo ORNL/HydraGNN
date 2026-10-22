@@ -23,7 +23,7 @@ from torch_geometric.nn import (
 )
 
 from hydragnn.utils.model import activation_function_selection, loss_function_selection
-from hydragnn.utils.distributed import get_device
+from hydragnn.distributed import get_device
 from hydragnn.models.Base import MLPNode
 from hydragnn.utils.print.print_utils import print_master
 from hydragnn.globalAtt.HeteroGPS import HeteroGPSConv

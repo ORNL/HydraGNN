@@ -41,10 +41,10 @@ from mpi4py import MPI
 import hydragnn
 import hydragnn.utils.model as model_utils
 from hydragnn.utils.model import print_model
-from hydragnn.utils.distributed import get_device
-from hydragnn.utils.input_config_parsing.config_utils import update_config
-from hydragnn.utils.input_config_parsing import edge_type_dims, save_config
-from hydragnn.utils.datasets.hdf5dataset import HDF5Dataset
+from hydragnn.distributed import get_device
+from hydragnn.config.config_utils import update_config
+from hydragnn.config import edge_type_dims, save_config
+from hydragnn.data.hdf5dataset import HDF5Dataset
 
 from ft_utils import EpochCSVWriter, evaluate_ft1, save_run_results
 
@@ -279,7 +279,7 @@ if __name__ == "__main__":
     edge_dim = _resolve_edge_dim(config)
 
     # ── Distributed init ───────────────────────────────────────────────────
-    hydragnn.utils.distributed.setup_ddp()
+    hydragnn.distributed.setup_ddp()
 
     # ── Log name ───────────────────────────────────────────────────────────
     ft_tag = f"{args.pretrained_model_name}_{args.finetune_regime}"
@@ -392,7 +392,7 @@ if __name__ == "__main__":
     )
 
     # ── DDP wrap ───────────────────────────────────────────────────────────
-    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+    model, optimizer = hydragnn.distributed.distributed_model_wrapper(
         model,
         optimizer,
         config["Verbosity"]["level"],

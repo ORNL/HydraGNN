@@ -6,6 +6,6 @@
 # omegaconf depends on the sdist-only antlr4-python3-runtime, which needs to
 # build its own setuptools backend. See .github/workflows/CI.yml.
 
-# --- FAIRChem UMA backbone (hydragnn/utils/model/uma/_vendored) ---
+# --- FAIRChem UMA backbone (hydragnn/third_party/uma) ---
 omegaconf # UMA backbone: DictConfig/ListConfig config types
 monty # UMA backbone: monty.dev.requires decorator

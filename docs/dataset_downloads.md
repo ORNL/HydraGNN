@@ -1,6 +1,6 @@
 # Dataset download utilities
 
-`hydragnn.utils.datasets.download` provides reusable dataset downloads without
+`hydragnn.data.download` provides reusable dataset downloads without
 requiring `wget` or shell command construction. Downloads are written to a
 `.part` file, resumed with HTTP range requests, and atomically renamed after
 completion. An optional SHA-256 digest verifies both cached and new files.
@@ -12,7 +12,7 @@ HydraGNN CI does not depend on external dataset servers.
 It can also be used from the command line:
 
 ```bash
-python -m hydragnn.utils.datasets.download URL DESTINATION \
+python -m hydragnn.data.download URL DESTINATION \
     [--sha256 DIGEST] [--extract-to DIRECTORY] [--remove-archive]
 ```
 

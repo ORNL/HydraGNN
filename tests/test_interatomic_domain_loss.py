@@ -371,7 +371,7 @@ def test_wrapper_exposes_active_term_metadata_to_training_loop():
 
 
 def test_interatomic_provider_enables_unused_parameter_detection(monkeypatch):
-    distributed = importlib.import_module("hydragnn.utils.distributed.distributed")
+    distributed = importlib.import_module("hydragnn.distributed.distributed")
     model = InteratomicPotentialDomainLoss(EnergyModel(), _config())
     captured = {}
 

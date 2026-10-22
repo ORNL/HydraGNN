@@ -56,11 +56,11 @@ def md17_pre_filter(data):
 
 def validate_named_cache(dataset, variables, cache_root):
     """Reject a processed cache that predates the declared named schema."""
-    schema = hydragnn.utils.input_config_parsing.parse_variable_schema(variables)
+    schema = hydragnn.config.parse_variable_schema(variables)
     sample = dataset[0]
     try:
         for spec in (*schema.inputs, *schema.outputs):
-            hydragnn.utils.input_config_parsing.validate_variable(sample, spec)
+            hydragnn.config.validate_variable(sample, spec)
     except (TypeError, ValueError) as error:
         raise RuntimeError(
             f"Incompatible MD17 processed cache at '{cache_root}'. "
@@ -98,7 +98,7 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         config["NeuralNetwork"]["Architecture"]["mpnn_type"] = mpnn_type
 
     # Always initialize for multi-rank training.
-    world_size, world_rank = hydragnn.utils.distributed.setup_ddp()
+    world_size, world_rank = hydragnn.distributed.setup_ddp()
 
     log_name = f"md17_test_{mpnn_type}" if mpnn_type else "md17_test"
     # Enable print to log file.
@@ -120,7 +120,7 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
     cache_root = os.environ.get("HYDRAGNN_MD17_ROOT", os.path.join("dataset", "md17"))
 
     def build_dataset():
-        hydragnn.utils.datasets.prepare_pyg_cache(
+        hydragnn.data.prepare_pyg_cache(
             cache_root, MD17_CACHE_VERSION, MD17_LEGACY_CACHE_DIRECTORIES
         )
         result = torch_geometric.datasets.MD17(
@@ -131,7 +131,7 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
             ),
             pre_filter=md17_pre_filter,
         )
-        hydragnn.utils.datasets.mark_pyg_cache_current(cache_root, MD17_CACHE_VERSION)
+        hydragnn.data.mark_pyg_cache_current(cache_root, MD17_CACHE_VERSION)
         return result
 
     dataset = hydragnn.preprocess.build_dataset_on_rank_zero(build_dataset)
@@ -151,7 +151,7 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         variables=config["Variables"],
     )
 
-    config = hydragnn.utils.input_config_parsing.update_config(
+    config = hydragnn.config.update_config(
         config, train_loader, val_loader, test_loader
     )
 
@@ -166,13 +166,13 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+    model, optimizer = hydragnn.distributed.distributed_model_wrapper(
         model, optimizer, verbosity, config=config
     )
 
     # Run training with the given model and md17 dataset.
     writer = hydragnn.utils.model.model.get_summary_writer(log_name)
-    hydragnn.utils.input_config_parsing.save_config(config, log_name)
+    hydragnn.config.save_config(config, log_name)
 
     hydragnn.train.train_validate_test(
         model,
