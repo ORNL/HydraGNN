@@ -210,7 +210,7 @@ class ODAC2023(AbstractBaseDataset):
 
             energy = torch.tensor(
                 dataset.get(index).get_total_energy(), dtype=torch.float32
-            ).unsqueeze(0)
+            ).reshape(1, 1)
 
             energy_per_atom = energy.detach().clone() / natoms
             forces = torch.tensor(dataset.get(index).get_forces(), dtype=torch.float32)

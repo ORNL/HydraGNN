@@ -86,6 +86,7 @@ setup(
     },
     install_requires=install_requires,
     extras_require={"test": test_requires},
+    entry_points={"console_scripts": ["hydragnn=hydragnn.cli:main"]},
     description="Distributed PyTorch implementation of multi-headed graph neural networks",
     license="BSD-3",
     license_files=["LICENSE", "LICENSES/PYG-MIT.txt"],

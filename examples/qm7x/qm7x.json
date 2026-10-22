@@ -44,9 +44,6 @@
             },
             "task_weights": [
                 1,
-                1,
-                1,
-                1,
                 1
             ]
         },
@@ -83,7 +80,7 @@
         ],
         "outputs": [
             {
-                "name": "HLGAP",
+                "name": "energy",
                 "level": "graph",
                 "dim": 1
             },
@@ -91,21 +88,6 @@
                 "name": "forces",
                 "level": "node",
                 "dim": 3
-            },
-            {
-                "name": "hCHG",
-                "level": "node",
-                "dim": 1
-            },
-            {
-                "name": "hVDIP",
-                "level": "node",
-                "dim": 1
-            },
-            {
-                "name": "hRAT",
-                "level": "node",
-                "dim": 1
             }
         ]
     }

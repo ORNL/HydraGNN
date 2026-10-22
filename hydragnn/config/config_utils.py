@@ -357,8 +357,9 @@ def update_config(config, train_loader, val_loader, test_loader):
     if "loss_function_type" not in config["NeuralNetwork"]["Training"]:
         config["NeuralNetwork"]["Training"]["loss_function_type"] = "mse"
 
-    if "Optimizer" not in config["NeuralNetwork"]["Training"]:
-        config["NeuralNetwork"]["Training"]["Optimizer"]["type"] = "AdamW"
+    config["NeuralNetwork"]["Training"].setdefault("Optimizer", {}).setdefault(
+        "type", "AdamW"
+    )
 
     if "precision" not in config["NeuralNetwork"]["Training"]:
         config["NeuralNetwork"]["Training"]["precision"] = "fp32"

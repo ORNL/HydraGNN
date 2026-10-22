@@ -464,6 +464,7 @@ For typed graphs, select `HeteroGIN`, `HeteroSAGE`, `HeteroGAT`, `HeteroPNA`,
 [heterogeneous model guide](docs/heterogeneous_models.md) covers edge-feature
 support, local attention heads, pooling, metadata, and heterogeneous GPS.
 Use it together with the [Variables schema](#variables).
+The `hydragnn train` CLI does not support heterogeneous models yet.
 
 ### Output Head Configuration
 
@@ -1274,6 +1275,16 @@ hydragnn.train.train_validate_test(
     writer, scheduler, config["NeuralNetwork"], log_name, verbosity
 )
 ```
+
+#### Command-Line Training
+
+`hydragnn train --inputfile config.json --dataset path/to/data.bp` trains on a
+dataset written by an example script with `--preonly`. The example training
+scripts share the same pipeline (`hydragnn/cli.py`).
+
+The CLI supports **homogeneous graphs only**. Heterogeneous models
+(`Hetero*`, see [Heterogeneous architectures](#heterogeneous-architectures))
+must be trained with a dedicated script, such as those in `examples/opf`.
 
 #### Custom Training Loop
 
