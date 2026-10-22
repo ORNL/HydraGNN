@@ -922,9 +922,8 @@ class HeteroBase(
             raise ValueError(
                 f"Graph concat projector expects input width {self.graph_concat_projector_in_dim}, got {in_dim}."
             )
-        super()._ensure_graph_concat_projector(
-            graph_attr_dim, channel_dim, device, dtype
-        )
+        # Projectors are built eagerly; keep the parameter dtype and let autocast cast.
+        super()._ensure_graph_concat_projector(graph_attr_dim, channel_dim, device)
 
     def _ensure_graph_pool_projector(
         self, graph_attr_dim: int, channel_dim: int, device, dtype=None
@@ -936,7 +935,7 @@ class HeteroBase(
             raise ValueError(
                 f"Graph pool projector expects input width {self.graph_pool_projector_in_dim}, got {in_dim}."
             )
-        super()._ensure_graph_pool_projector(graph_attr_dim, channel_dim, device, dtype)
+        super()._ensure_graph_pool_projector(graph_attr_dim, channel_dim, device)
 
     def _graph_attr_per_graph(self, graph_attr, batch):
         """Infer the graph count from ``graph_attr_dim`` for flattened inputs."""

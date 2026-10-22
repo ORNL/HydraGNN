@@ -21,6 +21,7 @@ from contextlib import contextmanager
 import warnings
 
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp.api import ShardingStrategy
 from torch.optim import Optimizer
 
 try:
