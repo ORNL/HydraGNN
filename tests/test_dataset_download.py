@@ -16,7 +16,7 @@ import tarfile
 
 import pytest
 
-from hydragnn.utils.datasets.download import download_file, safe_extract_tar
+from hydragnn.data.download import download_file, safe_extract_tar
 
 
 class _Response(io.BytesIO):
@@ -41,7 +41,7 @@ def test_download_file_resumes_partial_content(monkeypatch, tmp_path):
         assert request.headers["Range"] == "bytes=9-"
         return _Response(payload[9:], status=206)
 
-    monkeypatch.setattr("hydragnn.utils.datasets.download.urlopen", fake_urlopen)
+    monkeypatch.setattr("hydragnn.data.download.urlopen", fake_urlopen)
     result = download_file(
         "https://example.invalid/dataset.bin",
         destination,
@@ -57,7 +57,7 @@ def test_download_file_restarts_if_server_ignores_range(monkeypatch, tmp_path):
     (tmp_path / "dataset.bin.part").write_bytes(b"partial")
     payload = b"replacement"
     monkeypatch.setattr(
-        "hydragnn.utils.datasets.download.urlopen",
+        "hydragnn.data.download.urlopen",
         lambda request: _Response(payload, status=200),
     )
 
@@ -69,7 +69,7 @@ def test_download_file_reuses_verified_destination(monkeypatch, tmp_path):
     destination = tmp_path / "dataset.bin"
     destination.write_bytes(b"already complete")
     monkeypatch.setattr(
-        "hydragnn.utils.datasets.download.urlopen",
+        "hydragnn.data.download.urlopen",
         lambda request: pytest.fail("completed file should not be downloaded"),
     )
 
@@ -87,7 +87,7 @@ def test_download_file_rejects_existing_directory(monkeypatch, tmp_path):
     destination = tmp_path / "dataset.bin"
     destination.mkdir()
     monkeypatch.setattr(
-        "hydragnn.utils.datasets.download.urlopen",
+        "hydragnn.data.download.urlopen",
         lambda request: pytest.fail("invalid destination should not be downloaded"),
     )
 
@@ -99,7 +99,7 @@ def test_download_file_removes_partial_after_checksum_mismatch(monkeypatch, tmp_
     destination = tmp_path / "dataset.bin"
     partial = tmp_path / "dataset.bin.part"
     monkeypatch.setattr(
-        "hydragnn.utils.datasets.download.urlopen",
+        "hydragnn.data.download.urlopen",
         lambda request: _Response(b"corrupted", status=200),
     )
 
@@ -117,7 +117,7 @@ def test_download_file_removes_partial_after_checksum_mismatch(monkeypatch, tmp_
 def test_download_file_rejects_non_content_status(monkeypatch, tmp_path):
     destination = tmp_path / "dataset.bin"
     monkeypatch.setattr(
-        "hydragnn.utils.datasets.download.urlopen",
+        "hydragnn.data.download.urlopen",
         lambda request: _Response(b"", status=202),
     )
 
@@ -133,7 +133,7 @@ def test_download_file_preserves_partial_after_rejected_response(monkeypatch, tm
     partial = tmp_path / "dataset.bin.part"
     partial.write_bytes(b"partial")
     monkeypatch.setattr(
-        "hydragnn.utils.datasets.download.urlopen",
+        "hydragnn.data.download.urlopen",
         lambda request: _Response(b"", status=202),
     )
     with pytest.raises(OSError, match="Unexpected HTTP status 202"):
@@ -147,7 +147,7 @@ def test_download_file_retries_after_rejected_response(monkeypatch, tmp_path):
     payload = b"complete dataset"
     responses = iter([_Response(b"", status=202), _Response(payload, status=200)])
     monkeypatch.setattr(
-        "hydragnn.utils.datasets.download.urlopen", lambda request: next(responses)
+        "hydragnn.data.download.urlopen", lambda request: next(responses)
     )
     with pytest.raises(OSError, match="Unexpected HTTP status 202"):
         download_file("https://example.invalid/dataset.bin", destination)

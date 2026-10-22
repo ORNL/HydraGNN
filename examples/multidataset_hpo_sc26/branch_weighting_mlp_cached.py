@@ -35,8 +35,8 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 import hydragnn
 from hydragnn.models.create import create_model_config
 from hydragnn.train.train_validate_test import move_batch_to_device, resolve_precision
-from hydragnn.utils.distributed import get_device
-from hydragnn.utils.input_config_parsing.config_utils import update_config
+from hydragnn.distributed import get_device
+from hydragnn.config.config_utils import update_config
 from hydragnn.utils.print.print_utils import iterate_tqdm
 
 from branch_weighting_mlp import BranchWeightMLP
@@ -419,7 +419,7 @@ def main():
     configure_variable_names(config)
     var_config = config["Variables"]
 
-    hydragnn.utils.distributed.setup_ddp()
+    hydragnn.distributed.setup_ddp()
     rank = dist.get_rank() if dist.is_available() and dist.is_initialized() else 0
 
     # Get modellist and pna_deg once from metadata only

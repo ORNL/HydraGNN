@@ -14,12 +14,12 @@ import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-from hydragnn.utils.distributed import (
+from hydragnn.distributed import (
     configure_local_sgd,
     setup_ddp,
     synchronize_local_sgd_parameters,
 )
-from hydragnn.utils.input_config_parsing.config_utils import (
+from hydragnn.config.config_utils import (
     validate_local_sgd_config,
 )
 

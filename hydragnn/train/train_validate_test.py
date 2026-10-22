@@ -18,14 +18,14 @@ from hydragnn.postprocess.visualizer import Visualizer
 from hydragnn.utils.print.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.profiling_and_tracing.profile import Profiler
-from hydragnn.utils.distributed import (
+from hydragnn.distributed import (
     get_device,
     check_remaining,
     synchronize_local_sgd_parameters,
 )
 from hydragnn.utils.model.model import Checkpoint, EarlyStopping
 from hydragnn.globalAtt.gps import redraw_performer_projections
-from hydragnn.utils.input_config_parsing.variable_schema import parse_variable_schema
+from hydragnn.config.variable_schema import parse_variable_schema
 from hydragnn.loss_reporting import (
     accumulate_loss_report,
     configure_supervised_components,
@@ -38,7 +38,7 @@ import os
 
 from torch.profiler import record_function
 
-from hydragnn.utils.distributed import get_comm_size_and_rank, print_peak_memory
+from hydragnn.distributed import get_comm_size_and_rank, print_peak_memory
 import torch.distributed as dist
 import pickle
 

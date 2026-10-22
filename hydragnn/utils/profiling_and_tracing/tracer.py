@@ -22,7 +22,7 @@ from mpi4py import MPI
 
 from collections import defaultdict
 import numpy as np
-from hydragnn.utils.distributed import get_comm_size_and_rank, get_local_rank
+from hydragnn.distributed import get_comm_size_and_rank, get_local_rank
 import os
 
 

@@ -84,10 +84,6 @@ def test_examples_graph_attr(tmp_path, example, graph_attr_mode):
     config["Variables"]["inputs"].append(
         {"name": "conditioning", "level": "graph", "dim": 2}
     )
-    schema = hydragnn.utils.input_config_parsing.parse_variable_schema(
-        config["Variables"]
-    )
-    prepared = hydragnn.utils.input_config_parsing.prepare_data_from_schema(
-        sample, schema
-    )
+    schema = hydragnn.config.parse_variable_schema(config["Variables"])
+    prepared = hydragnn.config.prepare_data_from_schema(sample, schema)
     assert torch.allclose(prepared.graph_attr, expected.reshape(1, 2))

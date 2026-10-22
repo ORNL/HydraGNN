@@ -32,7 +32,7 @@ import json
 import os
 import time
 
-from hydragnn.utils.distributed import get_comm_size_and_rank, get_local_rank
+from hydragnn.distributed import get_comm_size_and_rank, get_local_rank
 
 from inference_random_structures import build_argument_parser
 

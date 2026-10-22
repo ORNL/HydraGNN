@@ -62,7 +62,7 @@ def main(num_trials=5):
         raise ImportError("Install optuna to run qm9_optuna.py") from error
 
     os.environ.setdefault("SERIALIZED_DATA_PATH", os.getcwd())
-    hydragnn.utils.distributed.setup_ddp()
+    hydragnn.distributed.setup_ddp()
     base_config = load_base_config()
     splits = prepare_splits(base_config)
 

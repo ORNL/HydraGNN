@@ -27,9 +27,9 @@ from torch_geometric.transforms import AddLaplacianEigenvectorPE
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.model import print_model
-from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
-from hydragnn.utils.datasets.distdataset import DistDataset
-from hydragnn.utils.datasets.pickledataset import (
+from hydragnn.data.abstractbasedataset import AbstractBaseDataset
+from hydragnn.data.distdataset import DistDataset
+from hydragnn.data.pickledataset import (
     SimplePickleWriter,
     SimplePickleDataset,
 )
@@ -44,10 +44,10 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
 from hydragnn.preprocess.load_data import split_dataset
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 from hydragnn.utils.print.print_utils import iterate_tqdm, log
-from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
+from hydragnn.data.adiosdataset import AdiosWriter, AdiosDataset
 
 import subprocess
-from hydragnn.utils.distributed import nsplit
+from hydragnn.distributed import nsplit
 from odac23 import ODAC2023
 
 ## FIMME
@@ -146,7 +146,7 @@ if __name__ == "__main__":
 
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
+    comm_size, rank = hydragnn.distributed.setup_ddp()
     ##################################################################################################################
 
     comm = MPI.COMM_WORLD
@@ -324,13 +324,13 @@ if __name__ == "__main__":
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
-    config = hydragnn.utils.input_config_parsing.update_config(
+    config = hydragnn.config.update_config(
         config, train_loader, val_loader, test_loader
     )
     ## Good to sync with everyone right after DDStore setup
     comm.Barrier()
 
-    hydragnn.utils.input_config_parsing.save_config(config, log_name)
+    hydragnn.config.save_config(config, log_name)
 
     timer.stop()
 
@@ -338,7 +338,7 @@ if __name__ == "__main__":
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
-    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
+    model = hydragnn.distributed.get_distributed_model(model, verbosity)
 
     # Print details of neural network architecture
     print_model(model)

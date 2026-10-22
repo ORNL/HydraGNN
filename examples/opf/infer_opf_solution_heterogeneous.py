@@ -15,13 +15,13 @@ import torch.distributed as dist
 
 import hydragnn
 from hydragnn.train.train_validate_test import test
-from hydragnn.utils.distributed import setup_ddp
-from hydragnn.utils.input_config_parsing.config_utils import update_config
-from hydragnn.utils.input_config_parsing import edge_type_dims, get_variable_schema
+from hydragnn.distributed import setup_ddp
+from hydragnn.config.config_utils import update_config
+from hydragnn.config import edge_type_dims, get_variable_schema
 from hydragnn.utils.model import load_existing_model
 
-from hydragnn.utils.datasets.pickledataset import SimplePickleDataset
-from hydragnn.utils.datasets.hdf5dataset import HDF5Dataset
+from hydragnn.data.pickledataset import SimplePickleDataset
+from hydragnn.data.hdf5dataset import HDF5Dataset
 
 from opf_solution_utils import (
     HeteroFromHomogeneousDataset,
@@ -37,7 +37,7 @@ from opf_solution_utils import (
 )
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosDataset
+    from hydragnn.data.adiosdataset import AdiosDataset
 except ImportError:
     AdiosDataset = None
 
@@ -335,7 +335,7 @@ if __name__ == "__main__":
         domain_loss.enabled = False
         model = OPFEnhancedModelWrapper(model, domain_loss)
 
-    model = hydragnn.utils.distributed.distributed_model_wrapper(
+    model = hydragnn.distributed.distributed_model_wrapper(
         model, None, config["Verbosity"]["level"]
     )[0]
 

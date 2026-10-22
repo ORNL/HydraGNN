@@ -14,14 +14,14 @@ import os, json
 import pytest
 
 import hydragnn
-from hydragnn.utils.input_config_parsing import (
+from hydragnn.config import (
     get_log_name_config,
     sanitize_filename_component,
 )
 
 
 def test_input_config_parsing_is_exposed_through_utils():
-    assert hydragnn.utils.input_config_parsing.update_config is not None
+    assert hydragnn.config.update_config is not None
 
 
 @pytest.mark.parametrize("config_file", ["lsms/lsms.json"])

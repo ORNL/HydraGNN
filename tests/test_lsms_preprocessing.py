@@ -16,7 +16,7 @@ from examples.lsms.lsms_preprocess import (
     prepare_lsms_dataset,
     split_and_write_lsms_dataset,
 )
-from hydragnn.utils.datasets.serializeddataset import SerializedDataset
+from hydragnn.data.serializeddataset import SerializedDataset
 
 
 def _write_lsms_record(path, energy=-8.0):

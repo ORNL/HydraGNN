@@ -13,8 +13,8 @@ from mpi4py import MPI
 import argparse
 import numpy as np
 
-from hydragnn.utils.distributed import nsplit
-from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
+from hydragnn.distributed import nsplit
+from hydragnn.data.adiosdataset import AdiosWriter, AdiosDataset
 from tqdm import tqdm
 import logging
 

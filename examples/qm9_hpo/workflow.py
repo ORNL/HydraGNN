@@ -128,10 +128,10 @@ def train_trial(base_config, splits, parameters, log_name):
     config = configure_trial(base_config, parameters)
     loaders = create_trial_loaders(splits, config)
     train_loader, val_loader, test_loader = loaders
-    config = hydragnn.utils.input_config_parsing.update_config(config, *loaders)
+    config = hydragnn.config.update_config(config, *loaders)
     verbosity = config["Verbosity"]["level"]
     hydragnn.utils.print.print_utils.setup_log(log_name)
-    hydragnn.utils.input_config_parsing.save_config(config, log_name)
+    hydragnn.config.save_config(config, log_name)
 
     model = hydragnn.models.create_model_config(
         config=config["NeuralNetwork"], verbosity=verbosity
@@ -141,7 +141,7 @@ def train_trial(base_config, splits, parameters, log_name):
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
-    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+    model, optimizer = hydragnn.distributed.distributed_model_wrapper(
         model, optimizer, verbosity
     )
     writer = hydragnn.utils.model.model.get_summary_writer(log_name)

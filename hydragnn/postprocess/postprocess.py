@@ -40,7 +40,7 @@ def unscale_features_by_num_nodes(datasets_list, scaled_index_list, nodes_num_li
 
 
 def unscale_features_by_num_nodes_config(config, datasets_list, nodes_num_list):
-    from hydragnn.utils.input_config_parsing.variable_schema import get_variable_schema
+    from hydragnn.config.variable_schema import get_variable_schema
 
     output_names = [spec.name for spec in get_variable_schema(config).outputs]
     scaled_feature_index = [

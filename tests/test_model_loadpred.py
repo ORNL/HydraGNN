@@ -13,13 +13,13 @@ import pytest
 import torch
 import hydragnn
 from tests.test_graphs import unittest_train_model
-from hydragnn.utils.input_config_parsing.config_utils import update_config
+from hydragnn.config.config_utils import update_config
 
 pytestmark = pytest.mark.mpi
 
 
 def unittest_model_prediction(config):
-    _, _ = hydragnn.utils.distributed.setup_ddp()
+    _, _ = hydragnn.distributed.setup_ddp()
 
     (
         train_loader,
@@ -36,11 +36,11 @@ def unittest_model_prediction(config):
         verbosity=config["Verbosity"]["level"],
     )
 
-    model = hydragnn.utils.distributed.get_distributed_model(
+    model = hydragnn.distributed.get_distributed_model(
         model, config["Verbosity"]["level"]
     )
 
-    log_name = hydragnn.utils.input_config_parsing.get_log_name_config(config)
+    log_name = hydragnn.config.get_log_name_config(config)
     hydragnn.utils.model.load_existing_model(model, log_name)
 
     # The checkpoint may include graph conditioning weights; disable conditioning for this
@@ -86,14 +86,11 @@ def test_model_loadpred():
     )
 
     # Read the exact configuration saved with the fresh checkpoint.
-    log_name = hydragnn.utils.input_config_parsing.config_utils.get_log_name_config(
-        config
-    )
+    log_name = hydragnn.config.config_utils.get_log_name_config(config)
     config_file = os.path.join("./logs/", log_name, "config.json")
     with open(config_file, "r") as f:
         config = json.load(f)
     assert (
-        hydragnn.utils.input_config_parsing.config_utils.get_log_name_config(config)
-        == log_name
+        hydragnn.config.config_utils.get_log_name_config(config) == log_name
     ), "Newly trained checkpoint configuration does not match its log name"
     unittest_model_prediction(config)

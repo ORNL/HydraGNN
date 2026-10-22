@@ -27,14 +27,14 @@ import hydragnn
 from hydragnn.utils.print.print_utils import print_distributed, iterate_tqdm, log
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 
-# from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
-from hydragnn.utils.descriptors_and_embeddings.smiles_utils import (
+# from hydragnn.data.adiosdataset import AdiosWriter, AdiosDataset
+from hydragnn.data.descriptors_and_embeddings.smiles_utils import (
     generate_graphdata_from_rdkit_molecule,
 )
-from hydragnn.utils.distributed import get_device
+from hydragnn.distributed import get_device
 from hydragnn.preprocess.load_data import split_dataset
-from hydragnn.utils.datasets.distdataset import DistDataset
-from hydragnn.utils.datasets.pickledataset import (
+from hydragnn.data.distdataset import DistDataset
+from hydragnn.data.pickledataset import (
     SimplePickleWriter,
     SimplePickleDataset,
 )
@@ -43,14 +43,14 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 import numpy as np
 
 try:
-    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.data.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
 import torch
 import torch.distributed as dist
 
-from hydragnn.utils.distributed import nsplit
+from hydragnn.distributed import nsplit
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 # FIXME: this works fine for now because we train on GDB-9 molecules
@@ -62,7 +62,7 @@ def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
-from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
+from hydragnn.data.abstractbasedataset import AbstractBaseDataset
 
 
 def dftb_to_graph(moldir, dftb_node_types, var_config):

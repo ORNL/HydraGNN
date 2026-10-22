@@ -24,7 +24,7 @@ import torch_scatter
 from hydragnn.utils.model import activation_function_selection, loss_function_selection
 import sys
 import pdb
-from hydragnn.utils.distributed import get_device
+from hydragnn.distributed import get_device
 from hydragnn.utils.print.print_utils import print_master
 from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 from hydragnn.globalAtt.gps import HydraGPSConv

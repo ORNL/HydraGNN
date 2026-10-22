@@ -21,8 +21,8 @@ import importlib
 from hydragnn.models.AllScAIPStack import _resolve_frequency_list
 from hydragnn.models.AllScAIPStack import AllScAIPStack
 from hydragnn.models.Base import Base
-from hydragnn.utils.model.allscaip.AllScAIP import AllScAIPBackbone
-from hydragnn.utils.model.allscaip.utils.allscaip_radius_graph import (
+from hydragnn.models.backends.allscaip.AllScAIP import AllScAIPBackbone
+from hydragnn.models.backends.allscaip.utils.allscaip_radius_graph import (
     build_radius_graph,
     build_radius_graph_chunked,
 )
@@ -98,11 +98,11 @@ def test_allscaip_construction_preserves_global_matmul_precision(monkeypatch):
     # Avoid constructing the large real blocks: this regression is solely
     # about constructor ownership of process-global PyTorch state.
     monkeypatch.setattr(
-        "hydragnn.utils.model.allscaip.AllScAIP.InputBlock",
+        "hydragnn.models.backends.allscaip.AllScAIP.InputBlock",
         lambda **_: nn.Identity(),
     )
     monkeypatch.setattr(
-        "hydragnn.utils.model.allscaip.AllScAIP.GraphAttentionBlock",
+        "hydragnn.models.backends.allscaip.AllScAIP.GraphAttentionBlock",
         lambda **_: nn.Identity(),
     )
     before = torch.get_float32_matmul_precision()

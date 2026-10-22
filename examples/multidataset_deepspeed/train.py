@@ -25,16 +25,16 @@ import numpy as np
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.model import print_model
-from hydragnn.utils.datasets.distdataset import DistDataset
-from hydragnn.utils.datasets.pickledataset import SimplePickleDataset
+from hydragnn.data.distdataset import DistDataset
+from hydragnn.data.pickledataset import SimplePickleDataset
 
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 from hydragnn.utils.print.print_utils import log, log0
-from hydragnn.utils.distributed import nsplit
+from hydragnn.distributed import nsplit
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosDataset, adios2_open
+    from hydragnn.data.adiosdataset import AdiosDataset, adios2_open
 except ImportError:
     pass
 
@@ -218,7 +218,7 @@ if __name__ == "__main__":
     use_deepspeed = args.deepspeed
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.distributed.setup_ddp(use_deepspeed=use_deepspeed)
+    comm_size, rank = hydragnn.distributed.setup_ddp(use_deepspeed=use_deepspeed)
     ##################################################################################################################
 
     comm = MPI.COMM_WORLD
@@ -444,13 +444,13 @@ if __name__ == "__main__":
         test_sampler_shuffle=False,
     )
 
-    config = hydragnn.utils.input_config_parsing.update_config(
+    config = hydragnn.config.update_config(
         config, train_loader, val_loader, test_loader
     )
     ## Good to sync with everyone right after DDStore setup
     comm.Barrier()
 
-    hydragnn.utils.input_config_parsing.save_config(config, log_name)
+    hydragnn.config.save_config(config, log_name)
 
     timer.stop()
 
@@ -473,7 +473,7 @@ if __name__ == "__main__":
 
     bf16_flag = args.precision.lower() == "bf16"
 
-    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+    model, optimizer = hydragnn.distributed.distributed_model_wrapper(
         model,
         optimizer,
         verbosity,

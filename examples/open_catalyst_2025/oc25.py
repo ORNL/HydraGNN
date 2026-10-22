@@ -33,8 +33,8 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
     pbc_as_tensor,
     should_skip_self_loops,
 )
-from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
-from hydragnn.utils.distributed import nsplit
+from hydragnn.data.abstractbasedataset import AbstractBaseDataset
+from hydragnn.distributed import nsplit
 from hydragnn.utils.print.print_utils import iterate_tqdm
 
 # Ensure the bundled fairchem package is importable when not installed system-wide.

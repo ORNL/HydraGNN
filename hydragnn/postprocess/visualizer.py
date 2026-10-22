@@ -17,7 +17,7 @@ from itertools import chain
 import time, pickle
 import numpy as np
 from math import sqrt, floor, ceil
-from hydragnn.utils.input_config_parsing import sanitize_filename_component
+from hydragnn.config import sanitize_filename_component
 
 plt.rcParams.update({"font.size": 18})
 

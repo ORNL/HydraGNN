@@ -9,7 +9,7 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 import torch
-from hydragnn.utils.distributed import get_device_name
+from hydragnn.distributed import get_device_name
 from torch.distributed.optim import ZeroRedundancyOptimizer
 
 deepspeed_available = True

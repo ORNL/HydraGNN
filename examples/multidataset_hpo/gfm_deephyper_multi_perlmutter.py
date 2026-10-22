@@ -138,7 +138,7 @@ if __name__ == "__main__":
     from deephyper.evaluator import Evaluator, ProcessPoolEvaluator, queued
     from deephyper.problem import HpProblem
     from deephyper.search.hps import CBO
-    from hydragnn.utils.deephyper import read_node_list
+    from hydragnn.utils.hpo.deephyper import read_node_list
 
     # define the variable you want to optimize
     problem = HpProblem()

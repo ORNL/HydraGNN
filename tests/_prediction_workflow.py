@@ -9,10 +9,10 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
-from hydragnn.utils.distributed import setup_ddp, get_distributed_model
+from hydragnn.distributed import setup_ddp, get_distributed_model
 from hydragnn.domain_losses import uses_interatomic_potential
 from hydragnn.utils.model import load_existing_model
-from hydragnn.utils.input_config_parsing.config_utils import (
+from hydragnn.config.config_utils import (
     get_log_name_config,
     parse_deepspeed_config,
 )

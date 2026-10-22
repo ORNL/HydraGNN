@@ -25,7 +25,7 @@ except ImportError:
 
 def main(parameters=None, log_name="qm9_hpo"):
     os.environ.setdefault("SERIALIZED_DATA_PATH", os.getcwd())
-    hydragnn.utils.distributed.setup_ddp()
+    hydragnn.distributed.setup_ddp()
     config = load_base_config()
     splits = prepare_splits(config)
     validation_loss = train_trial(config, splits, parameters or {}, log_name)

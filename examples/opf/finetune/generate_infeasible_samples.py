@@ -34,7 +34,7 @@ from mpi4py import MPI
 _OPF_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 sys.path.insert(0, _OPF_DIR)
 
-from hydragnn.utils.datasets.hdf5dataset import HDF5Dataset, HDF5Writer
+from hydragnn.data.hdf5dataset import HDF5Dataset, HDF5Writer
 
 # ---------------------------------------------------------------------------
 # Sample manipulation helpers

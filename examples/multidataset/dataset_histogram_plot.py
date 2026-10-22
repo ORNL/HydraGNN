@@ -17,7 +17,7 @@ from tqdm import tqdm
 import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from hydragnn.utils.datasets.adiosdataset import adios2_open
+from hydragnn.data.adiosdataset import adios2_open
 
 font = {"size": 12}
 matplotlib.rc("font", **font)

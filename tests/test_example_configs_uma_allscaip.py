@@ -16,7 +16,7 @@ import pytest
 import torch
 from torch_geometric.data import Data
 
-from hydragnn.utils.input_config_parsing.config_utils import update_config
+from hydragnn.config.config_utils import update_config
 from hydragnn.models.create import create_model_config
 from hydragnn.preprocess import create_dataloaders
 

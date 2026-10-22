@@ -32,7 +32,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.loader import DataLoader
 
 import hydragnn
-from hydragnn.utils.datasets.hdf5dataset import HDF5Dataset
+from hydragnn.data.hdf5dataset import HDF5Dataset
 
 DEFAULT_RUNS = {
     "LPE": "case4661_lpe",

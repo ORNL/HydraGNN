@@ -24,7 +24,7 @@ import numpy as np
 import os
 from typing import Tuple
 
-from hydragnn.utils.distributed import get_device
+from hydragnn.distributed import get_device
 
 import vesin
 
@@ -50,7 +50,7 @@ def check_if_graph_size_variable(train_loader, val_loader, test_loader):
 
 
 def check_if_graph_size_variable_dist(train_loader, val_loader, test_loader):
-    from hydragnn.utils.distributed import get_device
+    from hydragnn.distributed import get_device
 
     assert torch.distributed.is_initialized()
     graph_size_variable = False
@@ -546,7 +546,7 @@ def gather_deg(dataset):
 def gather_deg_dist(dataset):
     import torch.distributed as dist
     from hydragnn.utils.print.print_utils import iterate_tqdm
-    from hydragnn.utils.distributed import get_device
+    from hydragnn.distributed import get_device
 
     max_deg = 0
     for data in iterate_tqdm(dataset, 2, desc="Degree max"):

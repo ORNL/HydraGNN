@@ -14,7 +14,7 @@ import logging
 import os
 import shutil
 
-from hydragnn.utils.datasets.download import download_file, safe_extract_tar
+from hydragnn.data.download import download_file, safe_extract_tar
 
 """
 This script provides users with an automated way to download, preprocess (where

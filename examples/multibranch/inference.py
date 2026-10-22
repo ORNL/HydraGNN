@@ -25,18 +25,18 @@ import numpy as np
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.model import print_model
-from hydragnn.utils.datasets.distdataset import DistDataset
-from hydragnn.utils.datasets.pickledataset import SimplePickleDataset
+from hydragnn.data.distdataset import DistDataset
+from hydragnn.data.pickledataset import SimplePickleDataset
 
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 from hydragnn.utils.print.print_utils import log, log0
-from hydragnn.utils.distributed import nsplit
-from hydragnn.utils.distributed import get_device
+from hydragnn.distributed import nsplit
+from hydragnn.distributed import get_device
 from hydragnn.train.train_validate_test import test
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosDataset, adios2_open
+    from hydragnn.data.adiosdataset import AdiosDataset, adios2_open
 except ImportError:
     pass
 
@@ -169,7 +169,7 @@ if __name__ == "__main__":
     config["NeuralNetwork"]["Training"]["num_epoch"] = 1
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
+    comm_size, rank = hydragnn.distributed.setup_ddp()
     comm = MPI.COMM_WORLD
     ##################################################################################################################
     hydragnn.utils.print.setup_log(log_name)
@@ -458,7 +458,7 @@ if __name__ == "__main__":
     if args.task_parallel:
         model = MultiTaskModelMP(model, branch_id, branch_group)
     else:
-        model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
+        model = hydragnn.distributed.get_distributed_model(model, verbosity)
     # Print details of neural network architecture
     print_model(model)
     hydragnn.utils.model.load_existing_model_config(

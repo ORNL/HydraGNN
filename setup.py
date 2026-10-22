@@ -78,10 +78,10 @@ setup(
     include_package_data=True,
     package_data={
         "hydragnn": [
-            "utils/model/uma/_vendored/**/*.pt",
-            "utils/model/uma/_vendored/**/*.json",
-            "utils/model/uma/_vendored/*.md",
-            "utils/model/uma/_vendored/**/*.md",
+            "third_party/uma/**/*.pt",
+            "third_party/uma/**/*.json",
+            "third_party/uma/*.md",
+            "third_party/uma/**/*.md",
         ]
     },
     install_requires=install_requires,

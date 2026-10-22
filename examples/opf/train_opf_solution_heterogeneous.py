@@ -105,14 +105,14 @@ def _diag(msg: str):
     print(f"[diag][rank {rank}][{now:.3f}] {msg}", flush=True)
 
 
-from hydragnn.utils.datasets.pickledataset import (
+from hydragnn.data.pickledataset import (
     SimplePickleWriter,
     SimplePickleDataset,
 )
-from hydragnn.utils.distributed import nsplit
+from hydragnn.distributed import nsplit
 from hydragnn.utils.model import print_model
 from hydragnn.utils.print import iterate_tqdm
-from hydragnn.utils.input_config_parsing.config_utils import (
+from hydragnn.config.config_utils import (
     edge_type_dims,
     update_config,
 )
@@ -138,10 +138,10 @@ from opf_svd_rpe import (
     resolve_opf_positional_encoding_config,
 )
 
-from hydragnn.utils.datasets.hdf5dataset import HDF5Writer, HDF5Dataset
+from hydragnn.data.hdf5dataset import HDF5Writer, HDF5Dataset
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.data.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     AdiosWriter = None
     AdiosDataset = None
@@ -774,7 +774,7 @@ if __name__ == "__main__":
         ]
     validate_opf_variable_schema(config, args.node_target_type)
 
-    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
+    comm_size, rank = hydragnn.distributed.setup_ddp()
     comm = MPI.COMM_WORLD
 
     logging.basicConfig(
@@ -1383,7 +1383,7 @@ if __name__ == "__main__":
         arch_config["max_neighbours"] = max(0, len(pna_deg) - 1)
 
     config = _to_jsonable(config)
-    hydragnn.utils.input_config_parsing.save_config(config, log_name)
+    hydragnn.config.save_config(config, log_name)
 
     precision = config["NeuralNetwork"]["Training"].get("precision", "fp32")
     metadata = None
@@ -1436,7 +1436,7 @@ if __name__ == "__main__":
         optimizer, mode="min", factor=0.5, patience=5, min_lr=1e-5
     )
 
-    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+    model, optimizer = hydragnn.distributed.distributed_model_wrapper(
         model,
         optimizer,
         config["Verbosity"]["level"],

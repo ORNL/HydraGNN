@@ -86,7 +86,7 @@ def main() -> int:
     try:
         # HDF5Writer currently relies on HydraGNN iterate_tqdm, which reads
         # torch.distributed rank unconditionally.
-        hydragnn.utils.distributed.setup_ddp()
+        hydragnn.distributed.setup_ddp()
 
         if input_file is not None:
             if output_file is None:

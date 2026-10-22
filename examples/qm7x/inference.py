@@ -20,10 +20,10 @@ import numpy as np
 
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-from hydragnn.utils.distributed import get_device
+from hydragnn.distributed import get_device
 from hydragnn.utils.model import load_existing_model
-from hydragnn.utils.datasets import SimplePickleDataset
-from hydragnn.utils.input_config_parsing import (
+from hydragnn.data import SimplePickleDataset
+from hydragnn.config import (
     get_log_name_config,
     sanitize_filename_component,
 )

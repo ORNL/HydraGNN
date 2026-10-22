@@ -17,10 +17,10 @@ import torch
 
 pytest.importorskip("rdkit")
 
-from hydragnn.utils.descriptors_and_embeddings.smiles_utils import (
+from hydragnn.data.descriptors_and_embeddings.smiles_utils import (
     generate_graphdata_from_smilestr,
 )
-from hydragnn.utils.input_config_parsing.variable_schema import parse_variable_schema
+from hydragnn.config.variable_schema import parse_variable_schema
 
 
 def test_csce_smiles_features_are_compiled_from_named_attributes():

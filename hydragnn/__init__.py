@@ -8,10 +8,6 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
+from . import config, data, distributed
 from . import domain_losses, preprocess, models, train, postprocess, utils
 from ._version import __version__
-
-# ``utils`` is a namespace package, so importing it alone does not expose its
-# children as attributes. Keep the long-standing public access pattern used by
-# examples (``hydragnn.utils.input_config_parsing``) deterministic.
-from .utils import input_config_parsing

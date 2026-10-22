@@ -30,24 +30,24 @@ import torch.distributed as dist
 import hydragnn
 from hydragnn.utils.print.print_utils import print_distributed, iterate_tqdm, log
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-from hydragnn.utils.datasets.distdataset import DistDataset
-from hydragnn.utils.datasets.pickledataset import (
+from hydragnn.data.distdataset import DistDataset
+from hydragnn.data.pickledataset import (
     SimplePickleWriter,
     SimplePickleDataset,
 )
-from hydragnn.utils.descriptors_and_embeddings.smiles_utils import (
+from hydragnn.data.descriptors_and_embeddings.smiles_utils import (
     generate_graphdata_from_smilestr,
 )
-from hydragnn.utils.input_config_parsing.variable_schema import parse_variable_schema
-from hydragnn.utils.input_config_parsing import sanitize_filename_component
+from hydragnn.config.variable_schema import parse_variable_schema
+from hydragnn.config import sanitize_filename_component
 from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
-from hydragnn.utils.distributed import nsplit
+from hydragnn.distributed import nsplit
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 import numpy as np
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.data.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
@@ -237,7 +237,7 @@ if __name__ == "__main__":
     var_config = parse_variable_schema(config["Variables"])
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
+    comm_size, rank = hydragnn.distributed.setup_ddp()
     ##################################################################################################################
 
     comm = MPI.COMM_WORLD
@@ -393,12 +393,12 @@ if __name__ == "__main__":
     )
     comm.Barrier()
 
-    config = hydragnn.utils.input_config_parsing.update_config(
+    config = hydragnn.config.update_config(
         config, train_loader, val_loader, test_loader
     )
     comm.Barrier()
 
-    hydragnn.utils.input_config_parsing.save_config(config, log_name)
+    hydragnn.config.save_config(config, log_name)
     comm.Barrier()
 
     timer.stop()
@@ -414,7 +414,7 @@ if __name__ == "__main__":
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+    model, optimizer = hydragnn.distributed.distributed_model_wrapper(
         model, optimizer, verbosity, config=config
     )
 

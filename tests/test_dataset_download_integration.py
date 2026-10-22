@@ -63,13 +63,7 @@ def test_downloader_cli_resumes_redirect_and_extracts(tmp_path):
         archive = tmp_path / "dataset.tar.gz"
         archive.with_name(archive.name + ".part").write_bytes(payload[:17])
         output = tmp_path / "output"
-        downloader = (
-            Path(__file__).parents[1]
-            / "hydragnn"
-            / "utils"
-            / "datasets"
-            / "download.py"
-        )
+        downloader = Path(__file__).parents[1] / "hydragnn" / "data" / "download.py"
         subprocess.run(
             [
                 sys.executable,
@@ -113,7 +107,7 @@ def test_materials_download_entry_points_use_shared_transport():
     }
     for relative_path, expected_filename in shell_consumers.items():
         source = (repository / relative_path).read_text()
-        assert "hydragnn/utils/datasets/download.py" in source
+        assert "hydragnn/data/download.py" in source
         assert expected_filename in source
 
     for relative_path in (
@@ -121,5 +115,5 @@ def test_materials_download_entry_points_use_shared_transport():
         "examples/open_materials_2024/download_dataset.py",
     ):
         source = (repository / relative_path).read_text()
-        assert "hydragnn.utils.datasets.download import" in source
+        assert "hydragnn.data.download import" in source
         assert "download_file(" in source

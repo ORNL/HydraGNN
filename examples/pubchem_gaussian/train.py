@@ -36,15 +36,15 @@ from torch.utils.data import Subset
 import hydragnn
 from hydragnn.domain_losses import uses_interatomic_potential
 from hydragnn.preprocess.load_data import SchemaPreparedDataset, split_dataset
-from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
-from hydragnn.utils.datasets.adiosdataset import AdiosDataset, AdiosWriter
-from hydragnn.utils.datasets.pickledataset import (
+from hydragnn.data.abstractbasedataset import AbstractBaseDataset
+from hydragnn.data.adiosdataset import AdiosDataset, AdiosWriter
+from hydragnn.data.pickledataset import (
     SimplePickleDataset,
     SimplePickleWriter,
 )
-from hydragnn.utils.datasets.download import safe_extract_tar
+from hydragnn.data.download import safe_extract_tar
 from hydragnn.utils.print.print_utils import log
-from hydragnn.utils.input_config_parsing import (
+from hydragnn.config import (
     parse_variable_schema,
     prepare_data_from_schema,
 )
@@ -889,7 +889,7 @@ def main():
         )
         return
 
-    ddp_world_size, ddp_rank = hydragnn.utils.distributed.setup_ddp()
+    ddp_world_size, ddp_rank = hydragnn.distributed.setup_ddp()
     if (ddp_world_size, ddp_rank) != (world_size, rank):
         raise RuntimeError("MPI and torch.distributed rank assignments differ")
 
@@ -912,11 +912,11 @@ def main():
         testset,
         config["NeuralNetwork"]["Training"]["batch_size"],
     )
-    config = hydragnn.utils.input_config_parsing.update_config(
+    config = hydragnn.config.update_config(
         config, train_loader, val_loader, test_loader
     )
     config["pna_deg"] = pna_deg.tolist()
-    hydragnn.utils.input_config_parsing.save_config(config, args.log)
+    hydragnn.config.save_config(config, args.log)
 
     verbosity = config["Verbosity"]["level"]
     model = hydragnn.models.create_model_config(config["NeuralNetwork"], verbosity)
@@ -928,7 +928,7 @@ def main():
     optimizer = (
         None if use_fsdp2 else torch.optim.AdamW(model.parameters(), lr=learning_rate)
     )
-    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+    model, optimizer = hydragnn.distributed.distributed_model_wrapper(
         model, optimizer, verbosity, config=config
     )
     if use_fsdp2:

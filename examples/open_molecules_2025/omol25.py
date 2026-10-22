@@ -14,7 +14,7 @@ from fairchem.core.datasets import AseDBDataset
 from mpi4py import MPI
 from yaml import full_load
 
-from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
+from hydragnn.data.abstractbasedataset import AbstractBaseDataset
 from torch_geometric.transforms import Distance, Spherical, LocalCartesian
 from torch_geometric.data import Data
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
@@ -26,7 +26,7 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
     should_skip_self_loops,
     gather_deg,
 )
-from hydragnn.utils.distributed import nsplit
+from hydragnn.distributed import nsplit
 
 # transform_coordinates = Spherical(norm=False, cat=False)
 # transform_coordinates = LocalCartesian(norm=False, cat=False)

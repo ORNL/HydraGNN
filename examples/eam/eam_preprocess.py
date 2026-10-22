@@ -17,8 +17,8 @@ from ase.io.cfg import read_cfg
 from torch_geometric.data import Data
 
 from hydragnn.preprocess import get_radius_graph_pbc, split_dataset
-from hydragnn.utils.datasets.serializeddataset import SerializedWriter
-from hydragnn.utils.input_config_parsing.variable_schema import (
+from hydragnn.data.serializeddataset import SerializedWriter
+from hydragnn.config.variable_schema import (
     parse_variable_schema,
     prepare_data_from_schema,
 )

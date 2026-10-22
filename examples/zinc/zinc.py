@@ -42,7 +42,7 @@ verbosity = config["Verbosity"]["level"]
 var_config = config["Variables"]
 
 # Always initialize for multi-rank training.
-world_size, world_rank = hydragnn.utils.distributed.setup_ddp()
+world_size, world_rank = hydragnn.distributed.setup_ddp()
 
 log_name = "zinc_test"
 # Enable print to log file.
@@ -75,7 +75,7 @@ cache_root = "dataset/zinc"
 
 
 def build_datasets():
-    hydragnn.utils.datasets.prepare_pyg_cache(cache_root, ZINC_CACHE_VERSION)
+    hydragnn.data.prepare_pyg_cache(cache_root, ZINC_CACHE_VERSION)
     datasets = tuple(
         ZINC(
             root=cache_root,
@@ -85,7 +85,7 @@ def build_datasets():
         )
         for split in ("train", "val", "test")
     )
-    hydragnn.utils.datasets.mark_pyg_cache_current(cache_root, ZINC_CACHE_VERSION)
+    hydragnn.data.mark_pyg_cache_current(cache_root, ZINC_CACHE_VERSION)
     return datasets
 
 
@@ -103,9 +103,7 @@ train, val, test = hydragnn.preprocess.build_dataset_on_rank_zero(build_datasets
     variables=config["Variables"],
 )
 
-config = hydragnn.utils.input_config_parsing.update_config(
-    config, train_loader, val_loader, test_loader
-)
+config = hydragnn.config.update_config(config, train_loader, val_loader, test_loader)
 
 model = hydragnn.models.create_model_config(
     config=config["NeuralNetwork"],
@@ -118,7 +116,7 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
     optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
 )
 
-model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+model, optimizer = hydragnn.distributed.distributed_model_wrapper(
     model, optimizer, verbosity, config=config
 )
 
@@ -128,7 +126,7 @@ hydragnn.utils.model.model.load_existing_model_config(
 
 # Run training with the given model and zinc dataset.
 writer = hydragnn.utils.model.model.get_summary_writer(log_name)
-hydragnn.utils.input_config_parsing.save_config(config, log_name)
+hydragnn.config.save_config(config, log_name)
 
 hydragnn.train.train_validate_test(
     model,
