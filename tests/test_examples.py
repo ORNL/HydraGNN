@@ -10,12 +10,12 @@
 ##############################################################################
 
 import os
-import sys
 import pytest
-import pdb
-import subprocess
 
+from tests._script_runner import example_script, run_script
 from tests.md17_fixture import create_md17_raw_fixture
+
+pytestmark = pytest.mark.examples
 
 
 @pytest.mark.parametrize(
@@ -44,31 +44,22 @@ from tests.md17_fixture import create_md17_raw_fixture
 def test_examples_energy(
     tmp_path, example, mpnn_type, global_attn_engine, global_attn_type
 ):
-    path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
-    file_path = os.path.join(path, example + ".py")
-    # Add the --mpnn_type argument for the subprocess call
     env = os.environ.copy()
     if example == "md17":
         cache_root = tmp_path / "md17"
         create_md17_raw_fixture(cache_root)
         env["HYDRAGNN_MD17_ROOT"] = str(cache_root)
 
-    return_code = subprocess.call(
-        [
-            sys.executable,
-            file_path,
-            "--mpnn_type",
-            mpnn_type,
-            "--global_attn_engine",
-            global_attn_engine,
-            "--global_attn_type",
-            global_attn_type,
-        ],
+    run_script(
+        example_script(example),
+        "--mpnn_type",
+        mpnn_type,
+        "--global_attn_engine",
+        global_attn_engine,
+        "--global_attn_type",
+        global_attn_type,
         env=env,
     )
-
-    # Check the file ran without error.
-    assert return_code == 0
 
 
 # NOTE the grad forces example with LennardJones requires
@@ -89,11 +80,4 @@ def test_examples_energy(
 @pytest.mark.parametrize("example", ["LennardJones"])
 @pytest.mark.mpi_skip()
 def test_examples_grad_forces(example, mpnn_type):
-    path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
-    file_path = os.path.join(path, example + ".py")
-
-    # Add the --mpnn_type argument for the subprocess call
-    return_code = subprocess.call([sys.executable, file_path, "--mpnn_type", mpnn_type])
-
-    # Check the file ran without error.
-    assert return_code == 0
+    run_script(example_script(example), "--mpnn_type", mpnn_type)
