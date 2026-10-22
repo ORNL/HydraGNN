@@ -169,7 +169,7 @@ def _resolve_settings(settings_cls, settings, flat_settings):
     return replace(settings, **overrides) if overrides else settings
 
 
-# FIXME: interface does not include ilossweights_hyperp, ilossweights_nll, dropout
+# FIXME: interface does not include dropout
 def create_model(
     mpnn_type: str,
     input_dim: int,

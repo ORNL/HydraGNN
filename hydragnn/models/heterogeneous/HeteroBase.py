@@ -14,24 +14,29 @@ import functools
 import torch
 from torch.nn import Module, ModuleList, ModuleDict, Linear, Parameter, Sequential
 from torch.utils.checkpoint import checkpoint
-from torch_geometric.nn import (
-    BatchNorm,
-    HeteroConv,
-    global_add_pool,
-    global_max_pool,
-    global_mean_pool,
-)
+from torch_geometric.nn import BatchNorm, HeteroConv
 
-from hydragnn.models.utils import activation_function_selection, loss_function_selection
+from hydragnn.models.utils import activation_function_selection
 from hydragnn.distributed import get_device
-from hydragnn.models.Base import MLPNode
-from hydragnn.utils.print.print_utils import print_master
 from hydragnn.models.attention.HeteroGPS import HeteroGPSConv
 from hydragnn.models.attention.structural import StructuralAttentionContext
-from hydragnn.loss_reporting import supervised_loss_report
+from hydragnn.models.common.graph_conditioning import (
+    GraphConditioningMixin,
+    validate_graph_attr_conditioning_mode,
+)
+from hydragnn.models.common.losses import MultiHeadLossMixin
+from hydragnn.models.common.mlp_node import MLPNode
+from hydragnn.models.common.model_controls import ModelControlsMixin
+from hydragnn.models.common.pooling import GraphPoolingMixin
 
 
-class HeteroBase(Module):
+class HeteroBase(
+    GraphPoolingMixin,
+    GraphConditioningMixin,
+    MultiHeadLossMixin,
+    ModelControlsMixin,
+    Module,
+):
     """Base class for heterogeneous message passing models.
 
     This reuses HydraGNN's multi-head decoding logic while allowing hetero
@@ -52,9 +57,7 @@ class HeteroBase(Module):
         activation_function_type: str,
         loss_function_type: str,
         equivariance: bool,
-        ilossweights_hyperp: int = 1,
-        loss_weights: list = None,
-        ilossweights_nll: int = 0,
+        loss_weights: list | None = None,
         freeze_conv: bool = False,
         initial_bias=None,
         dropout: float = 0.25,
@@ -225,111 +228,32 @@ class HeteroBase(Module):
 
         self.use_graph_attr_conditioning = use_graph_attr_conditioning
         self.graph_attr_dim = int(graph_attr_dim)
-        self.graph_attr_conditioning_mode = graph_attr_conditioning_mode.lower()
-        if self.graph_attr_conditioning_mode not in (
-            "film",
-            "concat_node",
-            "fuse_pool",
-        ):
-            raise ValueError(
-                "graph_attr_conditioning_mode must be one of: 'film', 'concat_node', 'fuse_pool'."
-            )
-
-        # output variance for Gaussian negative log likelihood loss
-        self.var_output = 0
-        if loss_function_type == "GaussianNLLLoss":
-            self.var_output = 1
-        self.loss_function_type = loss_function_type
-        self.loss_function = loss_function_selection(loss_function_type)
-        self.ilossweights_nll = ilossweights_nll
-        self.ilossweights_hyperp = ilossweights_hyperp
-
-        if loss_weights is None:
-            loss_weights = [1.0] * self.num_heads
-
-        if self.ilossweights_hyperp * self.ilossweights_nll == 1:
-            raise ValueError(
-                "ilossweights_hyperp and ilossweights_nll cannot be both set to 1."
-            )
-        if self.ilossweights_hyperp == 1:
-            if len(loss_weights) != self.num_heads:
-                raise ValueError(
-                    "Inconsistent number of loss weights and tasks: "
-                    + str(len(loss_weights))
-                    + " VS "
-                    + str(self.num_heads)
-                )
-            else:
-                self.loss_weights = loss_weights
-            weightabssum = sum(abs(number) for number in self.loss_weights)
-            self.loss_weights = [iw / weightabssum for iw in self.loss_weights]
-
-        # Graph pooling policy
-        pool_mode = graph_pooling.lower()
-        if pool_mode == "sum":
-            pool_mode = "add"
-        pool_map = {
-            "mean": (global_mean_pool, "mean"),
-            "add": (global_add_pool, "sum"),
-            "max": (global_max_pool, "max"),
-        }
-        if pool_mode not in pool_map:
-            raise ValueError("Unsupported graph_pooling: " + graph_pooling)
-        self.graph_pooling = pool_mode
-        self.graph_pool_fn, self.graph_pool_reduction = pool_map[pool_mode]
+        self.graph_attr_conditioning_mode = validate_graph_attr_conditioning_mode(
+            graph_attr_conditioning_mode
+        )
+        self._configure_loss(loss_function_type, loss_weights)
+        self._configure_graph_pooling(graph_pooling)
 
         if hetero_pooling_mode not in ("sum", "mean"):
             raise ValueError("hetero_pooling_mode must be 'sum' or 'mean'.")
         self.hetero_pooling_mode = hetero_pooling_mode
 
-        def _pool_graph_features(x_tensor, batch_tensor, size=None):
-            if batch_tensor is None:
-                if self.graph_pool_reduction == "mean":
-                    return x_tensor.mean(dim=0, keepdim=True)
-                if self.graph_pool_reduction == "max":
-                    return x_tensor.max(dim=0, keepdim=True).values
-                return x_tensor.sum(dim=0, keepdim=True)
-            return self.graph_pool_fn(
-                x_tensor, batch_tensor.to(x_tensor.device), size=size
-            )
-
-        self._pool_graph_features = _pool_graph_features
-
         self.freeze_conv = freeze_conv
         self.initial_bias = initial_bias
 
         # Graph conditioning modules must exist before optimizer construction.
-        self.graph_conditioner = None
-        self.graph_concat_projector = None
-        self.graph_concat_projector_in_dim = None
-        self.graph_pool_projector = None
-        self.graph_pool_projector_in_dim = None
+        self._init_graph_conditioning_modules()
         if self.use_graph_attr_conditioning:
             if self.graph_attr_dim <= 0:
                 raise ValueError(
                     "graph_attr_dim must be positive when graph conditioning is enabled."
                 )
             if self.graph_attr_conditioning_mode == "film":
-                hidden = max(self.hidden_dim, self.graph_attr_dim)
-                self.graph_conditioner = Sequential(
-                    Linear(self.graph_attr_dim, hidden),
-                    self.activation_function,
-                    Linear(hidden, 2 * self.hidden_dim),
-                )
+                self._build_graph_conditioner(self.graph_attr_dim)
             elif self.graph_attr_conditioning_mode == "concat_node":
-                self.graph_concat_projector = Linear(
-                    self.hidden_dim + self.graph_attr_dim, self.hidden_dim
-                )
-                self.graph_concat_projector_in_dim = (
-                    self.hidden_dim + self.graph_attr_dim
-                )
+                self._build_graph_concat_projector(self.graph_attr_dim, self.hidden_dim)
             elif "graph" in self.head_type:
-                self.graph_pool_projector = Sequential(
-                    Linear(self.hidden_dim + self.graph_attr_dim, self.hidden_dim),
-                    self.activation_function,
-                    Linear(self.hidden_dim, self.hidden_dim),
-                )
-                self.graph_pool_projector_in_dim = self.hidden_dim + self.graph_attr_dim
+                self._build_graph_pool_projector(self.graph_attr_dim, self.hidden_dim)
 
         self._multihead()
         if self.initial_bias is not None:
@@ -553,26 +477,10 @@ class HeteroBase(Module):
             self.convs_node_output[branchtype] = convs_node_output
             self.batch_norms_node_output[branchtype] = batch_norms_node_output
 
-    def _freeze_conv(self):
-        for module in [self.graph_convs, self.feature_layers]:
-            for layer in module:
-                for param in layer.parameters():
-                    param.requires_grad = False
-
-    def enable_conv_checkpointing(self):
-        print_master("Enabling checkpointing")
-        self.conv_checkpointing = True
-
     def _maybe_checkpoint(self, conv):
         if self.conv_checkpointing:
             return functools.partial(checkpoint, conv, use_reentrant=False)
         return conv
-
-    def _set_bias(self):
-        for head, type in zip(self.heads_NN, self.head_type):
-            if type == "graph":
-                for branch in head.values():
-                    branch[-1].bias.data.fill_(self.initial_bias)
 
     def _multihead(self):
         self.graph_shared = ModuleDict({})
@@ -1002,162 +910,52 @@ class HeteroBase(Module):
             raise ValueError(
                 f"graph_attr width {graph_attr_dim} does not match configured graph_attr_dim={self.graph_attr_dim}."
             )
-        if self.graph_conditioner[0].weight.device != device:
-            self.graph_conditioner = self.graph_conditioner.to(device)
+        super()._ensure_graph_conditioner(graph_attr_dim, device)
 
     def _ensure_graph_concat_projector(
-        self, graph_attr_dim: int, channel_dim: int, device
+        self, graph_attr_dim: int, channel_dim: int, device, dtype=None
     ):
         in_dim = channel_dim + graph_attr_dim
-        if (self.graph_concat_projector is None) or (
+        if self.graph_concat_projector is None or (
             self.graph_concat_projector_in_dim != in_dim
         ):
             raise ValueError(
                 f"Graph concat projector expects input width {self.graph_concat_projector_in_dim}, got {in_dim}."
             )
-        if self.graph_concat_projector.weight.device != device:
-            self.graph_concat_projector = self.graph_concat_projector.to(device)
+        super()._ensure_graph_concat_projector(
+            graph_attr_dim, channel_dim, device, dtype
+        )
 
     def _ensure_graph_pool_projector(
-        self, graph_attr_dim: int, channel_dim: int, device
+        self, graph_attr_dim: int, channel_dim: int, device, dtype=None
     ):
         in_dim = channel_dim + graph_attr_dim
-        if (self.graph_pool_projector is None) or (
+        if self.graph_pool_projector is None or (
             self.graph_pool_projector_in_dim != in_dim
         ):
             raise ValueError(
                 f"Graph pool projector expects input width {self.graph_pool_projector_in_dim}, got {in_dim}."
             )
-        if self.graph_pool_projector[0].weight.device != device:
-            self.graph_pool_projector = self.graph_pool_projector.to(device)
+        super()._ensure_graph_pool_projector(graph_attr_dim, channel_dim, device, dtype)
 
-    def _apply_graph_conditioning(self, inv_node_feat, batch, data):
-        if not self.use_graph_attr_conditioning:
-            return inv_node_feat
-
-        if not hasattr(data, "graph_attr") or data.graph_attr is None:
-            raise ValueError(
-                "use_graph_attr_conditioning=True but data.graph_attr is missing."
-            )
-
-        graph_attr = data.graph_attr
-        graph_attr = graph_attr.to(
-            device=inv_node_feat.device, dtype=inv_node_feat.dtype
-        )
-
-        if batch is None:
-            batch = torch.zeros(
-                inv_node_feat.size(0), device=inv_node_feat.device, dtype=torch.long
-            )
-
-        batch_num_graphs = int(batch.max().item() + 1)
-
+    def _graph_attr_per_graph(self, graph_attr, batch):
+        """Infer the graph count from ``graph_attr_dim`` for flattened inputs."""
         if graph_attr.dim() == 1:
-            if self.graph_attr_dim and graph_attr.numel() % self.graph_attr_dim == 0:
-                feat_dim = self.graph_attr_dim
-                num_graphs = graph_attr.numel() // feat_dim
-                graph_attr = graph_attr.view(num_graphs, feat_dim)
-            else:
+            if graph_attr.numel() % self.graph_attr_dim != 0:
                 raise ValueError(
                     f"One-dimensional graph_attr with numel={graph_attr.numel()} is not divisible by graph_attr_dim={self.graph_attr_dim}."
                 )
-        elif graph_attr.dim() == 2:
-            num_graphs = graph_attr.size(0)
-        else:
+            graph_attr = graph_attr.view(-1, self.graph_attr_dim)
+        elif graph_attr.dim() != 2:
             raise ValueError(
                 f"Unsupported graph_attr ndim={graph_attr.dim()}; expected 1/2."
             )
-        if batch_num_graphs > num_graphs:
+        batch_num_graphs = int(batch.max().item() + 1)
+        if batch_num_graphs > graph_attr.size(0):
             raise ValueError(
-                f"Node batch references {batch_num_graphs} graphs, but graph_attr contains {num_graphs}."
+                f"Node batch references {batch_num_graphs} graphs, but graph_attr contains {graph_attr.size(0)}."
             )
-
-        if self.graph_attr_conditioning_mode == "film":
-            self._ensure_graph_conditioner(graph_attr.size(-1), inv_node_feat.device)
-
-            scale_shift = self.graph_conditioner(graph_attr)
-            scale, shift = scale_shift.split(self.hidden_dim, dim=-1)
-            scale = torch.tanh(scale)
-
-            channel_dim = inv_node_feat.size(-1)
-            scale_b = scale[batch]
-            shift_b = shift[batch]
-            if channel_dim != self.hidden_dim:
-                if channel_dim % self.hidden_dim != 0:
-                    raise ValueError(
-                        f"Graph conditioning expects channels divisible by hidden_dim (got {channel_dim} vs {self.hidden_dim})."
-                    )
-                factor = channel_dim // self.hidden_dim
-                scale_b = scale_b.repeat_interleave(factor, dim=-1)
-                shift_b = shift_b.repeat_interleave(factor, dim=-1)
-
-            return inv_node_feat * (1 + scale_b) + shift_b
-
-        if self.graph_attr_conditioning_mode == "concat_node":
-            channel_dim = inv_node_feat.size(-1)
-            self._ensure_graph_concat_projector(
-                graph_attr_dim=graph_attr.size(-1),
-                channel_dim=channel_dim,
-                device=inv_node_feat.device,
-            )
-            graph_attr_b = graph_attr[batch]
-            fused = torch.cat([inv_node_feat, graph_attr_b], dim=-1)
-            return self.graph_concat_projector(fused)
-
-        if self.graph_attr_conditioning_mode == "fuse_pool":
-            return inv_node_feat
-
-        raise ValueError(
-            f"Unsupported graph_attr_conditioning_mode: {self.graph_attr_conditioning_mode}"
-        )
-
-    def _apply_graph_pool_conditioning(self, x_graph, data):
-        if not self.use_graph_attr_conditioning:
-            return x_graph
-        if self.graph_attr_conditioning_mode != "fuse_pool":
-            return x_graph
-        if not hasattr(data, "graph_attr") or data.graph_attr is None:
-            raise ValueError(
-                "use_graph_attr_conditioning=True but data.graph_attr is missing."
-            )
-
-        graph_attr = data.graph_attr
-        num_graphs = x_graph.size(0)
-
-        if graph_attr.dim() == 1:
-            if graph_attr.numel() % num_graphs == 0:
-                feat_dim = graph_attr.numel() // num_graphs
-                graph_attr = graph_attr.view(num_graphs, feat_dim)
-            else:
-                raise ValueError(
-                    f"One-dimensional graph attribute with graph_attr.numel()={graph_attr.numel()} is not divisible by num_graphs={num_graphs}."
-                )
-        elif graph_attr.dim() == 2:
-            if graph_attr.size(0) != num_graphs:
-                raise ValueError(
-                    f"graph_attr batch size does not match pooled graph embeddings: graph_attr={tuple(graph_attr.size())}, num_graphs={num_graphs}"
-                )
-        else:
-            raise ValueError(
-                f"Unsupported graph_attr ndim={graph_attr.dim()}; expected 1/2."
-            )
-
-        graph_attr = graph_attr.to(device=x_graph.device, dtype=x_graph.dtype)
-
-        self._ensure_graph_pool_projector(
-            graph_attr_dim=graph_attr.size(-1),
-            channel_dim=x_graph.size(-1),
-            device=x_graph.device,
-        )
-
-        if graph_attr.size(0) != num_graphs:
-            raise ValueError(
-                f"graph_attr batch size does not match pooled graph embeddings: "
-                f"graph_attr={tuple(graph_attr.size())}, x_graph={tuple(x_graph.size())}, num_graphs={num_graphs}"
-            )
-
-        fused = torch.cat([x_graph, graph_attr], dim=-1)
-        return self.graph_pool_projector(fused)
+        return graph_attr
 
     def _move_data_to_model_device(self, data):
         device = next(self.parameters()).device
@@ -1372,44 +1170,6 @@ class HeteroBase(Module):
                 outputs.append(head)
                 outputs_var.append(headvar)
 
-        return outputs
-
-    def loss(self, pred, value, head_index):
-        var = None
         if self.var_output:
-            var = pred[1]
-            pred = pred[0]
-        if self.ilossweights_nll == 1:
-            raise ValueError("loss_nll() not ready yet")
-        if self.ilossweights_hyperp == 1:
-            return self.loss_hpweighted(pred, value, head_index, var=var)
-        raise ValueError("Unsupported loss weighting configuration")
-
-    def loss_hpweighted(self, pred, value, head_index, var=None):
-        tot_loss = 0
-        tasks_loss = []
-        for ihead in range(self.num_heads):
-            head_pre = pred[ihead]
-            pred_shape = head_pre.shape
-            head_val = value[head_index[ihead]]
-            value_shape = head_val.shape
-            if pred_shape != value_shape:
-                head_val = torch.reshape(head_val, pred_shape)
-            head_val = head_val.to(head_pre.device)
-            if var is None:
-                tot_loss += (
-                    self.loss_function(head_pre, head_val) * self.loss_weights[ihead]
-                )
-                tasks_loss.append(self.loss_function(head_pre, head_val))
-            else:
-                head_var = var[ihead]
-                tot_loss += (
-                    self.loss_function(head_pre, head_val, head_var)
-                    * self.loss_weights[ihead]
-                )
-                tasks_loss.append(self.loss_function(head_pre, head_val, head_var))
-
-        self.last_loss_components = supervised_loss_report(
-            self, pred, value, head_index, tasks_loss, var=var
-        )
-        return tot_loss, tasks_loss
+            return outputs, outputs_var
+        return outputs

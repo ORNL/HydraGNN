@@ -14,14 +14,13 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.nn as nn
 from collections import OrderedDict
 from torch.utils.checkpoint import checkpoint
-from torch_geometric.nn import global_add_pool, global_max_pool, global_mean_pool
+from hydragnn.models.common.pooling import GraphPoolingMixin
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 import os
 from contextlib import contextmanager
 import warnings
 
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-from torch.distributed.fsdp.api import ShardingStrategy
 from torch.optim import Optimizer
 
 try:
@@ -121,7 +120,7 @@ class EncoderModel(nn.Module):
         return inv_node_feat, equiv_node_feat, conv_args
 
 
-class DecoderModel(nn.Module):
+class DecoderModel(GraphPoolingMixin, nn.Module):
     def __init__(self, base_model):
         super().__init__()
         self.device = base_model.device
@@ -141,15 +140,6 @@ class DecoderModel(nn.Module):
             self.graph_pool_fn = base_model.graph_pool_fn
             self.graph_pool_reduction = base_model.graph_pool_reduction
             self.graph_pooling = base_model.graph_pooling
-
-    def _pool_graph_features(self, x_tensor, batch_tensor):
-        if batch_tensor is None:
-            if self.graph_pool_reduction == "mean":
-                return x_tensor.mean(dim=0, keepdim=True)
-            if self.graph_pool_reduction == "max":
-                return x_tensor.max(dim=0, keepdim=True).values
-            return x_tensor.sum(dim=0, keepdim=True)
-        return self.graph_pool_fn(x_tensor, batch_tensor.to(x_tensor.device))
 
     def forward(self, data, encoded_feats):
         if self.is_mace:
