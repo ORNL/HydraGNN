@@ -5,6 +5,7 @@
     "NeuralNetwork": {
         "Architecture": {
             "mpnn_type": "EGNN",
+            "graph_pooling": "add",
             "equivariance": true,
             "max_neighbours": 50,
             "num_gaussians": 50,
@@ -100,8 +101,8 @@
         ],
         "outputs": [
             {
-                "name": "graph_energy",
-                "level": "node",
+                "name": "energy",
+                "level": "graph",
                 "dim": 1
             }
         ]

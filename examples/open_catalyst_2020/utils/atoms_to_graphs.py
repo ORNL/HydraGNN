@@ -127,7 +127,7 @@ class AtomsToGraphs:
             pbc = torch.tensor([False, False, False], dtype=torch.bool)
 
         energy = atoms.get_potential_energy(apply_constraint=False)
-        energy_tensor = torch.tensor(energy).to(dtype=torch.float32).unsqueeze(0)
+        energy_tensor = torch.tensor(energy).to(dtype=torch.float32).reshape(1, 1)
         energy_per_atom_tensor = energy_tensor.detach().clone() / natoms
 
         forces = torch.Tensor(atoms.get_forces(apply_constraint=False))

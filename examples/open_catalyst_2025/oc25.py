@@ -158,7 +158,7 @@ def _create_pytorch_data_object(
             energy_value = row_fields.get("energy")
             if energy_value is None:
                 raise ValueError("missing energy")
-            energy = torch.as_tensor(energy_value, dtype=torch.float32).unsqueeze(0)
+            energy = torch.as_tensor(energy_value, dtype=torch.float32).reshape(1, 1)
         except Exception:
             print(
                 "Atomic structure does not have valid energy",

@@ -75,7 +75,7 @@
         ],
         "outputs": [
             {
-                "name": "formation_energy",
+                "name": "energy",
                 "level": "graph",
                 "dim": 1
             },

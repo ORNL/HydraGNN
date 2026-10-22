@@ -15,27 +15,18 @@ mpi4py.rc.thread_level = "serialized"
 mpi4py.rc.threads = False
 
 import os
-import json
 import random
-import logging
 import sys
-import argparse
 import sqlite3
+import numpy as np
 
 from ase.db import connect
 
-import hydragnn
+from hydragnn import cli
 from hydragnn.utils.print.print_utils import iterate_tqdm, log
-from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 
 from hydragnn.distributed import nsplit
 from hydragnn.preprocess.load_data import split_dataset
-from hydragnn.data.distdataset import DistDataset
-from hydragnn.data.pickledataset import (
-    SimplePickleWriter,
-    SimplePickleDataset,
-)
-from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 
 import torch
 import torch.distributed as dist
@@ -43,13 +34,6 @@ import torch.distributed as dist
 from torch_geometric.data import Data
 from torch_geometric.transforms import RadiusGraph, Distance
 
-try:
-    from hydragnn.data.adiosdataset import AdiosWriter, AdiosDataset
-except ImportError:
-    AdiosWriter = None
-    AdiosDataset = None
-
-import hydragnn.utils.profiling_and_tracing.tracer as tr
 from hydragnn.data.abstractbasedataset import AbstractBaseDataset
 
 torch.set_default_dtype(torch.float32)
@@ -171,7 +155,7 @@ class Nabla2RelaxDataset(AbstractBaseDataset):
                 )
 
         energy = (
-            torch.tensor([float(energy_scalar)], dtype=torch.float32)
+            torch.tensor([[float(energy_scalar)]], dtype=torch.float32)
             * conversion_constant_from_hartree_to_eV
         )
         forces = (
@@ -222,118 +206,40 @@ class Nabla2RelaxDataset(AbstractBaseDataset):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-    parser.add_argument("--preonly", action="store_true", help="preprocess only")
-    parser.add_argument(
-        "--inputfile", help="input JSON", type=str, default="nabla2_dft.json"
-    )
+    parser = cli.build_parser(default_inputfile="nabla2_dft.json")
     parser.add_argument(
         "--dbpath_train",
-        help="path to training ASE SQLite db",
-        type=str,
         default=None,
+        help="training db (absolute or relative to dataset/)",
     )
     parser.add_argument(
         "--dbpath_test",
-        help="path to testing ASE SQLite db",
-        type=str,
         default=None,
+        help="testing db (absolute or relative to dataset/)",
     )
-    parser.add_argument(
-        "--energy_per_atom",
-        help="normalize energy by number of atoms",
-        action="store_true",
-    )
-    parser.add_argument("--log", help="log name")
-    parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
-    parser.add_argument("--everyone", action="store_true", help="gptimer")
-    parser.add_argument(
-        "--precision",
-        type=str,
-        choices=["fp32", "fp64", "bf16"],
-        default=None,
-        help="Override precision; defaults to fp32 when not set",
-    )
-    parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
-    parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
-    parser.add_argument("--shmem", action="store_true", help="shmem")
-
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "--adios",
-        help="Adios dataset",
-        action="store_const",
-        dest="format",
-        const="adios",
-    )
-    group.add_argument(
-        "--pickle",
-        help="Pickle dataset",
-        action="store_const",
-        dest="format",
-        const="pickle",
-    )
-    parser.set_defaults(format="adios")
     args = parser.parse_args()
 
-    random_state = 0
-    torch.manual_seed(random_state)
-    random.seed(random_state)
-
-    graph_feature_names = ["formation_energy"]
-    graph_feature_dims = [1]
-    node_feature_names = ["atomic_number", "forces"]
-    node_feature_dims = [1, 3]
-
     dirpwd = os.path.dirname(os.path.abspath(__file__))
-    # Resolve datasets relative to this example's directory
-    dataset_dir = os.path.join(dirpwd, "dataset")
-    default_train_db = os.path.join(
-        dataset_dir, "train_2k_v2_formation_energy_w_forces.db"
-    )
-    default_test_db = os.path.join(
-        dataset_dir, "test_full_structures_v2_formation_energy_forces.db"
-    )
+    datadir = os.path.join(dirpwd, "dataset")
+    torch.manual_seed(0)
+    random.seed(0)
 
-    def resolve_db_path(user_value, default_value):
-        # If user passed a relative path or bare filename, look under dataset_dir
+    def resolve_db_path(user_value, default_name):
         if user_value is None:
-            return default_value
-        if os.path.isabs(user_value):
-            return user_value
-        return os.path.join(dataset_dir, user_value)
+            return os.path.join(datadir, default_name)
+        return os.path.join(datadir, user_value)
 
-    train_db_path = resolve_db_path(args.dbpath_train, default_train_db)
-    test_db_path = resolve_db_path(args.dbpath_test, default_test_db)
-
-    input_filename = os.path.join(dirpwd, args.inputfile)
-    with open(input_filename, "r") as f:
-        config = json.load(f)
-    verbosity = config["Verbosity"]["level"]
-    var_config = config["Variables"]
-
-    if args.batch_size is not None:
-        config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
-
-    comm_size, rank = hydragnn.distributed.setup_ddp()
-
-    comm = MPI.COMM_WORLD
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format=f"%(levelname)s (rank {rank}): %(message)s",
-        datefmt="%H:%M:%S",
+    train_db_path = resolve_db_path(
+        args.dbpath_train, "train_2k_v2_formation_energy_w_forces.db"
     )
-
-    log_name = "Nabla2DFT" if args.log is None else args.log
-    hydragnn.utils.print.setup_log(log_name)
-    writer = hydragnn.models.utils.get_summary_writer(log_name)
-
-    log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
-
-    modelname = "Nabla2DFT"
+    test_db_path = resolve_db_path(
+        args.dbpath_test, "test_full_structures_v2_formation_energy_forces.db"
+    )
+    config = cli.load_config(os.path.join(dirpwd, args.inputfile), args)
+    rank, log_name, writer = cli.setup_run(args, "Nabla2DFT")
+    comm = MPI.COMM_WORLD
+    modelname = args.modelname or "Nabla2DFT"
+    path = cli.dataset_path(dirpwd, modelname, args.format)
 
     if args.preonly:
         if not os.path.exists(train_db_path):
@@ -372,164 +278,8 @@ if __name__ == "__main__":
             % (len(train_dataset), len(trainset), len(valset), len(testset))
         )
 
-        deg = gather_deg(trainset)
-        config["pna_deg"] = deg
-
-        if args.format == "adios":
-            if AdiosWriter is None:
-                raise ImportError("ADIOS support not available")
-            fname = os.path.join(dataset_dir, "%s.bp" % modelname)
-            adwriter = AdiosWriter(fname, comm)
-            adwriter.add("trainset", trainset)
-            adwriter.add("valset", valset)
-            adwriter.add("testset", testset)
-            adwriter.add_global("pna_deg", deg)
-            adwriter.save()
-
-        elif args.format == "pickle":
-            basedir = os.path.join(dataset_dir, "%s.pickle" % modelname)
-            attrs = {"pna_deg": deg}
-            SimplePickleWriter(
-                trainset,
-                basedir,
-                "trainset",
-                use_subdir=True,
-                attrs=attrs,
-            )
-            SimplePickleWriter(
-                valset,
-                basedir,
-                "valset",
-                use_subdir=True,
-            )
-            SimplePickleWriter(
-                testset,
-                basedir,
-                "testset",
-                use_subdir=True,
-            )
+        cli.write_split_datasets(path, args.format, trainset, valset, testset)
         sys.exit(0)
 
-    tr.initialize()
-    tr.disable()
-    timer = Timer("load_data")
-    timer.start()
-
-    if args.format == "adios":
-        assert AdiosDataset is not None, "ADIOS support not available"
-        log("Adios load")
-        assert not (args.shmem and args.ddstore), "Cannot use both ddstore and shmem"
-        opt = {
-            "preload": False,
-            "shmem": args.shmem,
-            "ddstore": args.ddstore,
-            "ddstore_width": args.ddstore_width,
-        }
-        fname = os.path.join(dataset_dir, "%s.bp" % modelname)
-        trainset = AdiosDataset(fname, "trainset", comm, **opt, var_config=var_config)
-        valset = AdiosDataset(fname, "valset", comm, **opt, var_config=var_config)
-        testset = AdiosDataset(fname, "testset", comm, **opt, var_config=var_config)
-
-    elif args.format == "pickle":
-        log("Pickle load")
-        basedir = os.path.join(dataset_dir, "%s.pickle" % modelname)
-        trainset = SimplePickleDataset(
-            basedir=basedir, label="trainset", var_config=var_config
-        )
-        valset = SimplePickleDataset(
-            basedir=basedir, label="valset", var_config=var_config
-        )
-        testset = SimplePickleDataset(
-            basedir=basedir, label="testset", var_config=var_config
-        )
-        pna_deg = trainset.pna_deg
-        if args.ddstore:
-            opt = {"ddstore_width": args.ddstore_width}
-            trainset = DistDataset(trainset, "trainset", comm, **opt)
-            valset = DistDataset(valset, "valset", comm, **opt)
-            testset = DistDataset(testset, "testset", comm, **opt)
-            trainset.pna_deg = pna_deg
-    else:
-        raise NotImplementedError("No supported format: %s" % (args.format))
-
-    log(
-        "trainset,valset,testset size: %d %d %d"
-        % (len(trainset), len(valset), len(testset))
-    )
-
-    if args.ddstore:
-        os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
-        os.environ["HYDRAGNN_USE_ddstore"] = "1"
-
-    (
-        train_loader,
-        val_loader,
-        test_loader,
-    ) = hydragnn.preprocess.create_dataloaders(
-        trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
-    )
-
-    config = hydragnn.config.update_config(
-        config, train_loader, val_loader, test_loader
-    )
-
-    comm.Barrier()
-
-    hydragnn.config.save_config(config, log_name)
-
-    timer.stop()
-
-    precision = args.precision.lower() if args.precision is not None else "fp32"
-    config["NeuralNetwork"]["Training"]["precision"] = precision
-
-    model = hydragnn.models.create_model_config(
-        config=config["NeuralNetwork"],
-        verbosity=verbosity,
-    )
-
-    learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
-    )
-
-    model, optimizer = hydragnn.distributed.distributed_model_wrapper(
-        model, optimizer, verbosity, config=config
-    )
-
-    hydragnn.models.utils.load_existing_model_config(
-        model, config["NeuralNetwork"]["Training"], optimizer=optimizer
-    )
-
-    hydragnn.train.train_validate_test(
-        model,
-        optimizer,
-        train_loader,
-        val_loader,
-        test_loader,
-        writer,
-        scheduler,
-        config,
-        log_name,
-        verbosity,
-        create_plots=False,
-        compute_grad_energy=hydragnn.domain_losses.uses_interatomic_potential(config),
-        precision=precision,
-    )
-
-    hydragnn.models.utils.save_model(model, optimizer, log_name)
-    hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
-    if writer is not None:
-        writer.close()
-
-    if tr.has("GPTLTracer"):
-        import gptl4py as gp
-
-        eligible = rank if args.everyone else 0
-        if rank == eligible:
-            gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
-        gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
-        gp.finalize()
-
+    cli.train_from_args(args, config, path, log_name, writer)
     dist.destroy_process_group()
-    sys.exit(0)

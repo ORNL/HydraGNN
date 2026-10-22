@@ -195,7 +195,7 @@ class OMat2024(AbstractBaseDataset):
 
             energy = torch.as_tensor(
                 atoms.get_total_energy(), dtype=torch.float32
-            ).unsqueeze(0)
+            ).reshape(1, 1)
 
             energy_per_atom = energy.detach().clone() / natoms
             forces = torch.as_tensor(atoms.get_forces(), dtype=torch.float32)
