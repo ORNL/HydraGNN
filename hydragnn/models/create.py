@@ -10,10 +10,15 @@
 ##############################################################################
 
 import torch
+from dataclasses import replace
 from types import SimpleNamespace
 from typing import Dict, List, Union
 
-from hydragnn.architecture_defaults import MODEL_SPECIFIC_ARCHITECTURE_DEFAULTS
+from hydragnn.model_settings import (
+    AllScAIPSettings,
+    EquivariantAttentionSettings,
+    UMASettings,
+)
 from hydragnn.domain_losses import create_domain_loss
 from hydragnn.utils.input_config_parsing.config_utils import edge_type_dims
 from hydragnn.models.registry import get_model_builder
@@ -56,7 +61,6 @@ def create_model_config(
     metadata=None,
     node_input_dims=None,
 ):
-    model_defaults = MODEL_SPECIFIC_ARCHITECTURE_DEFAULTS
     model = create_model(
         mpnn_type=config["Architecture"]["mpnn_type"],
         input_dim=config["Architecture"]["input_dim"],
@@ -117,135 +121,11 @@ def create_model_config(
             "graph_attr_conditioning_mode", "concat_node"
         ),
         graph_pooling=config["Architecture"].get("graph_pooling", "mean"),
-        equivariant_attn_lmax=config["Architecture"].get("equivariant_attn_lmax", 1),
-        equivariant_attn_num_radial=config["Architecture"].get(
-            "equivariant_attn_num_radial", 16
+        equivariant_attn=EquivariantAttentionSettings.from_mapping(
+            config["Architecture"]
         ),
-        equivariant_attn_num_hidden_layers=config["Architecture"].get(
-            "equivariant_attn_num_hidden_layers", 1
-        ),
-        equivariant_attn_feedforward_multiplier=config["Architecture"].get(
-            "equivariant_attn_feedforward_multiplier", 2
-        ),
-        equivariant_attn_allow_scalar_only=config["Architecture"].get(
-            "equivariant_attn_allow_scalar_only", False
-        ),
-        equivariant_attn_require_tensor_coupling=config["Architecture"].get(
-            "equivariant_attn_require_tensor_coupling", True
-        ),
-        equivariant_attn_chunk_size=config["Architecture"].get(
-            "equivariant_attn_chunk_size", 512
-        ),
-        equivariant_attn_coupling_mode=config["Architecture"].get(
-            "equivariant_attn_coupling_mode", "parallel"
-        ),
-        equivariant_attn_periodic=config["Architecture"].get(
-            "equivariant_attn_periodic", False
-        ),
-        equivariant_attn_periodic_replication=config["Architecture"].get(
-            "equivariant_attn_periodic_replication", 1
-        ),
-        # AllScAIP-specific
-        allscaip_num_heads=config["Architecture"].get(
-            "allscaip_num_heads", model_defaults["allscaip_num_heads"]
-        ),
-        allscaip_freq_list=config["Architecture"].get(
-            "allscaip_freq_list", model_defaults["allscaip_freq_list"]
-        ),
-        allscaip_atten_name=config["Architecture"].get(
-            "allscaip_atten_name", model_defaults["allscaip_atten_name"]
-        ),
-        allscaip_use_node_path=config["Architecture"].get(
-            "allscaip_use_node_path", model_defaults["allscaip_use_node_path"]
-        ),
-        allscaip_use_sincx_mask=config["Architecture"].get(
-            "allscaip_use_sincx_mask", model_defaults["allscaip_use_sincx_mask"]
-        ),
-        allscaip_use_freq_mask=config["Architecture"].get(
-            "allscaip_use_freq_mask", model_defaults["allscaip_use_freq_mask"]
-        ),
-        allscaip_max_num_elements=config["Architecture"].get(
-            "allscaip_max_num_elements",
-            model_defaults["allscaip_max_num_elements"],
-        ),
-        allscaip_knn_soft=config["Architecture"].get(
-            "allscaip_knn_soft", model_defaults["allscaip_knn_soft"]
-        ),
-        allscaip_distance_function=config["Architecture"].get(
-            "allscaip_distance_function",
-            model_defaults["allscaip_distance_function"],
-        ),
-        allscaip_normalization=config["Architecture"].get(
-            "allscaip_normalization", model_defaults["allscaip_normalization"]
-        ),
-        allscaip_mlp_dropout=config["Architecture"].get(
-            "allscaip_mlp_dropout", model_defaults["allscaip_mlp_dropout"]
-        ),
-        allscaip_atten_dropout=config["Architecture"].get(
-            "allscaip_atten_dropout", model_defaults["allscaip_atten_dropout"]
-        ),
-        allscaip_use_residual_scaling=config["Architecture"].get(
-            "allscaip_use_residual_scaling",
-            model_defaults["allscaip_use_residual_scaling"],
-        ),
-        allscaip_regress_stress=config["Architecture"].get(
-            "allscaip_regress_stress", model_defaults["allscaip_regress_stress"]
-        ),
-        allscaip_use_chunked_graph=config["Architecture"].get(
-            "allscaip_use_chunked_graph", model_defaults["allscaip_use_chunked_graph"]
-        ),
-        allscaip_graph_chunk_size=config["Architecture"].get(
-            "allscaip_graph_chunk_size", model_defaults["allscaip_graph_chunk_size"]
-        ),
-        allscaip_knn_use_low_mem=config["Architecture"].get(
-            "allscaip_knn_use_low_mem", model_defaults["allscaip_knn_use_low_mem"]
-        ),
-        allscaip_dataset_list=config["Architecture"].get(
-            "allscaip_dataset_list", model_defaults["allscaip_dataset_list"].copy()
-        ),
-        # UMA-specific
-        uma_mmax=config["Architecture"].get("uma_mmax", model_defaults["uma_mmax"]),
-        uma_grid_resolution=config["Architecture"].get(
-            "uma_grid_resolution", model_defaults["uma_grid_resolution"]
-        ),
-        uma_edge_channels=config["Architecture"].get(
-            "uma_edge_channels", model_defaults["uma_edge_channels"]
-        ),
-        uma_hidden_channels=config["Architecture"].get(
-            "uma_hidden_channels", model_defaults["uma_hidden_channels"]
-        ),
-        uma_norm_type=config["Architecture"].get(
-            "uma_norm_type", model_defaults["uma_norm_type"]
-        ),
-        uma_ff_type=config["Architecture"].get(
-            "uma_ff_type", model_defaults["uma_ff_type"]
-        ),
-        uma_use_chg_spin=config["Architecture"].get(
-            "uma_use_chg_spin", model_defaults["uma_use_chg_spin"]
-        ),
-        uma_max_num_elements=config["Architecture"].get(
-            "uma_max_num_elements", model_defaults["uma_max_num_elements"]
-        ),
-        uma_variant=config["Architecture"].get(
-            "uma_variant", model_defaults["uma_variant"]
-        ),
-        uma_num_experts=config["Architecture"].get(
-            "uma_num_experts", model_defaults["uma_num_experts"]
-        ),
-        uma_moe_dropout=config["Architecture"].get(
-            "uma_moe_dropout", model_defaults["uma_moe_dropout"]
-        ),
-        uma_use_composition_embedding=config["Architecture"].get(
-            "uma_use_composition_embedding",
-            model_defaults["uma_use_composition_embedding"],
-        ),
-        uma_equivariant_vector_head=config["Architecture"].get(
-            "uma_equivariant_vector_head",
-            model_defaults["uma_equivariant_vector_head"],
-        ),
-        uma_vector_head_index=config["Architecture"].get(
-            "uma_vector_head_index", model_defaults["uma_vector_head_index"]
-        ),
+        allscaip=AllScAIPSettings.from_mapping(config["Architecture"]),
+        uma=UMASettings.from_mapping(config["Architecture"]),
         hetero_pooling_mode=config["Architecture"].get("hetero_pooling_mode", "sum"),
         node_target_type=config["Architecture"].get("node_target_type", None),
         share_relation_weights=config["Architecture"].get(
@@ -273,6 +153,20 @@ def create_model_config(
     torch.set_default_dtype(param_dtype)
 
     return model.to(dtype=param_dtype)
+
+
+_SETTINGS_CLASSES = {
+    "equivariant_attn": EquivariantAttentionSettings,
+    "allscaip": AllScAIPSettings,
+    "uma": UMASettings,
+}
+
+
+def _resolve_settings(settings_cls, settings, flat_settings):
+    """Merge legacy flat ``<prefix>_*`` keyword arguments into a settings object."""
+    overrides = settings_cls.pop_from(flat_settings)
+    settings = settings if settings is not None else settings_cls()
+    return replace(settings, **overrides) if overrides else settings
 
 
 # FIXME: interface does not include ilossweights_hyperp, ilossweights_nll, dropout
@@ -322,49 +216,8 @@ def create_model(
     graph_attr_dim: int = 0,
     graph_attr_conditioning_mode: str = "fuse_pool",
     graph_pooling: str = "mean",
-    equivariant_attn_lmax: int = 1,
-    equivariant_attn_num_radial: int = 16,
-    equivariant_attn_feedforward_multiplier: int = 2,
-    equivariant_attn_allow_scalar_only: bool = False,
-    equivariant_attn_require_tensor_coupling: bool = True,
-    equivariant_attn_chunk_size: int | None = 512,
-    equivariant_attn_coupling_mode: str = "parallel",
-    equivariant_attn_periodic: bool = False,
-    equivariant_attn_periodic_replication: int | list[int] = 1,
-    # AllScAIP-specific
-    allscaip_num_heads: int = 8,
-    allscaip_freq_list: List[int] = None,
-    allscaip_atten_name: str = "math",
-    allscaip_use_node_path: bool = True,
-    allscaip_use_sincx_mask: bool = True,
-    allscaip_use_freq_mask: bool = True,
-    allscaip_max_num_elements: int = 119,
-    allscaip_knn_soft: bool = True,
-    allscaip_distance_function: str = "gaussian",
-    allscaip_normalization: str = "rmsnorm",
-    allscaip_mlp_dropout: float = 0.0,
-    allscaip_atten_dropout: float = 0.0,
-    allscaip_use_residual_scaling: bool = True,
-    allscaip_regress_stress: bool = False,
-    allscaip_use_chunked_graph: bool = False,
-    allscaip_graph_chunk_size: int = 512,
-    allscaip_knn_use_low_mem: bool = True,
-    allscaip_dataset_list: List[str] = None,
-    # UMA-specific
-    uma_mmax: int = 2,
-    uma_grid_resolution: int = None,
-    uma_edge_channels: int = 128,
-    uma_hidden_channels: int = None,
-    uma_norm_type: str = "rms_norm_sh",
-    uma_ff_type: str = "grid",
-    uma_use_chg_spin: bool = False,
-    uma_max_num_elements: int = 100,
-    uma_variant: str = "S",
-    uma_num_experts: int = None,
-    uma_moe_dropout: float = 0.0,
-    uma_use_composition_embedding: bool = False,
-    uma_equivariant_vector_head: bool = False,
-    uma_vector_head_index: int = None,
+    # Keyword-only: the removed flat family params used to follow graph_pooling.
+    *,
     hetero_pooling_mode: str = "sum",
     node_target_type: str = None,
     share_relation_weights: bool = False,
@@ -378,12 +231,22 @@ def create_model(
     use_gpu: bool = True,
     periodic_boundary_conditions: bool = False,
     attn_only: bool = False,
-    *,
-    equivariant_attn_num_hidden_layers: int = 1,
     attn_node_types: List[str] = None,
     structural_encoding: dict = None,
+    equivariant_attn: EquivariantAttentionSettings | None = None,
+    allscaip: AllScAIPSettings | None = None,
+    uma: UMASettings | None = None,
+    **flat_settings,
 ):
-    params = SimpleNamespace(**locals())
+    params = dict(locals())
+    flat_settings = params.pop("flat_settings")
+    for name, settings_cls in _SETTINGS_CLASSES.items():
+        params[name] = _resolve_settings(settings_cls, params[name], flat_settings)
+    if flat_settings:
+        raise TypeError(
+            f"create_model() got unexpected keyword arguments: {sorted(flat_settings)}"
+        )
+    params = SimpleNamespace(**params)
 
     timer = Timer("create_model")
     timer.start()

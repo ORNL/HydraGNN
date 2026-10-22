@@ -87,8 +87,6 @@ jobs:
       - name: Run serial pytest
         if: matrix.suite == 'serial'
         run: |
-          # FIXME: install
-          export PYTHONPATH=$PYTHONPATH:~/HydraGNN
           pip list
           # Run native parity once, serially, and fail if the frozen FAIR-Chem
           # reference is missing or resolves to an unexpected version.
@@ -105,6 +103,4 @@ jobs:
       - name: Run MPI pytest
         if: matrix.suite == 'mpi'
         run: |
-          # FIXME: install
-          export PYTHONPATH=$PYTHONPATH:~/HydraGNN
           mpirun -n 2 --oversubscribe python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native --with-mpi -m "mpi and not gpu and not deepspeed and not fairchem" tests

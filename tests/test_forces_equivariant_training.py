@@ -12,11 +12,10 @@
 import os
 import pytest
 import json
-import tempfile
-import shutil
-import sys
 
-import subprocess
+from tests._script_runner import example_script, run_script
+
+pytestmark = pytest.mark.examples
 
 
 @pytest.mark.parametrize("example", ["LennardJones"])
@@ -25,13 +24,7 @@ import subprocess
 )
 @pytest.mark.mpi_skip()
 def test_examples(example, mpnn_type):
-    path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
-    file_path = os.path.join(path, example + ".py")  # Assuming different model scripts
-    python_exec = sys.executable
-    return_code = subprocess.call([python_exec, file_path, "--mpnn_type", mpnn_type])
-
-    # Check the file ran without error.
-    assert return_code == 0
+    run_script(example_script(example), "--mpnn_type", mpnn_type)
 
 
 @pytest.mark.parametrize("example", ["LennardJones"])
@@ -60,11 +53,12 @@ def test_examples(example, mpnn_type):
     ],
 )
 @pytest.mark.mpi_skip()
-def test_equivariant_heads(example, mpnn_type, head_level, head_type, graph_pooling):
+def test_equivariant_heads(
+    tmp_path, example, mpnn_type, head_level, head_type, graph_pooling
+):
     """Test equivariant models with different head placements (node vs graph) and pooling choices."""
-    path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
-    file_path = os.path.join(path, example + ".py")
-    config_path = os.path.join(path, "LJ.json")
+    file_path = example_script(example)
+    config_path = os.path.join(os.path.dirname(file_path), "LJ.json")
 
     # Load base config
     with open(config_path, "r") as f:
@@ -93,30 +87,11 @@ def test_equivariant_heads(example, mpnn_type, head_level, head_type, graph_pool
             {"name": "energy", "level": "graph", "dim": 1}
         ]
 
-    # Create temporary config file
-    temp_dir = tempfile.mkdtemp()
-    try:
-        temp_config_path = os.path.join(temp_dir, "temp_config.json")
-        with open(temp_config_path, "w") as f:
-            json.dump(config, f, indent=2)
-
-        python_exec = sys.executable
-        return_code = subprocess.call(
-            [
-                python_exec,
-                file_path,
-                "--mpnn_type",
-                mpnn_type,
-                "--inputfile",
-                temp_config_path,
-            ]
-        )
-
-        # Check the file ran without error
-        assert return_code == 0
-    finally:
-        # Clean up temporary directory
-        shutil.rmtree(temp_dir)
+    temp_config_path = tmp_path / "temp_config.json"
+    temp_config_path.write_text(json.dumps(config, indent=2))
+    run_script(
+        file_path, "--mpnn_type", mpnn_type, "--inputfile", str(temp_config_path)
+    )
 
 
 @pytest.mark.parametrize("example", ["LennardJones"])
@@ -128,11 +103,10 @@ def test_equivariant_heads(example, mpnn_type, head_level, head_type, graph_pool
     ],
 )
 @pytest.mark.mpi_skip()
-def test_expanded_x_features(example, mpnn_type, head_type):
+def test_expanded_x_features(tmp_path, example, mpnn_type, head_type):
     """Test that MLP heads work correctly with expanded x features (including equiv_norm)."""
-    path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
-    file_path = os.path.join(path, example + ".py")
-    config_path = os.path.join(path, "LJ.json")
+    file_path = example_script(example)
+    config_path = os.path.join(os.path.dirname(file_path), "LJ.json")
 
     # Load base config
     with open(config_path, "r") as f:
@@ -141,27 +115,8 @@ def test_expanded_x_features(example, mpnn_type, head_type):
     # Modify config to use MLP head type
     config["NeuralNetwork"]["Architecture"]["output_heads"]["node"]["type"] = head_type
 
-    # Create temporary config file
-    temp_dir = tempfile.mkdtemp()
-    try:
-        temp_config_path = os.path.join(temp_dir, "temp_config.json")
-        with open(temp_config_path, "w") as f:
-            json.dump(config, f, indent=2)
-
-        python_exec = sys.executable
-        return_code = subprocess.call(
-            [
-                python_exec,
-                file_path,
-                "--mpnn_type",
-                mpnn_type,
-                "--inputfile",
-                temp_config_path,
-            ]
-        )
-
-        # Check the file ran without error
-        assert return_code == 0
-    finally:
-        # Clean up temporary directory
-        shutil.rmtree(temp_dir)
+    temp_config_path = tmp_path / "temp_config.json"
+    temp_config_path.write_text(json.dumps(config, indent=2))
+    run_script(
+        file_path, "--mpnn_type", mpnn_type, "--inputfile", str(temp_config_path)
+    )

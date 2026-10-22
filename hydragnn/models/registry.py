@@ -12,6 +12,8 @@
 
 Each builder receives a namespace ``p`` holding every argument of
 ``hydragnn.models.create.create_model`` and returns an un-moved model.
+Family-specific options live on settings objects (``p.allscaip``, ``p.uma``,
+``p.equivariant_attn``) from ``hydragnn.model_settings``.
 New architectures register themselves with ``@register_model("Name")``.
 """
 
@@ -102,21 +104,6 @@ def _base_kwargs(p):
         graph_pooling=p.graph_pooling,
         use_graph_attr_conditioning=p.use_graph_attr_conditioning,
         graph_attr_conditioning_mode=p.graph_attr_conditioning_mode,
-    )
-
-
-def _equivariant_attn_kwargs(p):
-    return dict(
-        equivariant_attn_num_hidden_layers=p.equivariant_attn_num_hidden_layers,
-        equivariant_attn_lmax=p.equivariant_attn_lmax,
-        equivariant_attn_num_radial=p.equivariant_attn_num_radial,
-        equivariant_attn_feedforward_multiplier=p.equivariant_attn_feedforward_multiplier,
-        equivariant_attn_allow_scalar_only=p.equivariant_attn_allow_scalar_only,
-        equivariant_attn_require_tensor_coupling=p.equivariant_attn_require_tensor_coupling,
-        equivariant_attn_chunk_size=p.equivariant_attn_chunk_size,
-        equivariant_attn_coupling_mode=p.equivariant_attn_coupling_mode,
-        equivariant_attn_periodic=p.equivariant_attn_periodic,
-        equivariant_attn_periodic_replication=p.equivariant_attn_periodic_replication,
     )
 
 
@@ -246,7 +233,7 @@ def _build_schnet(p):
         *_base_args(p),
         max_neighbours=p.max_neighbours,
         **_base_kwargs(p),
-        **_equivariant_attn_kwargs(p),
+        **p.equivariant_attn.as_kwargs(),
     )
 
 
@@ -281,7 +268,7 @@ def _build_dimenet(p):
         *_base_args(p),
         max_neighbours=p.max_neighbours,
         **_base_kwargs(p),
-        **_equivariant_attn_kwargs(p),
+        **p.equivariant_attn.as_kwargs(),
     )
 
 
@@ -307,7 +294,7 @@ def _build_painn(p):
         p.radius,
         *_base_args(p),
         **_base_kwargs(p),
-        **_equivariant_attn_kwargs(p),
+        **p.equivariant_attn.as_kwargs(),
     )
 
 
@@ -323,7 +310,7 @@ def _build_pnaeq(p):
         p.radius,
         *_base_args(p),
         **_base_kwargs(p),
-        **_equivariant_attn_kwargs(p),
+        **p.equivariant_attn.as_kwargs(),
     )
 
 
@@ -347,7 +334,7 @@ def _build_mace(p):
         p.correlation,
         *_base_args(p),
         **_base_kwargs(p),
-        **_equivariant_attn_kwargs(p),
+        **p.equivariant_attn.as_kwargs(),
     )
 
 
@@ -360,24 +347,24 @@ def _build_allscaip(p):
         "inv_node_feat",
         p.radius,
         p.max_neighbours,
-        p.allscaip_num_heads,
-        p.allscaip_freq_list,
-        p.allscaip_atten_name,
-        p.allscaip_use_node_path,
-        p.allscaip_use_sincx_mask,
-        p.allscaip_use_freq_mask,
-        p.allscaip_max_num_elements,
-        p.allscaip_knn_soft,
-        p.allscaip_distance_function,
-        p.allscaip_normalization,
-        p.allscaip_mlp_dropout,
-        p.allscaip_atten_dropout,
-        p.allscaip_use_residual_scaling,
-        p.allscaip_regress_stress,
-        p.allscaip_dataset_list,
-        p.allscaip_use_chunked_graph,
-        p.allscaip_graph_chunk_size,
-        p.allscaip_knn_use_low_mem,
+        p.allscaip.num_heads,
+        p.allscaip.freq_list,
+        p.allscaip.atten_name,
+        p.allscaip.use_node_path,
+        p.allscaip.use_sincx_mask,
+        p.allscaip.use_freq_mask,
+        p.allscaip.max_num_elements,
+        p.allscaip.knn_soft,
+        p.allscaip.distance_function,
+        p.allscaip.normalization,
+        p.allscaip.mlp_dropout,
+        p.allscaip.atten_dropout,
+        p.allscaip.use_residual_scaling,
+        p.allscaip.regress_stress,
+        p.allscaip.dataset_list,
+        p.allscaip.use_chunked_graph,
+        p.allscaip.graph_chunk_size,
+        p.allscaip.knn_use_low_mem,
         *_base_args(p),
         **_base_kwargs(p),
     )
@@ -393,22 +380,22 @@ def _build_uma(p):
         p.max_neighbours,
         p.max_ell,
         p.num_radial,
-        p.uma_mmax,
-        p.uma_grid_resolution,
-        p.uma_edge_channels,
-        p.uma_hidden_channels,
-        p.uma_norm_type,
-        p.uma_ff_type,
-        p.uma_use_chg_spin,
-        p.uma_max_num_elements,
-        p.uma_variant,
-        p.uma_num_experts,
-        p.uma_moe_dropout,
-        p.uma_use_composition_embedding,
+        p.uma.mmax,
+        p.uma.grid_resolution,
+        p.uma.edge_channels,
+        p.uma.hidden_channels,
+        p.uma.norm_type,
+        p.uma.ff_type,
+        p.uma.use_chg_spin,
+        p.uma.max_num_elements,
+        p.uma.variant,
+        p.uma.num_experts,
+        p.uma.moe_dropout,
+        p.uma.use_composition_embedding,
         p.periodic_boundary_conditions,
         *_base_args(p),
-        uma_equivariant_vector_head=p.uma_equivariant_vector_head,
-        uma_vector_head_index=p.uma_vector_head_index,
+        uma_equivariant_vector_head=p.uma.equivariant_vector_head,
+        uma_vector_head_index=p.uma.vector_head_index,
         **_base_kwargs(p),
     )
 

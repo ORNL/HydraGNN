@@ -12,17 +12,13 @@
 import os
 import pytest
 
-import subprocess
+from tests._script_runner import REPO_ROOT, run_script
 
 
 @pytest.mark.mpi_skip()
 def test_atomicdescriptors():
-    file_path = os.path.join(
-        os.path.dirname(__file__),
-        "..",
-        "hydragnn/utils/descriptors_and_embeddings/atomicdescriptors.py",
+    run_script(
+        os.path.join(
+            REPO_ROOT, "hydragnn/utils/descriptors_and_embeddings/atomicdescriptors.py"
+        )
     )
-    return_code = subprocess.call(["python", file_path])
-
-    # Check the file ran without error.
-    assert return_code == 0

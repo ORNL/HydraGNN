@@ -24,6 +24,7 @@ import re
 import torch
 
 from hydragnn.architecture_defaults import MODEL_SPECIFIC_ARCHITECTURE_DEFAULTS
+from hydragnn.model_settings import EquivariantAttentionSettings
 from .variable_schema import (
     encoded_schema_dimensions,
     get_variable_schema,
@@ -137,18 +138,10 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Training"]["global_attn_redraw_interval"] = 1000
 
     architecture = config["NeuralNetwork"]["Architecture"]
-    architecture.setdefault("equivariant_attn_lmax", 1)
-    architecture.setdefault("equivariant_attn_num_radial", 16)
-    architecture.setdefault("equivariant_attn_num_hidden_layers", 1)
+    for key, value in EquivariantAttentionSettings().as_kwargs().items():
+        architecture.setdefault(key, value)
     if architecture["equivariant_attn_num_hidden_layers"] <= 0:
         raise ValueError("equivariant_attn_num_hidden_layers must be positive")
-    architecture.setdefault("equivariant_attn_feedforward_multiplier", 2)
-    architecture.setdefault("equivariant_attn_allow_scalar_only", False)
-    architecture.setdefault("equivariant_attn_require_tensor_coupling", True)
-    architecture.setdefault("equivariant_attn_chunk_size", 512)
-    architecture.setdefault("equivariant_attn_coupling_mode", "parallel")
-    architecture.setdefault("equivariant_attn_periodic", False)
-    architecture.setdefault("equivariant_attn_periodic_replication", 1)
     validate_equivariant_transformer_config(architecture)
 
     batching = config["NeuralNetwork"]["Training"].get("Batching")
