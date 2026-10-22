@@ -216,6 +216,8 @@ def create_model(
     graph_attr_dim: int = 0,
     graph_attr_conditioning_mode: str = "fuse_pool",
     graph_pooling: str = "mean",
+    # Keyword-only: the removed flat family params used to follow graph_pooling.
+    *,
     hetero_pooling_mode: str = "sum",
     node_target_type: str = None,
     share_relation_weights: bool = False,
@@ -229,7 +231,6 @@ def create_model(
     use_gpu: bool = True,
     periodic_boundary_conditions: bool = False,
     attn_only: bool = False,
-    *,
     attn_node_types: List[str] = None,
     structural_encoding: dict = None,
     equivariant_attn: EquivariantAttentionSettings | None = None,

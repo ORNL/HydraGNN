@@ -113,6 +113,17 @@ def test_create_model_rejects_unknown_kwargs():
         create_model(**_minimal_create_model_args(), uma_not_a_setting=1)
 
 
+def test_create_model_rejects_positional_args_after_graph_pooling():
+    import inspect
+
+    names = list(inspect.signature(create_model).parameters)
+    args = _minimal_create_model_args()
+    positional = [args.get(name) for name in names[: names.index("graph_pooling")]]
+    positional += ["mean", 2]  # old layout: graph_pooling, equivariant_attn_lmax
+    with pytest.raises(TypeError):
+        create_model(*positional)
+
+
 def _minimal_create_model_args():
     return dict(
         mpnn_type="GIN",
