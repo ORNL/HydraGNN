@@ -20,7 +20,7 @@ def example_script(example, script=None):
     return os.path.join(REPO_ROOT, "examples", example, (script or example) + ".py")
 
 
-def run_script(file_path, *args, env=None):
+def run_script(file_path, *args, env=None, cwd=None):
     """Run a script with the current interpreter and fail with its output on error."""
     env = dict(os.environ if env is None else env)
     # Make the in-repo hydragnn importable without installing it.
@@ -30,6 +30,7 @@ def run_script(file_path, *args, env=None):
     result = subprocess.run(
         [sys.executable, file_path, *args],
         env=env,
+        cwd=cwd,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,

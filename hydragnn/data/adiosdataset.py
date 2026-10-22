@@ -45,13 +45,25 @@ from hydragnn.data.abstractbasedataset import AbstractBaseDataset
 from hydragnn.distributed import nsplit
 
 
-def adios2_open(*args, **kwargs):
+def _comm_args(comm):
+    """Return the communicator argument for ADIOS2, or none for serial builds."""
+    if getattr(ad2, "is_built_with_mpi", True):
+        return (comm,)
+    if comm.Get_size() > 1:
+        raise RuntimeError(
+            "ADIOS2 was built without MPI support; it cannot be used with "
+            f"{comm.Get_size()} MPI ranks."
+        )
+    return ()
+
+
+def adios2_open(filename, mode, comm):
     adios2_version = [int(x) for x in ad2.__version__.split(".")]
     if adios2_version[0] <= 2 and adios2_version[1] < 10:
         f_adios2_open = ad2.open
     else:
         f_adios2_open = adios2.Stream
-    return f_adios2_open(*args, **kwargs)
+    return f_adios2_open(filename, mode, *_comm_args(comm))
 
 
 class AdiosWriter:
@@ -122,7 +134,9 @@ class AdiosWriter:
         """
         t0 = time.time()
         log0("Adios saving:", self.filename)
-        self.writer = self.io.Open(self.filename, ad2.Mode.Write, self.comm)
+        self.writer = self.io.Open(
+            self.filename, ad2.Mode.Write, *_comm_args(self.comm)
+        )
         total_ns = 0
 
         # Look for the dataset_name in any one of the Data samples and add it as an ADIOS attribute
@@ -602,7 +616,9 @@ class AdiosDataset(AbstractBaseDataset):
                     if self.local_rank == 0:
                         adios = ad2.ADIOS()
                         io = adios.DeclareIO("ogb_read")
-                        reader = io.Open(self.filename, ad2.Mode.Read, self.comm)
+                        reader = io.Open(
+                            self.filename, ad2.Mode.Read, *_comm_args(self.comm)
+                        )
                         var = io.InquireVariable("%s/%s" % (label, k))
 
                         if var.Type() == "double":
