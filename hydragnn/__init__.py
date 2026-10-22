@@ -8,15 +8,6 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
-from . import _compat
-
-_compat.install()
-
 from . import config, data, distributed
 from . import domain_losses, preprocess, models, train, postprocess, utils
 from ._version import __version__
-
-# Attribute access (``hydragnn.utils.distributed.setup_ddp``) bypasses the finder.
-utils.datasets = data
-utils.distributed = distributed
-utils.input_config_parsing = config
