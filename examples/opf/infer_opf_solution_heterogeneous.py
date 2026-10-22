@@ -14,7 +14,7 @@ import torch
 import torch.distributed as dist
 
 import hydragnn
-from hydragnn.train.train_validate_test import test
+from hydragnn.train.loops import test
 from hydragnn.distributed import setup_ddp
 from hydragnn.config.config_utils import update_config
 from hydragnn.config import edge_type_dims, get_variable_schema

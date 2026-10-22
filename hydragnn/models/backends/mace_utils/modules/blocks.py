@@ -27,30 +27,16 @@ import torch
 import torch.nn.functional
 from torch.nn import ModuleList, Sequential, Linear, ModuleDict
 from torch_scatter import scatter
-from torch_geometric.nn import global_add_pool, global_max_pool, global_mean_pool
 from e3nn import nn, o3
 from e3nn.util.jit import compile_mode
 
 from hydragnn.models.backends.mace_utils.tools.compile import simplify_if_compile
+from hydragnn.models.common.pooling import GraphPoolingMixin
 from hydragnn.models.utils.irreps_tools import (
     reshape_irreps,
     tp_out_irreps_with_instructions,
     create_irreps_string,
 )
-
-
-def _resolve_graph_pooling(graph_pooling: str):
-    mode = graph_pooling.lower()
-    if mode == "sum":
-        mode = "add"
-    pool_map = {
-        "mean": (global_mean_pool, "mean"),
-        "add": (global_add_pool, "sum"),
-        "max": (global_max_pool, "max"),
-    }
-    if mode not in pool_map:
-        raise ValueError("Unsupported graph_pooling: " + graph_pooling)
-    return mode, pool_map[mode]
 
 
 from .radial import (
@@ -439,7 +425,7 @@ class ScaleShiftBlock(torch.nn.Module):
 
 
 @compile_mode("script")
-class LinearMultiheadDecoderBlock(torch.nn.Module):
+class LinearMultiheadDecoderBlock(GraphPoolingMixin, torch.nn.Module):
     def __init__(
         self,
         input_irreps,
@@ -470,10 +456,7 @@ class LinearMultiheadDecoderBlock(torch.nn.Module):
         self.num_heads = num_heads
         self.activation_function = activation_function
         self.num_nodes = num_nodes
-        self.graph_pooling, (
-            self.graph_pool_fn,
-            self.graph_pool_reduction,
-        ) = _resolve_graph_pooling(graph_pooling)
+        self._configure_graph_pooling(graph_pooling)
 
         self.graph_shared = ModuleDict({})
         self.heads_NN = ModuleList()
@@ -536,15 +519,6 @@ class LinearMultiheadDecoderBlock(torch.nn.Module):
                     + "; currently only support 'graph' or 'node'"
                 )
             self.heads_NN.append(head_NN)
-
-    def _pool_graph_features(self, x_tensor, batch_tensor):
-        if batch_tensor is None:
-            if self.graph_pool_reduction == "mean":
-                return x_tensor.mean(dim=0, keepdim=True)
-            if self.graph_pool_reduction == "max":
-                return x_tensor.max(dim=0, keepdim=True).values
-            return x_tensor.sum(dim=0, keepdim=True)
-        return self.graph_pool_fn(x_tensor, batch_tensor.to(x_tensor.device))
 
     def forward(self, data, node_features):
         # Take only the type-0 irreps for graph aggregation
@@ -621,7 +595,7 @@ class LinearMultiheadDecoderBlock(torch.nn.Module):
 
 
 @compile_mode("script")
-class NonLinearMultiheadDecoderBlock(torch.nn.Module):
+class NonLinearMultiheadDecoderBlock(GraphPoolingMixin, torch.nn.Module):
     def __init__(
         self,
         input_irreps,
@@ -652,10 +626,7 @@ class NonLinearMultiheadDecoderBlock(torch.nn.Module):
         self.num_heads = num_heads
         self.activation_function = activation_function
         self.num_nodes = num_nodes
-        self.graph_pooling, (
-            self.graph_pool_fn,
-            self.graph_pool_reduction,
-        ) = _resolve_graph_pooling(graph_pooling)
+        self._configure_graph_pooling(graph_pooling)
 
         self.graph_shared = ModuleDict({})
         self.heads_NN = ModuleList()
@@ -742,15 +713,6 @@ class NonLinearMultiheadDecoderBlock(torch.nn.Module):
                     + "; currently only support 'graph' or 'node'"
                 )
             self.heads_NN.append(head_NN)
-
-    def _pool_graph_features(self, x_tensor, batch_tensor):
-        if batch_tensor is None:
-            if self.graph_pool_reduction == "mean":
-                return x_tensor.mean(dim=0, keepdim=True)
-            if self.graph_pool_reduction == "max":
-                return x_tensor.max(dim=0, keepdim=True).values
-            return x_tensor.sum(dim=0, keepdim=True)
-        return self.graph_pool_fn(x_tensor, batch_tensor.to(x_tensor.device))
 
     def forward(self, data, node_features):
         # Take only the type-0 irreps for graph aggregation

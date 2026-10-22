@@ -9,35 +9,38 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
+import inspect
+
 import torch
-from torch.nn import Embedding, ModuleList, Sequential, ReLU, Linear, Module, ModuleDict
 import torch.nn.functional as F
-from torch_geometric.nn import (
-    BatchNorm,
-    global_add_pool,
-    global_max_pool,
-    global_mean_pool,
-)
-from torch_geometric.nn import Sequential as PyGSequential
+from torch.nn import Embedding, ModuleList, Sequential, Linear, Module, ModuleDict
+from torch_geometric.nn import BatchNorm
 from torch.utils.checkpoint import checkpoint
-import torch_scatter
-from hydragnn.models.utils import activation_function_selection, loss_function_selection
-import sys
-import pdb
+
+from hydragnn.models.utils import activation_function_selection
 from hydragnn.distributed import get_device
-from hydragnn.utils.print.print_utils import print_master
-from hydragnn.models.utils.operations import get_edge_vectors_and_lengths
 from hydragnn.models.attention.gps import HydraGPSConv
 from hydragnn.models.attention.equivariant_local_global import (
     EquivariantLocalGlobalConv,
 )
-from hydragnn.loss_reporting import supervised_loss_report
+from hydragnn.models.common.graph_conditioning import (
+    GraphConditioningMixin,
+    validate_graph_attr_conditioning_mode,
+)
+from hydragnn.models.common.losses import MultiHeadLossMixin
+from hydragnn.models.common.mlp_node import MLPNode
+from hydragnn.models.common.model_controls import ModelControlsMixin
+from hydragnn.models.common.pooling import GraphPoolingMixin
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 
-import inspect
 
-
-class Base(Module):
+class Base(
+    GraphPoolingMixin,
+    GraphConditioningMixin,
+    MultiHeadLossMixin,
+    ModelControlsMixin,
+    Module,
+):
     def __init__(
         self,
         input_args: str,
@@ -54,9 +57,7 @@ class Base(Module):
         activation_function_type: str,
         loss_function_type: str,
         equivariance: bool,
-        ilossweights_hyperp: int = 1,  # if =1, considering weighted losses for different tasks and treat the weights as hyper parameters
-        loss_weights: list = [1.0, 1.0, 1.0],  # weights for losses of different tasks
-        ilossweights_nll: int = 0,  # if =1, using the scalar uncertainty as weights, as in paper# https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf
+        loss_weights: list | None = None,  # per-head weights; default uniform
         freeze_conv=False,
         initial_bias=None,
         dropout: float = 0.25,
@@ -128,41 +129,10 @@ class Base(Module):
             activation_function_type
         )
         self.use_graph_attr_conditioning = use_graph_attr_conditioning
-        self.graph_attr_conditioning_mode = graph_attr_conditioning_mode.lower()
-        if self.graph_attr_conditioning_mode not in (
-            "film",
-            "concat_node",
-            "fuse_pool",
-        ):
-            raise ValueError(
-                "graph_attr_conditioning_mode must be one of: 'film', 'concat_node', 'fuse_pool'."
-            )
-
-        # output variance for Gaussian negative log likelihood loss
-        self.var_output = 0
-        if loss_function_type == "GaussianNLLLoss":
-            self.var_output = 1
-        self.loss_function_type = loss_function_type
-
-        self.loss_function = loss_function_selection(loss_function_type)
-        self.ilossweights_nll = ilossweights_nll
-        self.ilossweights_hyperp = ilossweights_hyperp
-        if self.ilossweights_hyperp * self.ilossweights_nll == 1:
-            raise ValueError(
-                "ilossweights_hyperp and ilossweights_nll cannot be both set to 1."
-            )
-        if self.ilossweights_hyperp == 1:
-            if len(loss_weights) != self.num_heads:
-                raise ValueError(
-                    "Inconsistent number of loss weights and tasks: "
-                    + str(len(loss_weights))
-                    + " VS "
-                    + str(self.num_heads)
-                )
-            else:
-                self.loss_weights = loss_weights
-            weightabssum = sum(abs(number) for number in self.loss_weights)
-            self.loss_weights = [iw / weightabssum for iw in self.loss_weights]
+        self.graph_attr_conditioning_mode = validate_graph_attr_conditioning_mode(
+            graph_attr_conditioning_mode
+        )
+        self._configure_loss(loss_function_type, loss_weights)
 
         # Condition to pass edge_attr through forward propagation.
         self.use_edge_attr = False
@@ -177,34 +147,11 @@ class Base(Module):
             if "edge_attr" not in self.conv_args:
                 self.conv_args += ", edge_attr"
 
-        # Graph pooling policy
-        pool_mode = graph_pooling.lower()
-        if pool_mode == "sum":
-            pool_mode = "add"
-        pool_map = {
-            "mean": (global_mean_pool, "mean"),
-            "add": (global_add_pool, "sum"),
-            "max": (global_max_pool, "max"),
-        }
-        if pool_mode not in pool_map:
-            raise ValueError("Unsupported graph_pooling: " + graph_pooling)
-        self.graph_pooling = pool_mode
-        self.graph_pool_fn, self.graph_pool_reduction = pool_map[pool_mode]
+        self._configure_graph_pooling(graph_pooling)
 
         self.input_feature_encoders = ModuleDict()
         self.input_feature_encoding_config = []
         self.atomistic_mode_enabled = False
-
-        def _pool_graph_features(x_tensor, batch_tensor):
-            if batch_tensor is None:
-                if self.graph_pool_reduction == "mean":
-                    return x_tensor.mean(dim=0, keepdim=True)
-                if self.graph_pool_reduction == "max":
-                    return x_tensor.max(dim=0, keepdim=True).values
-                return x_tensor.sum(dim=0, keepdim=True)
-            return self.graph_pool_fn(x_tensor, batch_tensor.to(x_tensor.device))
-
-        self._pool_graph_features = _pool_graph_features
 
         # Option to only train final property layers.
         self.freeze_conv = freeze_conv
@@ -262,13 +209,8 @@ class Base(Module):
                         2 * self.hidden_dim, self.hidden_dim, bias=False
                     )
 
-        # Optional FiLM-like conditioning with graph-level features (data.graph_attr).
-        # Lazily initialized on first use to avoid extra config wiring; only scalar (invariant) node channels are modulated.
-        self.graph_conditioner = None
-        self.graph_concat_projector = None
-        self.graph_concat_projector_in_dim = None
-        self.graph_pool_projector = None
-        self.graph_pool_projector_in_dim = None
+        # Conditioning modules on data.graph_attr are created lazily on first use.
+        self._init_graph_conditioning_modules()
 
         self._init_conv()
         if self.freeze_conv:
@@ -324,203 +266,6 @@ class Base(Module):
             )
         else:
             return mpnn
-
-    def _ensure_graph_conditioner(self, graph_attr_dim: int, device):
-        """Instantiate (or move) graph conditioner to the active device."""
-        if self.graph_conditioner is None:
-            hidden = max(self.hidden_dim, graph_attr_dim)
-            self.graph_conditioner = Sequential(
-                Linear(graph_attr_dim, hidden),
-                self.activation_function,
-                Linear(hidden, 2 * self.hidden_dim),
-            )
-        if self.graph_conditioner[0].weight.device != device:
-            self.graph_conditioner = self.graph_conditioner.to(device)
-
-    def _ensure_graph_concat_projector(
-        self, graph_attr_dim: int, channel_dim: int, device, dtype=None
-    ):
-        """Instantiate (or move) concat projector used when conditioning_mode='concat_node'."""
-        in_dim = channel_dim + graph_attr_dim
-        if (self.graph_concat_projector is None) or (
-            self.graph_concat_projector_in_dim != in_dim
-        ):
-            self.graph_concat_projector = Linear(in_dim, channel_dim)
-            self.graph_concat_projector_in_dim = in_dim
-        if (self.graph_concat_projector.weight.device != device) or (
-            dtype is not None and self.graph_concat_projector.weight.dtype != dtype
-        ):
-            self.graph_concat_projector = self.graph_concat_projector.to(
-                device=device, dtype=dtype
-            )
-
-    def _ensure_graph_pool_projector(
-        self, graph_attr_dim: int, channel_dim: int, device, dtype=None
-    ):
-        """Instantiate (or move) projector used when conditioning_mode='fuse_pool'."""
-        in_dim = channel_dim + graph_attr_dim
-        if (self.graph_pool_projector is None) or (
-            self.graph_pool_projector_in_dim != in_dim
-        ):
-            self.graph_pool_projector = Sequential(
-                Linear(in_dim, channel_dim),
-                self.activation_function,
-                Linear(channel_dim, channel_dim),
-            )
-            self.graph_pool_projector_in_dim = in_dim
-        if (self.graph_pool_projector[0].weight.device != device) or (
-            dtype is not None and self.graph_pool_projector[0].weight.dtype != dtype
-        ):
-            self.graph_pool_projector = self.graph_pool_projector.to(
-                device=device, dtype=dtype
-            )
-
-    def _apply_graph_conditioning(self, inv_node_feat, batch, data):
-        """Apply graph_attr conditioning (FiLM, concat_node, or defer to fuse_pool) to invariant node channels."""
-        if not self.use_graph_attr_conditioning:
-            return inv_node_feat
-
-        if not hasattr(data, "graph_attr") or data.graph_attr is None:
-            raise ValueError(
-                "use_graph_attr_conditioning=True but data.graph_attr is missing."
-            )
-
-        graph_attr = data.graph_attr
-
-        graph_attr = graph_attr.to(
-            device=inv_node_feat.device, dtype=inv_node_feat.dtype
-        )
-
-        # Batch can be None for single-graph inputs; create a dummy batch in that case.
-        if batch is None:
-            batch = torch.zeros(
-                inv_node_feat.size(0), device=inv_node_feat.device, dtype=torch.long
-            )
-
-        num_graphs = int(batch.max().item() + 1)
-
-        # Normalize graph_attr to [num_graphs, feat_dim] for downstream broadcasting.
-        if graph_attr.dim() == 1:
-            if graph_attr.numel() % num_graphs == 0:
-                feat_dim = graph_attr.numel() // num_graphs
-                graph_attr = graph_attr.view(num_graphs, feat_dim)
-            else:
-                raise ValueError(
-                    f"One-dimensional graph_attr with numel={graph_attr.numel()} is not divisible by num_graphs={num_graphs}."
-                )
-        elif graph_attr.dim() == 2:
-            if graph_attr.size(0) != num_graphs:
-                raise ValueError(
-                    f"graph_attr first dim {graph_attr.size(0)} does not match num_graphs={num_graphs}."
-                )
-        else:
-            raise ValueError(
-                f"Unsupported graph_attr ndim={graph_attr.dim()}; expected 1/2."
-            )
-
-        if self.graph_attr_conditioning_mode == "film":
-            self._ensure_graph_conditioner(graph_attr.size(-1), inv_node_feat.device)
-
-            # FiLM: inv = (1 + scale) * inv + shift, scale/shift are per-graph then broadcast by batch.
-            scale_shift = self.graph_conditioner(graph_attr)
-            scale, shift = scale_shift.split(self.hidden_dim, dim=-1)
-            scale = torch.tanh(scale)  # keep modulation bounded
-
-            channel_dim = inv_node_feat.size(-1)
-            scale_b = scale[batch]
-            shift_b = shift[batch]
-            if channel_dim != self.hidden_dim:
-                if channel_dim % self.hidden_dim != 0:
-                    raise ValueError(
-                        f"Graph conditioning expects channels divisible by hidden_dim (got {channel_dim} vs {self.hidden_dim})."
-                    )
-                factor = channel_dim // self.hidden_dim
-                scale_b = scale_b.repeat_interleave(factor, dim=-1)
-                shift_b = shift_b.repeat_interleave(factor, dim=-1)
-
-            return inv_node_feat * (1 + scale_b) + shift_b
-
-        if self.graph_attr_conditioning_mode == "concat_node":
-            channel_dim = inv_node_feat.size(-1)
-            self._ensure_graph_concat_projector(
-                graph_attr_dim=graph_attr.size(-1),
-                channel_dim=channel_dim,
-                device=inv_node_feat.device,
-                dtype=inv_node_feat.dtype,
-            )
-            graph_attr_b = graph_attr[batch]
-            if inv_node_feat.size(0) != graph_attr_b.size(0):
-                raise RuntimeError(
-                    f"Graph conditioning dimension mismatch: inv_node_feat has "
-                    f"{inv_node_feat.size(0)} rows but batch has {graph_attr_b.size(0)} "
-                    f"nodes. This typically means the MPNN dropped isolated nodes "
-                    f"(nodes with no edges within the radius cutoff). "
-                    f"inv_node_feat.shape={list(inv_node_feat.shape)}, "
-                    f"graph_attr_b.shape={list(graph_attr_b.shape)}"
-                )
-            fused = torch.cat([inv_node_feat, graph_attr_b], dim=-1)
-            return self.graph_concat_projector(fused)
-
-        if self.graph_attr_conditioning_mode == "fuse_pool":
-            # Pool-level fusion is applied later; leave node features unchanged here.
-            return inv_node_feat
-
-        raise ValueError(
-            f"Unsupported graph_attr_conditioning_mode: {self.graph_attr_conditioning_mode}"
-        )
-
-    def _apply_graph_pool_conditioning(self, x_graph, data):
-        """Fuse pooled graph embedding with graph_attr when conditioning_mode='fuse_pool'."""
-        if not self.use_graph_attr_conditioning:
-            return x_graph
-        if self.graph_attr_conditioning_mode != "fuse_pool":
-            return x_graph
-        if not hasattr(data, "graph_attr") or data.graph_attr is None:
-            raise ValueError(
-                "use_graph_attr_conditioning=True but data.graph_attr is missing."
-            )
-
-        graph_attr = data.graph_attr
-        num_graphs = x_graph.size(0)
-
-        if graph_attr.dim() == 1:
-            # If length matches num_graphs * feat_dim, reshape to [num_graphs, feat_dim].
-            if graph_attr.numel() % num_graphs == 0:
-                feat_dim = graph_attr.numel() // num_graphs
-                graph_attr = graph_attr.view(num_graphs, feat_dim)
-            else:
-                raise ValueError(
-                    f"One-dimensional graph attribute with graph_attr.numel()={graph_attr.numel()} is not divisible by num_graphs={num_graphs}."
-                )
-        elif graph_attr.dim() == 2:
-            if graph_attr.size(0) != num_graphs:
-                raise ValueError(
-                    f"graph_attr batch size does not match pooled graph embeddings: graph_attr={tuple(graph_attr.size())}, num_graphs={num_graphs}"
-                )
-        else:
-            raise ValueError(
-                f"Unsupported graph_attr ndim={graph_attr.dim()}; expected 1/2."
-            )
-
-        # Preserve the model/input dtype to avoid mixed precision mismatches under fp64 runs.
-        graph_attr = graph_attr.to(device=x_graph.device, dtype=x_graph.dtype)
-
-        self._ensure_graph_pool_projector(
-            graph_attr_dim=graph_attr.size(-1),
-            channel_dim=x_graph.size(-1),
-            device=x_graph.device,
-            dtype=x_graph.dtype,
-        )
-
-        # graph_attr is per-graph; assume batch aligns with x_graph rows
-        if graph_attr.size(0) != num_graphs:
-            raise ValueError(
-                f"graph_attr batch size does not match pooled graph embeddings: "
-                f"graph_attr={tuple(graph_attr.size())}, x_graph={tuple(x_graph.size())}, num_graphs={num_graphs}"
-            )
-
-        fused = torch.cat([x_graph, graph_attr], dim=-1)
-        return self.graph_pool_projector(fused)
 
     def _init_conv(self):
         self.graph_convs.append(
@@ -665,20 +410,6 @@ class Base(Module):
                 )
             geometry.update({"cell": data.cell, "pbc": data.pbc})
         return geometry
-
-    def _freeze_conv(self):
-        for module in [self.graph_convs, self.feature_layers]:
-            for layer in module:
-                for param in layer.parameters():
-                    param.requires_grad = False
-
-    def _set_bias(self):
-        for head, type in zip(self.heads_NN, self.head_type):
-            # FIXME: we only currently enable this for graph outputs.
-            if type == "graph":
-                # Set the bias of the last linear layer to a large value (UQ)
-                for branch in head.values():
-                    branch[-1].bias.data.fill_(self.initial_bias)
 
     def _init_node_conv(self):
         # *******convolutional layers for node level predictions*******#
@@ -867,10 +598,6 @@ class Base(Module):
                 )
             self.heads_NN.append(head_NN)
 
-    def enable_conv_checkpointing(self):
-        print_master("Enabling checkpointing")
-        self.conv_checkpointing = True
-
     def _postprocess_conv_output(self, inv_node_feat, batch, data, feat_layer):
         """Apply HydraGNN processing after one convolution layer.
 
@@ -1041,141 +768,5 @@ class Base(Module):
             return outputs, outputs_var
         return outputs
 
-    def loss(self, pred, value, head_index):
-        var = None
-        if self.var_output:
-            var = pred[1]
-            pred = pred[0]
-        if self.ilossweights_nll == 1:
-            return self.loss_nll(pred, value, head_index, var=var)
-        elif self.ilossweights_hyperp == 1:
-            return self.loss_hpweighted(pred, value, head_index, var=var)
-
-    def loss_nll(self, pred, value, head_index, var=None):
-        # negative log likelihood loss
-        # uncertainty to weigh losses in https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf
-        # fixme: Pei said that right now this is never used
-        raise ValueError("loss_nll() not ready yet")
-        nll_loss = 0
-        tasks_mseloss = []
-        loss = GaussianNLLLoss()
-        for ihead in range(self.num_heads):
-            head_pre = pred[ihead][:, :-1]
-            pred_shape = head_pre.shape
-            head_val = value[head_index[ihead]]
-            value_shape = head_val.shape
-            if pred_shape != value_shape:
-                head_val = torch.reshape(head_val, pred_shape)
-            head_var = torch.exp(pred[ihead][:, -1])
-            nll_loss += loss(head_pre, head_val, head_var)
-            tasks_mseloss.append(F.mse_loss(head_pre, head_val))
-
-        return nll_loss, tasks_mseloss, []
-
-    def loss_hpweighted(self, pred, value, head_index, var=None):
-        # weights for different tasks as hyper-parameters
-        tot_loss = 0
-        tasks_loss = []
-        for ihead in range(self.num_heads):
-            head_pre = pred[ihead]
-            pred_shape = head_pre.shape
-            head_val = value[head_index[ihead]]
-            value_shape = head_val.shape
-            if pred_shape != value_shape:
-                head_val = torch.reshape(head_val, pred_shape)
-            if var is None:
-                assert (
-                    self.loss_function_type != "GaussianNLLLoss"
-                ), "Expecting var for GaussianNLLLoss, but got None"
-                tot_loss += (
-                    self.loss_function(head_pre, head_val) * self.loss_weights[ihead]
-                )
-                tasks_loss.append(self.loss_function(head_pre, head_val))
-            else:
-                head_var = var[ihead]
-                tot_loss += (
-                    self.loss_function(head_pre, head_val, head_var)
-                    * self.loss_weights[ihead]
-                )
-                tasks_loss.append(self.loss_function(head_pre, head_val, head_var))
-
-        self.last_loss_components = supervised_loss_report(
-            self, pred, value, head_index, tasks_loss, var=var
-        )
-        return tot_loss, tasks_loss
-
     def __str__(self):
         return "Base"
-
-
-class MLPNode(Module):
-    def __init__(
-        self,
-        input_dim,
-        output_dim,
-        num_mlp,
-        hidden_dim_node,
-        node_type,
-        activation_function,
-        num_nodes=None,
-    ):
-        super().__init__()
-        self.input_dim = input_dim
-        self.output_dim = output_dim
-        self.node_type = node_type
-        self.num_mlp = num_mlp
-        self.num_nodes = num_nodes
-        self.activation_function = activation_function
-
-        self.mlp = ModuleList()
-        for _ in range(self.num_mlp):
-            denselayers = []
-            denselayers.append(Linear(self.input_dim, hidden_dim_node[0]))
-            denselayers.append(self.activation_function)
-            for ilayer in range(len(hidden_dim_node) - 1):
-                denselayers.append(
-                    Linear(hidden_dim_node[ilayer], hidden_dim_node[ilayer + 1])
-                )
-                denselayers.append(self.activation_function)
-            denselayers.append(Linear(hidden_dim_node[-1], output_dim))
-            self.mlp.append(Sequential(*denselayers))
-
-    def node_features_reshape(self, x, batch):
-        """reshape x from [batch_size*num_nodes, num_features] to [batch_size, num_features, num_nodes]"""
-        if self.num_nodes is None:
-            raise ValueError(
-                "num_nodes is required for mlp_per_node; use 'mlp' for variable-size graphs"
-            )
-        num_features = x.shape[1]
-        batch_size = batch.max() + 1
-        out = torch.zeros(
-            (batch_size, num_features, self.num_nodes),
-            dtype=x.dtype,
-            device=x.device,
-        )
-        for inode in range(self.num_nodes):
-            inode_index = [i for i in range(inode, batch.shape[0], self.num_nodes)]
-            out[:, :, inode] = x[inode_index, :]
-        return out
-
-    def forward(self, x: torch.Tensor, batch: torch.Tensor):
-        if self.node_type == "mlp":
-            outs = self.mlp[0](x)
-        else:
-            if self.num_nodes is None:
-                raise ValueError(
-                    "num_nodes is required for mlp_per_node; use 'mlp' for variable-size graphs"
-                )
-            outs = torch.zeros(
-                (x.shape[0], self.output_dim),
-                dtype=x.dtype,
-                device=x.device,
-            )
-            x_nodes = self.node_features_reshape(x, batch)
-            for inode in range(self.num_nodes):
-                inode_index = [i for i in range(inode, batch.shape[0], self.num_nodes)]
-                outs[inode_index, :] = self.mlp[inode](x_nodes[:, :, inode])
-        return outs
-
-    def __str__(self):
-        return "MLPNode"

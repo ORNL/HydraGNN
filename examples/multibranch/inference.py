@@ -33,7 +33,7 @@ import hydragnn.utils.profiling_and_tracing.tracer as tr
 from hydragnn.utils.print.print_utils import log, log0
 from hydragnn.distributed import nsplit
 from hydragnn.distributed import get_device
-from hydragnn.train.train_validate_test import test
+from hydragnn.train.loops import test
 
 try:
     from hydragnn.data.adiosdataset import AdiosDataset, adios2_open

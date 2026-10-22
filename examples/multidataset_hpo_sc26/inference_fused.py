@@ -48,7 +48,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.data import Batch
 
-from hydragnn.train.train_validate_test import (
+from hydragnn.train.precision import (
     move_batch_to_device,
     resolve_precision,
 )

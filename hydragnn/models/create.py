@@ -25,33 +25,7 @@ from hydragnn.models.registry import get_model_builder
 
 from hydragnn.distributed import get_device
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-from hydragnn.train.train_validate_test import resolve_precision
-
-
-def compute_forces_and_hessian(
-    energy, positions, *, compute_hessian=False, create_graph=False
-):
-    """Differentiate scalar graph energy into forces and a Cartesian Hessian."""
-    forces = -torch.autograd.grad(
-        energy,
-        positions,
-        grad_outputs=torch.ones_like(energy),
-        retain_graph=create_graph or compute_hessian,
-        create_graph=create_graph or compute_hessian,
-    )[0]
-    if not compute_hessian:
-        return forces, None
-
-    rows = []
-    for component in forces.reshape(-1):
-        force_gradient = torch.autograd.grad(
-            component,
-            positions,
-            retain_graph=True,
-            create_graph=create_graph,
-        )[0]
-        rows.append(-force_gradient.reshape(-1))
-    return forces, torch.stack(rows)
+from hydragnn.train.precision import resolve_precision
 
 
 def create_model_config(
@@ -169,7 +143,7 @@ def _resolve_settings(settings_cls, settings, flat_settings):
     return replace(settings, **overrides) if overrides else settings
 
 
-# FIXME: interface does not include ilossweights_hyperp, ilossweights_nll, dropout
+# FIXME: interface does not include dropout
 def create_model(
     mpnn_type: str,
     input_dim: int,

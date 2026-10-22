@@ -20,7 +20,7 @@ import torch.distributed as dist
 
 import hydragnn
 from hydragnn.models.create import create_model_config
-from hydragnn.train.train_validate_test import move_batch_to_device, resolve_precision
+from hydragnn.train.precision import move_batch_to_device, resolve_precision
 from hydragnn.distributed import get_device
 from hydragnn.config.config_utils import update_config
 from hydragnn.utils.print.print_utils import iterate_tqdm

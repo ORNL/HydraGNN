@@ -38,7 +38,8 @@ from hydragnn.config.config_utils import (
 )
 from hydragnn.utils.optimizer import select_optimizer
 from hydragnn.models.create import create_model_config
-from hydragnn.train.train_validate_test import train_validate_test, resolve_precision
+from hydragnn.train.precision import resolve_precision
+from hydragnn.train.train_validate_test import train_validate_test
 
 deepspeed_available = True
 try:
