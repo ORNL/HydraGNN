@@ -15,7 +15,7 @@ from hydragnn.models.create import create_model
 from hydragnn.models.backends.mace_utils.modules.blocks import (
     EquivariantProductBasisBlock,
 )
-from hydragnn.utils.model.model import update_multibranch_heads
+from hydragnn.models.utils.model import update_multibranch_heads
 
 
 def _create_mace(correlation):

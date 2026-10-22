@@ -16,7 +16,7 @@ from torch_geometric.loader import DataLoader
 
 import hydragnn
 from hydragnn.models.create import create_model
-from hydragnn.utils.model.model import load_existing_model, update_multibranch_heads
+from hydragnn.models.utils.model import load_existing_model, update_multibranch_heads
 from hydragnn.preprocess.load_data import split_dataset
 from hydragnn.distributed import setup_ddp, get_distributed_model
 from examples.pglearn.download_and_uncompress_data import _validate_path_component

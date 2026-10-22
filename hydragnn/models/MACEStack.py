@@ -55,15 +55,15 @@ from e3nn.util.jit import compile_mode
 
 # HydraGNN
 from .Base import Base
-from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
-from hydragnn.utils.model.irreps_tools import create_irreps_string
+from hydragnn.models.utils.operations import get_edge_vectors_and_lengths
+from hydragnn.models.utils.irreps_tools import create_irreps_string
 from hydragnn.models.backends.mace_utils.modules.blocks import (
     CombineBlock,
     SplitBlock,
     NonLinearMultiheadDecoderBlock,
     LinearMultiheadDecoderBlock,
 )
-from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
+from hydragnn.models.utils.operations import get_edge_vectors_and_lengths
 
 # Etc
 import numpy as np

@@ -11,7 +11,7 @@
 
 from hydragnn.distributed import setup_ddp, get_distributed_model
 from hydragnn.domain_losses import uses_interatomic_potential
-from hydragnn.utils.model import load_existing_model
+from hydragnn.models.utils import load_existing_model
 from hydragnn.config.config_utils import (
     get_log_name_config,
     parse_deepspeed_config,

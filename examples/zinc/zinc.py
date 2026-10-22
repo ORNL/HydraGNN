@@ -120,12 +120,12 @@ model, optimizer = hydragnn.distributed.distributed_model_wrapper(
     model, optimizer, verbosity, config=config
 )
 
-hydragnn.utils.model.model.load_existing_model_config(
+hydragnn.models.utils.model.load_existing_model_config(
     model=model, config=config["NeuralNetwork"]["Training"]
 )
 
 # Run training with the given model and zinc dataset.
-writer = hydragnn.utils.model.model.get_summary_writer(log_name)
+writer = hydragnn.models.utils.model.get_summary_writer(log_name)
 hydragnn.config.save_config(config, log_name)
 
 hydragnn.train.train_validate_test(

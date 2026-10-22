@@ -936,10 +936,10 @@ def main():
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5, min_lr=1.0e-5
     )
-    hydragnn.utils.model.load_existing_model_config(
+    hydragnn.models.utils.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
-    writer = hydragnn.utils.model.get_summary_writer(args.log)
+    writer = hydragnn.models.utils.get_summary_writer(args.log)
     hydragnn.train.train_validate_test(
         model,
         optimizer,
@@ -954,7 +954,7 @@ def main():
         create_plots=False,
         compute_grad_energy=uses_interatomic_potential(config),
     )
-    hydragnn.utils.model.save_model(model, optimizer, args.log)
+    hydragnn.models.utils.save_model(model, optimizer, args.log)
     if writer is not None:
         writer.close()
     dist.destroy_process_group()

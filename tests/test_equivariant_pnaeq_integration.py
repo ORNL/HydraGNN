@@ -17,7 +17,7 @@ from e3nn import o3
 from torch_geometric.data import Data
 
 from hydragnn.models.create import create_model
-from hydragnn.utils.model import update_multibranch_heads
+from hydragnn.models.utils import update_multibranch_heads
 
 
 def _create_model(**overrides):

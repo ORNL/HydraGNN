@@ -25,7 +25,7 @@ from hydragnn.utils.print.print_utils import log
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.config.config_utils import get_log_name_config
 from hydragnn.preprocess.load_data import split_dataset
-from hydragnn.utils.model import print_model
+from hydragnn.models.utils import print_model
 from hydragnn.data.distdataset import DistDataset
 from hydragnn.data.pickledataset import (
     SimplePickleWriter,
@@ -274,7 +274,7 @@ if __name__ == "__main__":
         model, optimizer, verbosity, config=config
     )
 
-    writer = hydragnn.utils.model.get_summary_writer(log_name)
+    writer = hydragnn.models.utils.get_summary_writer(log_name)
 
     if dist.is_initialized():
         dist.barrier()
@@ -294,7 +294,7 @@ if __name__ == "__main__":
         verbosity,
     )
 
-    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.models.utils.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
     if writer is not None:
         writer.close()

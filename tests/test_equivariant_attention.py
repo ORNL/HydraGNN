@@ -14,8 +14,8 @@ import copy
 import torch
 from e3nn import o3
 
-from hydragnn.globalAtt.complete_graph import complete_graph_edge_index
-from hydragnn.globalAtt.equivariant_attention import EquivariantAllToAllAttention
+from hydragnn.models.attention.complete_graph import complete_graph_edge_index
+from hydragnn.models.attention.equivariant_attention import EquivariantAllToAllAttention
 
 
 def _sample(dtype=torch.float64):

@@ -41,9 +41,9 @@ import torch.distributed as dist
 from mpi4py import MPI
 
 import hydragnn
-import hydragnn.utils.model as model_utils
-from hydragnn.utils.model.model import load_existing_model
-from hydragnn.utils.model import print_model
+import hydragnn.models.utils as model_utils
+from hydragnn.models.utils.model import load_existing_model
+from hydragnn.models.utils import print_model
 from hydragnn.distributed import get_device
 from hydragnn.config.config_utils import update_config
 from hydragnn.config import (

@@ -27,8 +27,8 @@ from torch_geometric.typing import OptTensor
 
 from .Base import Base
 
-from hydragnn.utils.model import unsorted_segment_mean
-from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
+from hydragnn.models.utils import unsorted_segment_mean
+from hydragnn.models.utils.operations import get_edge_vectors_and_lengths
 
 
 class RadiusInteractionGraph(nn.Module):

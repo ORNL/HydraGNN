@@ -145,7 +145,7 @@ Below are the four main functionalities for running the code.
 ```python
 import hydragnn
 from hydragnn.train import train_validate_test
-from hydragnn.utils.model import load_existing_model, save_model
+from hydragnn.models.utils import load_existing_model, save_model
 
 train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
     trainset, valset, testset, batch_size=32

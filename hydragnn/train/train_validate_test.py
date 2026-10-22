@@ -23,8 +23,8 @@ from hydragnn.distributed import (
     check_remaining,
     synchronize_local_sgd_parameters,
 )
-from hydragnn.utils.model.model import Checkpoint, EarlyStopping
-from hydragnn.globalAtt.gps import redraw_performer_projections
+from hydragnn.models.utils.model import Checkpoint, EarlyStopping
+from hydragnn.models.attention.gps import redraw_performer_projections
 from hydragnn.config.variable_schema import parse_variable_schema
 from hydragnn.loss_reporting import (
     accumulate_loss_report,

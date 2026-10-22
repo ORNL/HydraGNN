@@ -17,7 +17,7 @@ import argparse
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.config.config_utils import get_log_name_config
-from hydragnn.utils.model import print_model
+from hydragnn.models.utils import print_model
 from hydragnn.data.serializeddataset import SerializedDataset
 from eam_preprocess import prepare_eam_dataset, split_and_write_eam_dataset
 
@@ -192,7 +192,7 @@ if __name__ == "__main__":
     )
 
     log_name = get_log_name_config(config)
-    writer = hydragnn.utils.model.get_summary_writer(log_name)
+    writer = hydragnn.models.utils.get_summary_writer(log_name)
 
     if dist.is_initialized():
         dist.barrier()
@@ -213,7 +213,7 @@ if __name__ == "__main__":
         create_plots=True,
     )
 
-    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.models.utils.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.time_utils.print_timers(verbosity)
     if writer is not None:
         writer.close()

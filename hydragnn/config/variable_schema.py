@@ -509,3 +509,87 @@ def validate_node_type_contract(
             f"Variables.node_types {sorted(schema.node_types)} do not match dataset "
             f"node types {sorted(node_types)}"
         )
+
+
+def normalize_edge_types(edge_types):
+    if not isinstance(edge_types, list) or not edge_types:
+        raise ValueError("edge_types must be a non-empty list.")
+
+    normalized = []
+    seen = set()
+    required = {"source_type", "relation", "target_type", "dim"}
+    for index, spec in enumerate(edge_types):
+        if not isinstance(spec, dict) or set(spec) != required:
+            raise ValueError(
+                f"edge_types[{index}] must contain exactly {sorted(required)}."
+            )
+        source_type = str(spec["source_type"]).strip()
+        relation = str(spec["relation"]).strip()
+        target_type = str(spec["target_type"]).strip()
+        if not source_type or not relation or not target_type:
+            raise ValueError(f"edge_types[{index}] contains an empty type name.")
+        try:
+            dim = int(spec["dim"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"edge_types[{index}].dim must be an integer.") from exc
+        if dim < 0:
+            raise ValueError(f"edge_types[{index}].dim must be >= 0.")
+        edge_type = (source_type, relation, target_type)
+        if edge_type in seen:
+            raise ValueError(f"Duplicate edge type declaration: {edge_type}.")
+        seen.add(edge_type)
+        normalized.append(
+            {
+                "source_type": source_type,
+                "relation": relation,
+                "target_type": target_type,
+                "dim": dim,
+            }
+        )
+    return normalized
+
+
+def edge_type_dims(edge_types):
+    return {
+        (spec["source_type"], spec["relation"], spec["target_type"]): spec["dim"]
+        for spec in normalize_edge_types(edge_types)
+    }
+
+
+def validate_edge_type_contract(edge_types, data):
+    configured = edge_type_dims(edge_types)
+    if not hasattr(data, "edge_types"):
+        raise ValueError("Configured edge_types require a heterogeneous dataset.")
+
+    actual = {tuple(edge_type) for edge_type in data.edge_types}
+    declared = set(configured)
+    if actual != declared:
+        raise ValueError(
+            "Configured edge_types do not match dataset edge types: "
+            f"missing={sorted(actual - declared)}, "
+            f"unexpected={sorted(declared - actual)}."
+        )
+
+    for edge_type, expected_dim in configured.items():
+        store = data[edge_type]
+        edge_index = getattr(store, "edge_index", None)
+        if not isinstance(edge_index, torch.Tensor):
+            raise ValueError(f"Edge type {edge_type} is missing edge_index.")
+        edge_attr = getattr(store, "edge_attr", None)
+        if expected_dim == 0:
+            if isinstance(edge_attr, torch.Tensor):
+                raise ValueError(
+                    f"Featureless edge type {edge_type} must not have edge_attr."
+                )
+            continue
+        expected_shape = (int(edge_index.shape[1]), expected_dim)
+        if (
+            not isinstance(edge_attr, torch.Tensor)
+            or tuple(edge_attr.shape) != expected_shape
+        ):
+            actual_shape = None if edge_attr is None else tuple(edge_attr.shape)
+            raise ValueError(
+                f"Edge type {edge_type} has edge_attr shape {actual_shape}; "
+                f"expected {expected_shape}."
+            )
+    return configured

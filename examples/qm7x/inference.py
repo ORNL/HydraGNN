@@ -21,7 +21,7 @@ import numpy as np
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.distributed import get_device
-from hydragnn.utils.model import load_existing_model
+from hydragnn.models.utils import load_existing_model
 from hydragnn.data import SimplePickleDataset
 from hydragnn.config import (
     get_log_name_config,

@@ -16,12 +16,14 @@ import torch
 from e3nn import o3
 from torch_geometric.data import Data
 
-from hydragnn.globalAtt.equivariant_local_global import EquivariantLocalGlobalConv
+from hydragnn.models.attention.equivariant_local_global import (
+    EquivariantLocalGlobalConv,
+)
 from hydragnn.models.create import create_model
 from hydragnn.config.config_utils import (
     validate_equivariant_transformer_config,
 )
-from hydragnn.utils.model import update_multibranch_heads
+from hydragnn.models.utils import update_multibranch_heads
 
 
 def _create_model(**overrides):

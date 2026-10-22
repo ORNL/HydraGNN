@@ -21,14 +21,16 @@ from torch_geometric.nn import (
 from torch_geometric.nn import Sequential as PyGSequential
 from torch.utils.checkpoint import checkpoint
 import torch_scatter
-from hydragnn.utils.model import activation_function_selection, loss_function_selection
+from hydragnn.models.utils import activation_function_selection, loss_function_selection
 import sys
 import pdb
 from hydragnn.distributed import get_device
 from hydragnn.utils.print.print_utils import print_master
-from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
-from hydragnn.globalAtt.gps import HydraGPSConv
-from hydragnn.globalAtt.equivariant_local_global import EquivariantLocalGlobalConv
+from hydragnn.models.utils.operations import get_edge_vectors_and_lengths
+from hydragnn.models.attention.gps import HydraGPSConv
+from hydragnn.models.attention.equivariant_local_global import (
+    EquivariantLocalGlobalConv,
+)
 from hydragnn.loss_reporting import supervised_loss_report
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 
@@ -239,7 +241,7 @@ class Base(Module):
             )
 
         self.use_encodings = (
-            False  # provision to decouple encodings from globalAtt later
+            False  # provision to decouple encodings from attention later
         )
 
         # Specify learnable embeddings

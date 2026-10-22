@@ -36,7 +36,7 @@ mpi4py.rc.threads = False
 from hydragnn.data.abstractbasedataset import AbstractBaseDataset
 from hydragnn.distributed import nsplit
 from hydragnn.preprocess.graph_samples_checks_and_updates import get_radius_graph_pbc
-from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
+from hydragnn.models.utils.operations import get_edge_vectors_and_lengths
 
 # Angstrom unit
 primitive_bravais_lattice_constant_x = 3.8

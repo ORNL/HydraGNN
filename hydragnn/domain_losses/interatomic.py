@@ -1,8 +1,6 @@
 import torch
 import torch_scatter
 
-from hydragnn.utils.model import loss_function_selection
-
 
 class InteratomicPotentialDomainLoss(torch.nn.Module):
     """Declarative energy/force training objective for interatomic potentials."""
@@ -98,6 +96,9 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
         return self.model(data)
 
     def _loss(self, name, prediction, target):
+        # Imported lazily: hydragnn.models imports hydragnn.domain_losses.
+        from hydragnn.models.utils import loss_function_selection
+
         if prediction.numel() == 0:
             return prediction.sum()
         loss_name = self.terms[name].get(

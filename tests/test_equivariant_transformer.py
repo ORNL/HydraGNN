@@ -13,7 +13,7 @@ import pytest
 import torch
 from e3nn import o3
 
-from hydragnn.globalAtt.equivariant_transformer import (
+from hydragnn.models.attention.equivariant_transformer import (
     EquivariantRMSNorm,
     EquivariantTransformerLayer,
 )

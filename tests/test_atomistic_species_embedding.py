@@ -6,7 +6,7 @@ import torch
 from torch_geometric.data import Data
 
 from hydragnn.models.create import create_model
-from hydragnn.utils.model.model import update_multibranch_heads
+from hydragnn.models.utils.model import update_multibranch_heads
 
 GENERIC_MPNN_TYPES = (
     "PAINN",

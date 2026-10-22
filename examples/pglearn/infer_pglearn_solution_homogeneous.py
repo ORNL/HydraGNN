@@ -18,7 +18,7 @@ from hydragnn.data.hdf5dataset import HDF5Dataset
 from hydragnn.data.pickledataset import SimplePickleDataset
 from hydragnn.distributed import setup_ddp
 from hydragnn.config.config_utils import update_config
-from hydragnn.utils.model import load_existing_model
+from hydragnn.models.utils import load_existing_model
 
 try:
     from hydragnn.data.adiosdataset import AdiosDataset

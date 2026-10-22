@@ -13,7 +13,9 @@ import pytest
 import torch
 from e3nn import o3
 
-from hydragnn.globalAtt.equivariant_local_global import EquivariantLocalGlobalConv
+from hydragnn.models.attention.equivariant_local_global import (
+    EquivariantLocalGlobalConv,
+)
 
 
 class _EquivariantScaleConv(torch.nn.Module):

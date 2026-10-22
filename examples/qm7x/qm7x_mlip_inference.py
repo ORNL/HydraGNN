@@ -26,7 +26,7 @@ import numpy as np
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.distributed import get_device, setup_ddp, nsplit
-from hydragnn.utils.model import load_existing_model
+from hydragnn.models.utils import load_existing_model
 from hydragnn.data.pickledataset import SimplePickleDataset
 from hydragnn.config.config_utils import (
     update_config,
@@ -181,7 +181,7 @@ if __name__ == "__main__":
 
     log_name = "qm7x"
     hydragnn.utils.print.setup_log(log_name)
-    writer = hydragnn.utils.model.get_summary_writer(log_name)
+    writer = hydragnn.models.utils.get_summary_writer(log_name)
 
     # Configurable run choices (JSON file that accompanies this example script).
     with open(input_filename, "r") as f:

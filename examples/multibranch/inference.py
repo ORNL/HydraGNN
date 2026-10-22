@@ -24,7 +24,7 @@ import numpy as np
 
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-from hydragnn.utils.model import print_model
+from hydragnn.models.utils import print_model
 from hydragnn.data.distdataset import DistDataset
 from hydragnn.data.pickledataset import SimplePickleDataset
 
@@ -461,7 +461,7 @@ if __name__ == "__main__":
         model = hydragnn.distributed.get_distributed_model(model, verbosity)
     # Print details of neural network architecture
     print_model(model)
-    hydragnn.utils.model.load_existing_model_config(
+    hydragnn.models.utils.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], path=os.path.dirname(modeldir)
     )
 

@@ -13,7 +13,7 @@ import pytest
 import torch
 from e3nn import o3
 
-from hydragnn.globalAtt.equivariant_features import (
+from hydragnn.models.attention.equivariant_features import (
     IrrepsFeatureAdapter,
     ScalarIrrepsAdapter,
     ScalarVectorIrrepsAdapter,

@@ -2,7 +2,7 @@ import types
 
 import torch
 
-from hydragnn.globalAtt.gps import HydraGPSConv
+from hydragnn.models.attention.gps import HydraGPSConv
 from hydragnn.models.Base import Base
 
 

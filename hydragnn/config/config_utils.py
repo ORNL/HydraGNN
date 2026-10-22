@@ -13,9 +13,7 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
     check_if_graph_size_variable,
     gather_deg,
 )
-from hydragnn.utils.model.model import calculate_avg_deg
 from hydragnn.distributed import get_comm_size_and_rank
-from hydragnn.utils.model import update_multibranch_heads
 from copy import deepcopy
 import warnings
 import json
@@ -26,10 +24,12 @@ import torch
 from hydragnn.architecture_defaults import MODEL_SPECIFIC_ARCHITECTURE_DEFAULTS
 from hydragnn.model_settings import EquivariantAttentionSettings
 from .variable_schema import (
+    normalize_edge_types,
     encoded_schema_dimensions,
     get_variable_schema,
     node_type_feature_dims,
     schema_dimensions,
+    validate_edge_type_contract,
     validate_node_type_contract,
 )
 
@@ -57,6 +57,12 @@ def sanitize_filename_component(value, max_length=48):
 
 
 def update_config(config, train_loader, val_loader, test_loader):
+    # Imported lazily: hydragnn.models imports hydragnn.config.
+    from hydragnn.models.utils.model import (
+        calculate_avg_deg,
+        update_multibranch_heads,
+    )
+
     """check if config input consistent and update config with model and datasets"""
 
     graph_size_variable = os.getenv("HYDRAGNN_USE_VARIABLE_GRAPH_SIZE")
@@ -498,90 +504,6 @@ def update_config_equivariance(config):
     else:
         config["equivariance"] = None
     return config
-
-
-def normalize_edge_types(edge_types):
-    if not isinstance(edge_types, list) or not edge_types:
-        raise ValueError("edge_types must be a non-empty list.")
-
-    normalized = []
-    seen = set()
-    required = {"source_type", "relation", "target_type", "dim"}
-    for index, spec in enumerate(edge_types):
-        if not isinstance(spec, dict) or set(spec) != required:
-            raise ValueError(
-                f"edge_types[{index}] must contain exactly {sorted(required)}."
-            )
-        source_type = str(spec["source_type"]).strip()
-        relation = str(spec["relation"]).strip()
-        target_type = str(spec["target_type"]).strip()
-        if not source_type or not relation or not target_type:
-            raise ValueError(f"edge_types[{index}] contains an empty type name.")
-        try:
-            dim = int(spec["dim"])
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"edge_types[{index}].dim must be an integer.") from exc
-        if dim < 0:
-            raise ValueError(f"edge_types[{index}].dim must be >= 0.")
-        edge_type = (source_type, relation, target_type)
-        if edge_type in seen:
-            raise ValueError(f"Duplicate edge type declaration: {edge_type}.")
-        seen.add(edge_type)
-        normalized.append(
-            {
-                "source_type": source_type,
-                "relation": relation,
-                "target_type": target_type,
-                "dim": dim,
-            }
-        )
-    return normalized
-
-
-def edge_type_dims(edge_types):
-    return {
-        (spec["source_type"], spec["relation"], spec["target_type"]): spec["dim"]
-        for spec in normalize_edge_types(edge_types)
-    }
-
-
-def validate_edge_type_contract(edge_types, data):
-    configured = edge_type_dims(edge_types)
-    if not hasattr(data, "edge_types"):
-        raise ValueError("Configured edge_types require a heterogeneous dataset.")
-
-    actual = {tuple(edge_type) for edge_type in data.edge_types}
-    declared = set(configured)
-    if actual != declared:
-        raise ValueError(
-            "Configured edge_types do not match dataset edge types: "
-            f"missing={sorted(actual - declared)}, "
-            f"unexpected={sorted(declared - actual)}."
-        )
-
-    for edge_type, expected_dim in configured.items():
-        store = data[edge_type]
-        edge_index = getattr(store, "edge_index", None)
-        if not isinstance(edge_index, torch.Tensor):
-            raise ValueError(f"Edge type {edge_type} is missing edge_index.")
-        edge_attr = getattr(store, "edge_attr", None)
-        if expected_dim == 0:
-            if isinstance(edge_attr, torch.Tensor):
-                raise ValueError(
-                    f"Featureless edge type {edge_type} must not have edge_attr."
-                )
-            continue
-        expected_shape = (int(edge_index.shape[1]), expected_dim)
-        if (
-            not isinstance(edge_attr, torch.Tensor)
-            or tuple(edge_attr.shape) != expected_shape
-        ):
-            actual_shape = None if edge_attr is None else tuple(edge_attr.shape)
-            raise ValueError(
-                f"Edge type {edge_type} has edge_attr shape {actual_shape}; "
-                f"expected {expected_shape}."
-            )
-    return configured
 
 
 def update_config_edge_dim(config):

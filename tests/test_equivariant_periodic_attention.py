@@ -12,8 +12,10 @@ import pytest
 import torch
 from e3nn import o3
 
-from hydragnn.globalAtt.equivariant_transformer import EquivariantTransformerLayer
-from hydragnn.globalAtt.periodic_supercell import (
+from hydragnn.models.attention.equivariant_transformer import (
+    EquivariantTransformerLayer,
+)
+from hydragnn.models.attention.periodic_supercell import (
     build_periodic_attention_sources,
 )
 from hydragnn.config.config_utils import (

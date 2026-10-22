@@ -1,11 +1,11 @@
 import torch
 from torch_geometric.nn import GATConv, HeteroConv
 
-from hydragnn.globalAtt.HeteroGPS import (
+from hydragnn.models.attention.HeteroGPS import (
     HeteroGPSConv,
     StructuralCoordinatePerformerAttention,
 )
-from hydragnn.globalAtt.structural import StructuralAttentionContext
+from hydragnn.models.attention.structural import StructuralAttentionContext
 
 
 class DummyEquivariantLocalConv(torch.nn.Module):
