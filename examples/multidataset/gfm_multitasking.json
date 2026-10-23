@@ -90,7 +90,7 @@
                 "dim": 1
             },
             {
-                "name": "force",
+                "name": "forces",
                 "level": "node",
                 "dim": 3
             }
