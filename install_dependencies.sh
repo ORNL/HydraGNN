@@ -45,11 +45,12 @@ EXTRAS="torch"
 
 python -m pip install --upgrade "setuptools>=77" wheel
 
+# PyTorch must be present before the PyG extensions build.
+echo "Installing PyTorch..."
+python -m pip install -v torch==2.13.0 torchvision==0.28.0
+
 echo "Installing HydraGNN with extras [${EXTRAS}]..."
 python -m pip install --no-build-isolation -v -e ".[${EXTRAS}]"
-
-echo "Installing PyTorch Geometric extensions..."
-python -m pip install --no-build-isolation -v -e ".[pyg]"
 
 # Build isolation stays enabled so omegaconf's sdist-only antlr4 dependency can build.
 echo "Installing model-specific backbone dependencies..."

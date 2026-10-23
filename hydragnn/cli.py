@@ -139,7 +139,7 @@ def write_split_datasets(path, fmt, trainset, valset, testset, comm=None):
             "ADIOS cannot store HeteroData samples; use the pickle format."
         )
     if hetero:
-        deg = gather_hetero_deg(trainset, 0, rank_local=True)
+        deg = gather_hetero_deg(trainset, 0, comm=comm)
     else:
         deg = gather_deg(trainset)
     splits = dict(zip(SPLITS, (trainset, valset, testset)))
@@ -306,7 +306,10 @@ def run_training(
     arch = config["NeuralNetwork"]["Architecture"]
     # update_config only computes homogeneous PNA degrees.
     if arch["mpnn_type"] == "HeteroPNA" and not arch.get("pna_deg"):
-        arch["pna_deg"] = gather_hetero_deg(trainset, verbosity)
+        if hasattr(trainset, "pna_deg"):
+            arch["pna_deg"] = list(trainset.pna_deg)
+        else:
+            arch["pna_deg"] = gather_hetero_deg(trainset, verbosity)
         arch["max_neighbours"] = len(arch["pna_deg"]) - 1
     precision = config["NeuralNetwork"]["Training"]["precision"]
     comm.Barrier()

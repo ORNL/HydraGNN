@@ -57,9 +57,9 @@ or 2.14 so facility installers can retain their tested accelerator wheels.
 
 **Alternative manual approach:**
 ```bash
-# Install HydraGNN with pinned PyTorch, then the compiled PyG extensions
-pip install -e ".[torch]"
-pip install --no-build-isolation -e ".[pyg]" \
+# Install PyTorch first so the compiled PyG extensions can build against it
+pip install torch==2.13.0 torchvision==0.28.0
+pip install --no-build-isolation -e ".[torch]" \
   -f https://data.pyg.org/whl/torch-2.13.0+cpu.html
 pip install -e ".[uma]"
 ```
@@ -67,13 +67,14 @@ pip install -e ".[uma]"
 **Extras (choose what you need):**
 ```bash
 # Core only; keeps an existing PyTorch 2.13/2.14 install
-pip install -e .
+pip install --no-build-isolation -e . \
+  -f https://data.pyg.org/whl/torch-<torch-version>+<device>.html
 
 # Optional features (HPO, ADIOS, etc.)
 pip install -e ".[optional]"
 ```
 
-Available extras: `torch`, `pyg`, `uma`, `dev`, `optional`, `deepspeed`.
+Available extras: `torch`, `uma`, `dev`, `optional`, `deepspeed`.
 
 `pyg-lib` is built from source in CI because its binary wheels are hosted
 separately from PyPI. The official

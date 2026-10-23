@@ -42,17 +42,15 @@ dependencies = [
     "torch-ema==0.3",
     "torchmetrics==1.4.0",
     "torch_geometric==2.8.0",
-]
-
-[project.optional-dependencies]
-torch = ["torch==2.13.0", "torchvision==0.28.0"]
-# Compiled extensions: install with -f https://data.pyg.org/whl/torch-<version>+<device>.html
-pyg = [
+    # Imported eagerly; prebuilt wheels: -f https://data.pyg.org/whl/torch-<version>+<device>.html
     "torch_scatter==2.1.2",
     "torch_sparse==0.6.18",
     "torch_cluster==1.6.3",
     "torch_spline_conv==1.2.2",
 ]
+
+[project.optional-dependencies]
+torch = ["torch==2.13.0", "torchvision==0.28.0"]
 dev = [
     "black==26.5.1",
     "pre-commit",

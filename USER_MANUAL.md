@@ -113,10 +113,10 @@ Legacy-checkpoint compatibility is a separate issue.
 ```bash
 ./install_dependencies.sh
 ```
-This script installs HydraGNN in editable mode with these `pyproject.toml`
-extras, in order:
-- `torch`: pinned PyTorch and torchvision (core dependencies come along)
-- `pyg`: compiled PyTorch Geometric extensions
+This script installs pinned PyTorch, then HydraGNN in editable mode (core
+dependencies include PyTorch Geometric and its compiled extensions), then
+these `pyproject.toml` extras:
+- `torch`: pinned PyTorch and torchvision
 - `uma`: dependencies used by the vendored UMA backbone
 
 You can also install development or optional dependencies:
@@ -139,8 +139,8 @@ Unknown dependency-group names are rejected.
 #### Manual Installation (Advanced)
 If you prefer, you can install the extras manually:
 ```bash
-pip install -e ".[torch]"
-pip install --no-build-isolation -e ".[pyg]" \
+pip install torch==2.13.0 torchvision==0.28.0
+pip install --no-build-isolation -e ".[torch]" \
   -f https://data.pyg.org/whl/torch-2.13.0+cpu.html
 pip install -e ".[uma]"
 # For development tools (optional)

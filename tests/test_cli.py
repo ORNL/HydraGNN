@@ -290,9 +290,37 @@ def test_gather_hetero_deg_rank_local(monkeypatch):
     monkeypatch.setattr(dist, "get_rank", lambda: 0)
     monkeypatch.setattr(dist, "get_world_size", lambda: 2)
     monkeypatch.setattr(dist, "all_reduce", lambda tensor, op: None)
+
+    class TwoIdenticalRanksComm:
+        def allreduce(self, value, op):
+            return value if op == MPI.MAX else value * 2
+
     samples = _hetero_samples(2)
     assert gather_hetero_deg(samples, 0) == [1, 5, 1]
-    assert gather_hetero_deg(samples, 0, rank_local=True) == [2, 10, 2]
+    assert gather_hetero_deg(samples, 0, comm=TwoIdenticalRanksComm()) == [4, 20, 4]
+
+
+def test_run_training_reuses_cached_hetero_pna_deg(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    hydragnn.distributed.setup_ddp()
+    samples = _hetero_samples(8)
+
+    class CachedDegList(list):
+        pna_deg = [7, 0, 0, 1]
+
+    hydragnn.utils.print.setup_log("hetero_cached")
+    _, config = cli.run_training(
+        _hetero_config("HeteroPNA"),
+        CachedDegList(samples[:4]),
+        samples[4:6],
+        samples[6:],
+        "hetero_cached",
+        None,
+        before_train=lambda *args: True,
+    )
+    arch = config["NeuralNetwork"]["Architecture"]
+    assert arch["pna_deg"] == [7, 0, 0, 1]
+    assert arch["max_neighbours"] == 3
 
 
 def test_run_training_before_train_can_skip_training(tmp_path, monkeypatch):
