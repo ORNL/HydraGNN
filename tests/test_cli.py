@@ -49,16 +49,16 @@ def test_dataset_path(tmp_path):
     assert cli.dataset_path(str(tmp_path), "qm9", "pickle").endswith(
         "dataset/qm9.pickle"
     )
+    assert cli.dataset_path(str(tmp_path), "qm9", "hdf5").endswith("dataset/qm9.h5")
 
 
-@pytest.mark.parametrize("fmt", ["pickle", "adios"])
+@pytest.mark.parametrize("fmt", ["pickle", "adios", "hdf5"])
 def test_hydragnn_train_end_to_end(tmp_path, monkeypatch, fmt):
-    if fmt == "adios":
-        pytest.importorskip("adios2")
+    pytest.importorskip({"pickle": "pickle", "adios": "adios2", "hdf5": "h5py"}[fmt])
     monkeypatch.chdir(tmp_path)
     hydragnn.distributed.setup_ddp()
     samples = _samples(12)
-    dataset = str(tmp_path / ("graphs.bp" if fmt == "adios" else "graphs.pickle"))
+    dataset = cli.dataset_path(str(tmp_path), "graphs", fmt)
     cli.write_split_datasets(
         dataset, fmt, samples[:8], samples[8:10], samples[10:], comm=MPI.COMM_SELF
     )
