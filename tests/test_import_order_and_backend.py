@@ -47,8 +47,11 @@ def test_setup_ddp_refuses_gloo_when_gpus_assigned(no_gpu, monkeypatch, var):
         hdist.setup_ddp()
 
 
-def test_setup_ddp_ignores_empty_gpu_assignment(no_gpu, monkeypatch):
-    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
+@pytest.mark.parametrize(
+    "var,value", [("CUDA_VISIBLE_DEVICES", ""), ("SLURM_GPUS_ON_NODE", "0")]
+)
+def test_setup_ddp_ignores_empty_gpu_assignment(no_gpu, monkeypatch, var, value):
+    monkeypatch.setenv(var, value)
     monkeypatch.setattr(hdist, "init_comm_size_and_rank", lambda: (1, 0))
     monkeypatch.setattr(
         hdist.dist,

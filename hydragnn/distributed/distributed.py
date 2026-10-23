@@ -186,6 +186,8 @@ def setup_ddp(use_deepspeed=False):
             v
             for v in _GPU_ASSIGNMENT_VARS
             if os.getenv(v, "").strip() not in ("", "-1", "NoDevFiles")
+            # SLURM_GPUS_ON_NODE is a count, not a device mask.
+            and not (v == "SLURM_GPUS_ON_NODE" and os.environ[v].strip() == "0")
         ]
         if assigned:
             raise RuntimeError(
