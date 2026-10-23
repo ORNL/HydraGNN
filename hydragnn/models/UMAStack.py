@@ -138,7 +138,7 @@ from hydragnn.models.Base import Base
 # ``_load_uma_backbones``) rather than at module import time. This keeps
 # ``import hydragnn`` fast -- the sizeable vendored fairchem-core tree is only
 # loaded when a UMA model is actually constructed. Its lightweight import-time
-# deps (omegaconf, monty) are declared in requirements-specific-models.txt; the
+# deps (omegaconf, monty) are the ``uma`` extra in pyproject.toml; the
 # heavier fairchem-core deps (torchtnt/ray/wandb/hydra) live only in checkpoint/
 # inference code paths that HydraGNN never reaches.
 
@@ -161,8 +161,8 @@ def _load_uma_backbones():
         raise ImportError(
             "The UMA backbone could not be imported. Install its optional "
             "dependencies:\n"
-            "    pip install omegaconf monty\n"
-            "(declared in requirements-specific-models.txt; underlying import "
+            "    pip install 'hydragnn[uma]'\n"
+            "(or: pip install omegaconf monty; underlying import "
             f"error: {exc})"
         ) from exc
     return eSCNMDBackbone, eSCNMDMoeBackbone

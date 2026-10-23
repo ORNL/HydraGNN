@@ -18,3 +18,4 @@ installation_DOE_supercomputers/HydraGNN-Installation-Frontier*/
   *.pkl
   *.bp/
   *.bp
+hydragnn_venv/

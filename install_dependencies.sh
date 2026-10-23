@@ -39,37 +39,24 @@ esac
 
 echo "Installing HydraGNN dependencies with consistent settings..."
 
-# Install base dependencies
-echo "Installing base dependencies..."
-python -m pip install --no-build-isolation -v -r requirements-base.txt
+EXTRAS="torch"
+[ "${INSTALL_DEV}" -eq 1 ] && EXTRAS="${EXTRAS},dev"
+[ "${INSTALL_OPTIONAL}" -eq 1 ] && EXTRAS="${EXTRAS},optional"
 
-# Install PyTorch dependencies
-echo "Installing PyTorch dependencies..."
-python -m pip install --no-build-isolation -v -r requirements-torch.txt
+python -m pip install --upgrade "setuptools>=77" wheel
 
-# Install PyTorch Geometric dependencies
-echo "Installing PyTorch Geometric dependencies..."
-python -m pip install --no-build-isolation -v -r requirements-pyg.txt
+# PyTorch must be present before the PyG extensions build.
+echo "Installing PyTorch..."
+python -m pip install -v torch==2.13.0 torchvision==0.28.0
 
-# Install development dependencies (optional)
-if [ "${INSTALL_DEV}" -eq 1 ]; then
-    echo "Installing development dependencies..."
-    python -m pip install --no-build-isolation -v -r requirements-dev.txt
-fi
+echo "Installing HydraGNN with extras [${EXTRAS}]..."
+python -m pip install --no-build-isolation -v -e ".[${EXTRAS}]"
 
-# Install model-specific backbone dependencies (e.g. FAIRChem UMA).
-# NOTE: build isolation is intentionally ENABLED here (no --no-build-isolation)
-# so omegaconf's sdist-only antlr4-python3-runtime dependency can build.
+# Build isolation stays enabled so omegaconf's sdist-only antlr4 dependency can build.
 echo "Installing model-specific backbone dependencies..."
-python -m pip install -v -r requirements-specific-models.txt
-
-# Install optional dependencies (optional)
-if [ "${INSTALL_OPTIONAL}" -eq 1 ]; then
-    echo "Installing optional dependencies..."
-    python -m pip install --no-build-isolation -v -r requirements-optional.txt
-fi
+python -m pip install -v -e ".[uma]"
 
 echo "Installation complete!"
-echo "HydraGNN source version: $(python setup.py --version)"
+echo "HydraGNN source version: $(python -c 'import hydragnn._version as v; print(v.__version__)')"
 echo "Installed package versions:"
 python -m pip list | grep -E "(numpy|scipy|torch|scikit-learn|matplotlib|ase)"

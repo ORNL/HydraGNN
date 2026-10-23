@@ -46,8 +46,8 @@ PyTorch and PyTorch Geometric:
 
 The generic `install_dependencies.sh` baseline currently uses NumPy 2.4.6, PyTorch 2.13.0,
 torchvision 0.28.0, and PyTorch Geometric 2.8.0. HydraGNN accepts PyTorch 2.13
-or 2.14 so facility installers can retain their tested accelerator wheels. The
-requirements files are the authoritative source for the complete version set.
+or 2.14 so facility installers can retain their tested accelerator wheels.
+`pyproject.toml` is the authoritative source for the complete version set.
 
 **Recommended approach - standard installation:**
 ```bash
@@ -57,27 +57,24 @@ requirements files are the authoritative source for the complete version set.
 
 **Alternative manual approach:**
 ```bash
-# Install the modular requirements in dependency order
-pip install --no-build-isolation -v -r requirements-base.txt
-pip install --no-build-isolation -v -r requirements-torch.txt
-pip install --no-build-isolation -v -r requirements-pyg.txt
-pip install -v -r requirements-specific-models.txt
+# Install PyTorch first so the compiled PyG extensions can build against it
+pip install torch==2.13.0 torchvision==0.28.0
+pip install --no-build-isolation -e ".[torch]" \
+  -f https://data.pyg.org/whl/torch-2.13.0+cpu.html
+pip install -e ".[uma]"
 ```
 
-**Modular installation (choose what you need):**
+**Extras (choose what you need):**
 ```bash
-# Base only (scientific computing, materials science, visualization)
-pip install -r requirements-base.txt
+# Core only; keeps an existing PyTorch 2.13/2.14 install
+pip install --no-build-isolation -e . \
+  -f https://data.pyg.org/whl/torch-<torch-version>+<device>.html
 
-# Add PyTorch
-pip install -r requirements-torch.txt
-
-# Add PyTorch Geometric
-pip install -r requirements-pyg.txt
-
-# Add optional features (HPO, FAIRChem, etc.)
-pip install -r requirements-optional.txt
+# Optional features (HPO, ADIOS, etc.)
+pip install -e ".[optional]"
 ```
+
+Available extras: `torch`, `uma`, `dev`, `optional`, `deepspeed`.
 
 `pyg-lib` is built from source in CI because its binary wheels are hosted
 separately from PyPI. The official
@@ -96,7 +93,7 @@ reproducibility. The build requires a working C++ compiler.
 If you plan to modify the code, include packages for formatting (`black`) and
 testing (`pytest`) the code:
 ```bash
-pip install -r requirements-dev.txt
+pip install -e ".[dev]"
 # Or with the script:
 ./install_dependencies.sh dev
 

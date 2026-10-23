@@ -70,9 +70,9 @@ attention backend is the safe default when double backward is required.
 ## Dependency and provenance
 
 Vendored source retains its upstream MIT notices; HydraGNN additions remain
-under the repository's BSD-3-Clause terms. `requirements-specific-models.txt`
+under the repository's BSD-3-Clause terms. The `uma` extra in `pyproject.toml`
 provides auxiliary dependencies required by the vendored UMA backbone, while
-`requirements-dev.txt` freezes `fairchem-core==2.22.0` for native parity tests.
+the `dev` extra freezes `fairchem-core==2.22.0` for native parity tests.
 The native test dependency is distinct from the vendored runtime used by
 HydraGNN's adapters. See the stack module docstrings and vendoring provenance
 files for the complete key mapping and upstream revision details.

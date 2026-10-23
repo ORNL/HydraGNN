@@ -113,11 +113,11 @@ Legacy-checkpoint compatibility is a separate issue.
 ```bash
 ./install_dependencies.sh
 ```
-This script installs the following requirements in order:
-- `requirements-base.txt`: Core Python dependencies for HydraGNN
-- `requirements-torch.txt`: PyTorch and related dependencies
-- `requirements-pyg.txt`: PyTorch Geometric and extensions
-- `requirements-specific-models.txt`: Dependencies used by supported model backbones
+This script installs pinned PyTorch, then HydraGNN in editable mode (core
+dependencies include PyTorch Geometric and its compiled extensions), then
+these `pyproject.toml` extras:
+- `torch`: pinned PyTorch and torchvision
+- `uma`: dependencies used by the vendored UMA backbone
 
 You can also install development or optional dependencies:
 ```bash
@@ -137,17 +137,18 @@ You can also install development or optional dependencies:
 Unknown dependency-group names are rejected.
 
 #### Manual Installation (Advanced)
-If you prefer, you can install requirements manually:
+If you prefer, you can install the extras manually:
 ```bash
-pip install --no-build-isolation -v -r requirements-base.txt
-pip install --no-build-isolation -v -r requirements-torch.txt
-pip install --no-build-isolation -v -r requirements-pyg.txt
+pip install torch==2.13.0 torchvision==0.28.0
+pip install --no-build-isolation -e ".[torch]" \
+  -f https://data.pyg.org/whl/torch-2.13.0+cpu.html
+pip install -e ".[uma]"
 # For development tools (optional)
-pip install --no-build-isolation -v -r requirements-dev.txt
+pip install -e ".[dev]"
 # For DeepSpeed support (optional)
-pip install --no-build-isolation -v -r requirements-deepspeed.txt
+pip install -e ".[deepspeed]"
 # For additional optional features
-pip install --no-build-isolation -v -r requirements-optional.txt
+pip install -e ".[optional]"
 ```
 
 #### Building pyg-lib from source
@@ -209,7 +210,7 @@ Tested installation scripts are organized by facility and system under
 - **Perlmutter** (NVIDIA A100; CUDA 13.0 and PyTorch 2.14 by default)
 - **Andes** (CPU)
 
-Use the facility installer instead of `requirements-torch.txt` when preparing
+Use the facility installer instead of the `torch` extra when preparing
 an accelerator-specific environment. The facility scripts select wheels or
 framework modules compatible with that system. In particular, the Frontier
 ROCm 7.2 installer selects PyTorch 2.14 and torchvision 0.29 from the ROCm 7.2
@@ -464,7 +465,6 @@ For typed graphs, select `HeteroGIN`, `HeteroSAGE`, `HeteroGAT`, `HeteroPNA`,
 [heterogeneous model guide](docs/heterogeneous_models.md) covers edge-feature
 support, local attention heads, pooling, metadata, and heterogeneous GPS.
 Use it together with the [Variables schema](#variables).
-The `hydragnn train` CLI does not support heterogeneous models yet.
 
 ### Output Head Configuration
 
@@ -1282,9 +1282,23 @@ hydragnn.train.train_validate_test(
 dataset written by an example script with `--preonly`. The example training
 scripts share the same pipeline (`hydragnn/cli.py`).
 
-The CLI supports **homogeneous graphs only**. Heterogeneous models
-(`Hetero*`, see [Heterogeneous architectures](#heterogeneous-architectures))
-must be trained with a dedicated script, such as those in `examples/opf`.
+Heterogeneous datasets (`HeteroData` samples) are detected automatically:
+`run_training` passes the graph metadata to the model and computes the
+`HeteroPNA` degree histograms.
+
+Scripts that need more control call `cli.run_training` with hooks:
+
+- `variables=False`: skips compiling `Variables` for samples already in model
+  format (always skipped for heterogeneous data).
+- `loader_transform`: wraps each data loader (for example, a batch adapter).
+- `model_wrapper(model, config)`: wraps the model before DDP.
+- `deferred_loss_provider`: name of a loss computed outside the model.
+- `find_unused_parameters`: passed to DDP.
+- `before_train(model, optimizer, loaders, config)`: runs before training; a
+  truthy return skips training and saving.
+- `after_train(model)`: runs before the model is saved.
+
+See `examples/opf/train_opf_*.py` for examples.
 
 #### Custom Training Loop
 
@@ -1562,7 +1576,7 @@ python examples/multibranch/train.py \
 
 ### Hyperparameter Optimization
 
-HydraGNN supports HPO through **DeepHyper** (distributed, scalable) and **Optuna** (TPE, random, CMA-ES samplers). Both are optional dependencies (see `requirements-optional.txt`).
+HydraGNN supports HPO through **DeepHyper** (distributed, scalable) and **Optuna** (TPE, random, CMA-ES samplers). Both are optional dependencies (see the `optional` extra in `pyproject.toml`).
 
 #### DeepHyper
 
@@ -1741,7 +1755,7 @@ Key features:
 cd examples/multibranch
 
 # Run with SLURM on HPC systems
-sbatch SC25-multibranch-omnistat.sh
+sbatch scripts/hpc/olcf/frontier/jobs/SC25-multibranch-omnistat.sh
 ```
 
 Features:

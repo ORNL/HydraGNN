@@ -28,7 +28,6 @@ import os
 import sys
 import json
 import argparse
-import shutil
 import glob
 import re
 
@@ -53,6 +52,7 @@ from hydragnn.config import (
 )
 
 from hydragnn.data.hdf5dataset import HDF5Dataset
+from hydragnn.preprocess.graph_samples_checks_and_updates import gather_hetero_deg
 
 from ft_utils import EpochCSVWriter, evaluate_ft3, save_run_results
 
@@ -62,7 +62,6 @@ from opf_solution_utils import (
     NodeBatchAdapter,
     NodeTargetDatasetAdapter,
     OPFDomainLoss,
-    compute_pna_deg_for_hetero_dataset,
     validate_opf_variable_schema,
     info,
     resolve_node_target_type as _resolve_node_target_type,
@@ -474,7 +473,7 @@ if __name__ == "__main__":
     arch_config = config["NeuralNetwork"]["Architecture"]
 
     if arch_config.get("mpnn_type") == "HeteroPNA" and not arch_config.get("pna_deg"):
-        pna_deg = compute_pna_deg_for_hetero_dataset(trainset, verbosity=2)
+        pna_deg = gather_hetero_deg(trainset)
         arch_config["pna_deg"] = pna_deg
         arch_config["max_neighbours"] = max(0, len(pna_deg) - 1)
 

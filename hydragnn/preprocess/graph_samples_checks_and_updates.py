@@ -564,6 +564,60 @@ def gather_deg_dist(dataset):
     return deg.cpu().detach().numpy()
 
 
+def gather_hetero_deg(dataset, verbosity=2, comm=None):
+    """Return the PNA in-degree histogram of ``HeteroData`` samples as a list.
+
+    Each sample is flattened with ``to_homogeneous`` so that degrees are counted
+    across all edge types. Without ``comm``, a replicated ``dataset`` is split
+    into contiguous slices and reduced over the default process group. With an
+    MPI ``comm``, each rank counts every sample it holds and reduces over ``comm``.
+    """
+    import torch.distributed as dist
+    from hydragnn.utils.print.print_utils import iterate_tqdm
+
+    num_samples = len(dataset)
+    if comm is None and dist.is_initialized():
+        rank = dist.get_rank()
+        world_size = dist.get_world_size()
+        local_indices = range(
+            (num_samples * rank) // world_size,
+            (num_samples * (rank + 1)) // world_size,
+        )
+    else:
+        local_indices = range(num_samples)
+
+    def _degrees(idx):
+        data_h = dataset[idx].to_homogeneous(add_node_type=True, add_edge_type=True)
+        return degree(
+            data_h.edge_index[1], num_nodes=data_h.num_nodes, dtype=torch.long
+        )
+
+    def _all_reduce(tensor, op):
+        if comm is not None:
+            from mpi4py import MPI
+
+            mpi_op = MPI.MAX if op == "max" else MPI.SUM
+            return torch.from_numpy(comm.allreduce(tensor.numpy(), op=mpi_op))
+        if not dist.is_initialized():
+            return tensor
+        tensor = tensor.to(get_device())
+        torch_op = dist.ReduceOp.MAX if op == "max" else dist.ReduceOp.SUM
+        dist.all_reduce(tensor, op=torch_op)
+        return tensor.cpu()
+
+    max_deg = 0
+    for idx in iterate_tqdm(local_indices, verbosity, desc="HeteroPNA degree max"):
+        d = _degrees(idx)
+        if d.numel() > 0:
+            max_deg = max(max_deg, int(d.max()))
+    max_deg = int(_all_reduce(torch.tensor([max_deg]), "max"))
+
+    deg = torch.zeros(max_deg + 1, dtype=torch.long)
+    for idx in iterate_tqdm(local_indices, verbosity, desc="HeteroPNA degree bincount"):
+        deg += torch.bincount(_degrees(idx), minlength=deg.numel())
+    return _all_reduce(deg, "sum").tolist()
+
+
 def should_skip_self_loops(data_object, context=""):
     """Return True if data_object contains self-loops in edge_index.
 

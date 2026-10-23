@@ -69,7 +69,7 @@ INFER_BATCH_SIZE=${INFER_BATCH_SIZE:-50}
 INFER_NUM_STRUCTURES=${INFER_NUM_STRUCTURES:-15000}
 INFER_SCRIPT=${INFER_SCRIPT:-inference_fused_write_adios.py}
 
-HYDRAGNN_ROOT=${HYDRAGNN_ROOT:-"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"}
+HYDRAGNN_ROOT=${HYDRAGNN_ROOT:-"$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"}
 EXAMPLE_DIR=${EXAMPLE_DIR:-$HYDRAGNN_ROOT/examples/multidataset_hpo_sc26}
 
 CHECKPOINT_LOGDIR=${CHECKPOINT_LOGDIR:-$HYDRAGNN_ROOT/logs/multidataset_hpo-BEST6-fp64}

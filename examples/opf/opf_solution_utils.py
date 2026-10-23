@@ -7,7 +7,6 @@ import statistics
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
-from torch_geometric.utils import degree
 
 from hydragnn.config import get_variable_schema
 from hydragnn.domain_losses import create_constraint_optimizer
@@ -792,65 +791,6 @@ def validate_opf_variable_schema(config: dict, node_target_type: str | None = No
             f"Variables.outputs has no entries for node_type '{node_target_type}'."
         )
     return config
-
-
-def compute_pna_deg_for_hetero_dataset(dataset, verbosity: int = 2):
-    from hydragnn.utils.print.print_utils import iterate_tqdm
-
-    num_samples = len(dataset)
-    if dist.is_initialized():
-        rank = dist.get_rank()
-        world_size = dist.get_world_size()
-        start = (num_samples * rank) // world_size
-        end = (num_samples * (rank + 1)) // world_size
-    else:
-        start = 0
-        end = num_samples
-
-    local_indices = range(start, end)
-
-    max_deg_local = 0
-    for idx in iterate_tqdm(local_indices, verbosity, desc="HeteroPNA degree max"):
-        data = dataset[idx]
-        data_h = data.to_homogeneous(add_node_type=True, add_edge_type=True)
-        d = degree(data_h.edge_index[1], num_nodes=data_h.num_nodes, dtype=torch.long)
-        if d.numel() > 0:
-            max_deg_local = max(max_deg_local, int(d.max().item()))
-
-    if dist.is_initialized():
-        reduce_device = (
-            torch.device("cuda", torch.cuda.current_device())
-            if torch.cuda.is_available()
-            else torch.device("cpu")
-        )
-        max_deg_tensor = torch.tensor(
-            [max_deg_local], dtype=torch.long, device=reduce_device
-        )
-        dist.all_reduce(max_deg_tensor, op=dist.ReduceOp.MAX)
-        max_deg = int(max_deg_tensor.item())
-    else:
-        max_deg = max_deg_local
-
-    deg_local = torch.zeros(max_deg + 1, dtype=torch.long)
-    for idx in iterate_tqdm(local_indices, verbosity, desc="HeteroPNA degree bincount"):
-        data = dataset[idx]
-        data_h = data.to_homogeneous(add_node_type=True, add_edge_type=True)
-        d = degree(data_h.edge_index[1], num_nodes=data_h.num_nodes, dtype=torch.long)
-        deg_local += torch.bincount(d, minlength=deg_local.numel())
-
-    if dist.is_initialized():
-        reduce_device = (
-            torch.device("cuda", torch.cuda.current_device())
-            if torch.cuda.is_available()
-            else torch.device("cpu")
-        )
-        deg_tensor = deg_local.to(device=reduce_device)
-        dist.all_reduce(deg_tensor, op=dist.ReduceOp.SUM)
-        deg = deg_tensor.cpu()
-    else:
-        deg = deg_local
-
-    return deg.tolist()
 
 
 def _assemble_edge_attr_hetero(data, edge_dim_dict):

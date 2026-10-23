@@ -11,7 +11,7 @@ reviewed by at least one HydraGNN developer.
 
 Additional dependencies are needed for formatting and testing:
 ```
-pip install -r requirements-dev.txt
+pip install -e ".[dev]"
 ```
 
 ## Automatic commit checking

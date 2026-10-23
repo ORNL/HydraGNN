@@ -611,13 +611,20 @@ def get_log_name_config(config):
     )
 
 
+def _json_default(obj):
+    # Tensors and numpy arrays/scalars (e.g. computed degree histograms).
+    if hasattr(obj, "tolist"):
+        return obj.tolist()
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+
 def save_config(config, log_name, path="./logs/"):
     """Save config"""
     _, world_rank = get_comm_size_and_rank()
     if world_rank == 0:
         fname = os.path.join(path, log_name, "config.json")
         with open(fname, "w") as f:
-            json.dump(config, f, indent=4)
+            json.dump(config, f, indent=4, default=_json_default)
 
 
 def parse_deepspeed_config(config):
