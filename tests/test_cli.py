@@ -226,6 +226,64 @@ def test_run_training_heterogeneous_with_hooks(tmp_path, monkeypatch, mpnn_type)
     assert (tmp_path / "logs" / ("hetero_" + mpnn_type) / "config.json").exists()
 
 
+@pytest.mark.parametrize("node_head", [False, True])
+def test_run_training_heterogeneous_multihead(tmp_path, monkeypatch, node_head):
+    monkeypatch.chdir(tmp_path)
+    hydragnn.distributed.setup_ddp()
+    samples = _hetero_samples(8)
+    for data in samples:
+        energy = data["a"].x.sum().reshape(1, 1)
+        second = data["a"].x[:, :1] if node_head else data["b"].x.sum().reshape(1, 1)
+        data.y = torch.cat([energy, second])
+        data.y_loc = torch.tensor([[0, 1, 1 + second.shape[0]]])
+    config = _hetero_config("HeteroGIN")
+    arch = config["NeuralNetwork"]["Architecture"]
+    arch["task_weights"] = [1.0, 1.0]
+    outputs = config["Variables"]["outputs"]
+    if node_head:
+        arch["node_target_type"] = "a"
+        arch["output_heads"]["node"] = {
+            "num_headlayers": 1,
+            "dim_headlayers": [8],
+            "type": "mlp",
+        }
+        outputs.append({"name": "a_out", "level": "node", "dim": 1, "node_type": "a"})
+    else:
+        outputs.append({"name": "target2", "level": "graph", "dim": 1})
+    log_name = "hetero_multihead_%s" % node_head
+    hydragnn.utils.print.setup_log(log_name)
+    cli.run_training(config, samples[:4], samples[4:6], samples[6:], log_name, None)
+    assert (tmp_path / "logs" / log_name / (log_name + ".pk")).exists()
+
+
+def test_write_split_datasets_rejects_heterogeneous_adios(tmp_path):
+    samples = _hetero_samples(3)
+    with pytest.raises(NotImplementedError, match="pickle"):
+        cli.write_split_datasets(
+            str(tmp_path / "h.bp"),
+            "adios",
+            samples[:1],
+            samples[1:2],
+            samples[2:],
+            comm=MPI.COMM_SELF,
+        )
+
+
+def test_gather_hetero_deg_rank_local(monkeypatch):
+    import torch.distributed as dist
+    from hydragnn.preprocess.graph_samples_checks_and_updates import (
+        gather_hetero_deg,
+    )
+
+    monkeypatch.setattr(dist, "is_initialized", lambda: True)
+    monkeypatch.setattr(dist, "get_rank", lambda: 0)
+    monkeypatch.setattr(dist, "get_world_size", lambda: 2)
+    monkeypatch.setattr(dist, "all_reduce", lambda tensor, op: None)
+    samples = _hetero_samples(2)
+    assert gather_hetero_deg(samples, 0) == [1, 5, 1]
+    assert gather_hetero_deg(samples, 0, rank_local=True) == [2, 10, 2]
+
+
 def test_run_training_before_train_can_skip_training(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     hydragnn.distributed.setup_ddp()

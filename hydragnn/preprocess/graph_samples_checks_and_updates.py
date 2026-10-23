@@ -564,18 +564,19 @@ def gather_deg_dist(dataset):
     return deg.cpu().detach().numpy()
 
 
-def gather_hetero_deg(dataset, verbosity=2):
+def gather_hetero_deg(dataset, verbosity=2, rank_local=False):
     """Return the PNA in-degree histogram of ``HeteroData`` samples as a list.
 
     Each sample is flattened with ``to_homogeneous`` so that degrees are counted
-    across all edge types. Every rank processes a contiguous slice of
-    ``dataset`` and the result is reduced over the default process group.
+    across all edge types. The result is reduced over the default process
+    group. A replicated ``dataset`` is split into contiguous per-rank slices;
+    with ``rank_local=True`` each rank counts every sample it holds.
     """
     import torch.distributed as dist
     from hydragnn.utils.print.print_utils import iterate_tqdm
 
     num_samples = len(dataset)
-    if dist.is_initialized():
+    if dist.is_initialized() and not rank_local:
         rank = dist.get_rank()
         world_size = dist.get_world_size()
         local_indices = range(

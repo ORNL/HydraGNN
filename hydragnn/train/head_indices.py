@@ -36,7 +36,7 @@ def get_head_indices_graph(model, data):
     head_dims = model.module.head_dims
     head_dimsum = sum(head_dims)
 
-    batch_size = data.batch.max() + 1
+    batch_size = data.num_graphs
     for ihead in range(model.module.num_heads):
         head_each = torch.arange(head_dims[ihead])
         head_ind_temporary = head_each.repeat(batch_size)
@@ -49,7 +49,7 @@ def get_head_indices_graph(model, data):
 
 def get_head_indices_node_or_mixed(model, data):
     """this is for cases when outputs are node level or mixed graph-node level"""
-    batch_size = data.batch.max() + 1
+    batch_size = data.num_graphs
     y_loc = data.y_loc
     # head size for each sample
     total_size = y_loc[:, -1]

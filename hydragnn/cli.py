@@ -131,7 +131,14 @@ def write_split_datasets(path, fmt, trainset, valset, testset, comm=None):
 
     comm = MPI.COMM_WORLD if comm is None else comm
     hetero = len(trainset) > 0 and hasattr(trainset[0], "node_types")
-    deg = gather_hetero_deg(trainset, 0) if hetero else gather_deg(trainset)
+    if hetero and fmt == "adios":
+        raise NotImplementedError(
+            "ADIOS cannot store HeteroData samples; use the pickle format."
+        )
+    if hetero:
+        deg = gather_hetero_deg(trainset, 0, rank_local=True)
+    else:
+        deg = gather_deg(trainset)
     splits = dict(zip(SPLITS, (trainset, valset, testset)))
     if fmt == "adios":
         from hydragnn.data.adiosdataset import AdiosWriter
