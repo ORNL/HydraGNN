@@ -14,9 +14,6 @@ Arguments summary:
 """
 
 import os
-import json
-import logging
-import argparse
 import shutil
 import subprocess
 import sys
@@ -37,17 +34,6 @@ from opf_solution_utils import (
     resolve_node_target_type as _resolve_node_target_type,
 )
 from hydragnn.config import get_variable_schema, schema_dimensions
-
-
-def _to_jsonable(obj):
-    if isinstance(obj, torch.Tensor):
-        return obj.item() if obj.numel() == 1 else obj.tolist()
-    if isinstance(obj, dict):
-        return {k: _to_jsonable(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_to_jsonable(v) for v in obj]
-    return obj
-
 
 _DEFAULT_CASE_NAMES = [
     "pglib_opf_case14_ieee",
@@ -98,39 +84,16 @@ def _patch_fast_tar_extraction():
     tg_opf.extract_tar = _fast_extract_tar
 
 
-import hydragnn
 import time
-
-
-def _diag(msg: str):
-    if os.getenv("HYDRAGNN_DIAG") != "1":
-        return
-    rank = dist.get_rank() if dist.is_initialized() else 0
-    rank_filter = os.getenv("HYDRAGNN_DIAG_RANK")
-    if rank_filter is not None:
-        try:
-            if int(rank_filter) != int(rank):
-                return
-        except ValueError:
-            pass
-    now = time.perf_counter()
-    print(f"[diag][rank {rank}][{now:.3f}] {msg}", flush=True)
-
-
-from hydragnn.data.pickledataset import (
-    SimplePickleWriter,
-    SimplePickleDataset,
-)
+from hydragnn import cli
+from hydragnn.data.pickledataset import SimplePickleWriter
 from hydragnn.distributed import nsplit
-from hydragnn.models.utils import print_model
 from hydragnn.utils.print import iterate_tqdm
-from hydragnn.config.config_utils import update_config
 
 try:
-    from hydragnn.data.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.data.adiosdataset import AdiosWriter
 except ImportError:
     AdiosWriter = None
-    AdiosDataset = None
 
 
 def _prepare_sample(
@@ -351,11 +314,10 @@ class HomogeneousBatchAdapter:
 
 if __name__ == "__main__":
     _patch_fast_tar_extraction()
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-    parser.add_argument(
-        "--inputfile", type=str, default="opf_solution_homogeneous.json"
+    parser = cli.build_parser(
+        default_inputfile="opf_solution_homogeneous.json",
+        default_format="pickle",
+        preprocessing=False,
     )
     parser.add_argument("--data_root", type=str, default="dataset")
     parser.add_argument(
@@ -409,8 +371,6 @@ if __name__ == "__main__":
         default="",
         help="File with one case name per line used only with --preonly",
     )
-    parser.add_argument("--batch_size", type=int, default=None)
-    parser.add_argument("--num_epoch", type=int, default=None)
     parser.add_argument("--modelname", type=str, default="OPF_Solution_Homo")
     parser.add_argument(
         "--nvme",
@@ -424,19 +384,11 @@ if __name__ == "__main__":
         choices=["bus", "generator"],
     )
 
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument("--adios", action="store_const", dest="format", const="adios")
-    group.add_argument("--pickle", action="store_const", dest="format", const="pickle")
-    parser.set_defaults(format="pickle")
-
     args = parser.parse_args()
 
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     datadir = os.path.join(dirpwd, args.data_root)
-    input_filename = os.path.join(dirpwd, args.inputfile)
-
-    with open(input_filename, "r") as f:
-        config = json.load(f)
+    config = cli.load_config(os.path.join(dirpwd, args.inputfile), args)
 
     arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
     raw_edge_dim = arch_config.get("edge_dim")
@@ -456,18 +408,9 @@ if __name__ == "__main__":
             "node_target_type"
         ]
 
-    comm_size, rank = hydragnn.distributed.setup_ddp()
+    rank, log_name, writer = cli.setup_run(args, args.modelname)
     comm = MPI.COMM_WORLD
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format=f"%(levelname)s (rank {rank}): %(message)s",
-        datefmt="%H:%M:%S",
-    )
-
-    log_name = args.modelname
-    hydragnn.utils.print.setup_log(log_name)
-    writer = hydragnn.models.utils.get_summary_writer(log_name)
+    comm_size = comm.Get_size()
 
     requested_num_groups = data_ops.parse_num_groups(args.num_groups)
     adios_training_only = args.format == "adios" and not args.preonly
@@ -780,47 +723,19 @@ if __name__ == "__main__":
             )
         )
 
-    if args.format == "adios":
-        if AdiosDataset is None:
-            raise RuntimeError("adios2 is not available in this environment.")
-        fname = os.path.join(datadir, f"{args.modelname}.bp")
-        if adios_training_only and not os.path.isdir(fname):
-            raise RuntimeError(
-                f"Expected preprocessed ADIOS dataset at '{fname}' for training-only mode. "
-                "Run with --preonly --adios first."
-            )
-        train_base = AdiosDataset(fname, "trainset", comm, var_config=None)
-        val_base = AdiosDataset(fname, "valset", comm, var_config=None)
-        test_base = AdiosDataset(fname, "testset", comm, var_config=None)
-        trainset = HomogeneousDatasetAdapter(
-            train_base, args.node_target_type, edge_dim, edge_feature_schema
+    ext = ".bp" if args.format == "adios" else ".pickle"
+    path = os.path.join(datadir, f"{args.modelname}{ext}")
+    if adios_training_only and not os.path.isdir(path):
+        raise RuntimeError(
+            f"Expected preprocessed ADIOS dataset at '{path}' for training-only mode. "
+            "Run with --preonly --adios first."
         )
-        valset = HomogeneousDatasetAdapter(
-            val_base, args.node_target_type, edge_dim, edge_feature_schema
+    trainset, valset, testset = (
+        HomogeneousDatasetAdapter(
+            split, args.node_target_type, edge_dim, edge_feature_schema
         )
-        testset = HomogeneousDatasetAdapter(
-            test_base, args.node_target_type, edge_dim, edge_feature_schema
-        )
-    else:
-        basedir = os.path.join(datadir, f"{args.modelname}.pickle")
-        trainset = HomogeneousDatasetAdapter(
-            SimplePickleDataset(basedir=basedir, label="trainset", var_config=None),
-            args.node_target_type,
-            edge_dim,
-            edge_feature_schema,
-        )
-        valset = HomogeneousDatasetAdapter(
-            SimplePickleDataset(basedir=basedir, label="valset", var_config=None),
-            args.node_target_type,
-            edge_dim,
-            edge_feature_schema,
-        )
-        testset = HomogeneousDatasetAdapter(
-            SimplePickleDataset(basedir=basedir, label="testset", var_config=None),
-            args.node_target_type,
-            edge_dim,
-            edge_feature_schema,
-        )
+        for split in cli.load_split_datasets(path, args.format, comm)
+    )
 
     resolved_node_target_type = _resolve_node_target_type(
         trainset[0], args.node_target_type
@@ -839,74 +754,19 @@ if __name__ == "__main__":
             f"but homogeneous OPF data provides {actual_x_dim}."
         )
 
-    info(
-        "trainset,valset,testset size: %d %d %d"
-        % (len(trainset), len(valset), len(testset))
-    )
-
-    (
-        train_loader,
-        val_loader,
-        test_loader,
-    ) = hydragnn.preprocess.create_dataloaders(
-        trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
-    )
-
-    train_loader = HomogeneousBatchAdapter(train_loader)
-    val_loader = HomogeneousBatchAdapter(val_loader)
-    test_loader = HomogeneousBatchAdapter(test_loader)
-
-    config = update_config(config, train_loader, val_loader, test_loader)
-    config = _to_jsonable(config)
-    hydragnn.config.save_config(config, log_name)
-
-    precision = config["NeuralNetwork"]["Training"].get("precision", "fp32")
-    model = hydragnn.models.create_model_config(
-        config=config["NeuralNetwork"],
-        verbosity=config["Verbosity"]["level"],
-    )
-
-    learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=5, min_lr=1e-5
-    )
-
-    model, optimizer = hydragnn.distributed.distributed_model_wrapper(
-        model, optimizer, config["Verbosity"]["level"]
-    )
-
-    _diag("Entering print_model")
-    print_model(model)
-    _diag("Exited print_model")
-
-    _diag("Entering load_existing_model_config")
-    hydragnn.models.utils.load_existing_model_config(
-        model, config["NeuralNetwork"]["Training"], optimizer=optimizer
-    )
-    _diag("Exited load_existing_model_config")
-
-    _diag("Entering train_validate_test")
-    hydragnn.train.train_validate_test(
-        model,
-        optimizer,
-        train_loader,
-        val_loader,
-        test_loader,
-        writer,
-        scheduler,
+    cli.run_training(
         config,
+        trainset,
+        valset,
+        testset,
         log_name,
-        config["Verbosity"]["level"],
-        create_plots=False,
-        precision=precision,
+        writer,
+        precision=args.precision,
+        everyone=args.everyone,
+        comm=comm,
+        variables=False,
+        loader_transform=HomogeneousBatchAdapter,
     )
-    _diag("Exited train_validate_test")
-
-    hydragnn.models.utils.save_model(model, optimizer, log_name)
-    hydragnn.utils.profiling_and_tracing.print_timers(config["Verbosity"]["level"])
-    if writer is not None:
-        writer.close()
 
     comm.Barrier()
     if dist.is_initialized():

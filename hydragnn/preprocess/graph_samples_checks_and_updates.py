@@ -564,6 +564,56 @@ def gather_deg_dist(dataset):
     return deg.cpu().detach().numpy()
 
 
+def gather_hetero_deg(dataset, verbosity=2):
+    """Return the PNA in-degree histogram of ``HeteroData`` samples as a list.
+
+    Each sample is flattened with ``to_homogeneous`` so that degrees are counted
+    across all edge types. Every rank processes a contiguous slice of
+    ``dataset`` and the result is reduced over the default process group.
+    """
+    import torch.distributed as dist
+    from hydragnn.utils.print.print_utils import iterate_tqdm
+
+    num_samples = len(dataset)
+    if dist.is_initialized():
+        rank = dist.get_rank()
+        world_size = dist.get_world_size()
+        local_indices = range(
+            (num_samples * rank) // world_size,
+            (num_samples * (rank + 1)) // world_size,
+        )
+    else:
+        local_indices = range(num_samples)
+
+    def _degrees(idx):
+        data_h = dataset[idx].to_homogeneous(add_node_type=True, add_edge_type=True)
+        return degree(
+            data_h.edge_index[1], num_nodes=data_h.num_nodes, dtype=torch.long
+        )
+
+    def _all_reduce(tensor, op):
+        if not dist.is_initialized():
+            return tensor
+        tensor = tensor.to(get_device())
+        dist.all_reduce(tensor, op=op)
+        return tensor.cpu()
+
+    max_deg = 0
+    for idx in iterate_tqdm(local_indices, verbosity, desc="HeteroPNA degree max"):
+        d = _degrees(idx)
+        if d.numel() > 0:
+            max_deg = max(max_deg, int(d.max()))
+    if dist.is_initialized():
+        max_deg = int(_all_reduce(torch.tensor([max_deg]), dist.ReduceOp.MAX))
+
+    deg = torch.zeros(max_deg + 1, dtype=torch.long)
+    for idx in iterate_tqdm(local_indices, verbosity, desc="HeteroPNA degree bincount"):
+        deg += torch.bincount(_degrees(idx), minlength=deg.numel())
+    if dist.is_initialized():
+        deg = _all_reduce(deg, dist.ReduceOp.SUM)
+    return deg.tolist()
+
+
 def should_skip_self_loops(data_object, context=""):
     """Return True if data_object contains self-loops in edge_index.
 

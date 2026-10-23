@@ -10,7 +10,6 @@ import matplotlib as mpl
 mpl.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
 import torch.distributed as dist
 
 import hydragnn
@@ -22,6 +21,7 @@ from hydragnn.models.utils import load_existing_model
 
 from hydragnn.data.pickledataset import SimplePickleDataset
 from hydragnn.data.hdf5dataset import HDF5Dataset
+from hydragnn.preprocess.graph_samples_checks_and_updates import gather_hetero_deg
 
 from opf_solution_utils import (
     HeteroFromHomogeneousDataset,
@@ -29,10 +29,8 @@ from opf_solution_utils import (
     NodeTargetDatasetAdapter,
     OPFDomainLoss,
     OPFEnhancedModelWrapper,
-    compute_pna_deg_for_hetero_dataset,
     validate_opf_variable_schema,
     info,
-    resolve_edge_feature_schema,
     resolve_node_target_type,
 )
 
@@ -293,7 +291,7 @@ if __name__ == "__main__":
     arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
     if arch_config.get("mpnn_type") == "HeteroPNA" and not arch_config.get("pna_deg"):
         info("Computing pna_deg for HeteroPNA from inference dataset")
-        pna_deg = compute_pna_deg_for_hetero_dataset(trainset, verbosity=2)
+        pna_deg = gather_hetero_deg(trainset)
         arch_config["pna_deg"] = pna_deg
         arch_config["max_neighbours"] = max(0, len(pna_deg) - 1)
 

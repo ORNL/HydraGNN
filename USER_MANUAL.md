@@ -464,7 +464,6 @@ For typed graphs, select `HeteroGIN`, `HeteroSAGE`, `HeteroGAT`, `HeteroPNA`,
 [heterogeneous model guide](docs/heterogeneous_models.md) covers edge-feature
 support, local attention heads, pooling, metadata, and heterogeneous GPS.
 Use it together with the [Variables schema](#variables).
-The `hydragnn train` CLI does not support heterogeneous models yet.
 
 ### Output Head Configuration
 
@@ -1282,9 +1281,23 @@ hydragnn.train.train_validate_test(
 dataset written by an example script with `--preonly`. The example training
 scripts share the same pipeline (`hydragnn/cli.py`).
 
-The CLI supports **homogeneous graphs only**. Heterogeneous models
-(`Hetero*`, see [Heterogeneous architectures](#heterogeneous-architectures))
-must be trained with a dedicated script, such as those in `examples/opf`.
+Heterogeneous datasets (`HeteroData` samples) are detected automatically:
+`run_training` passes the graph metadata to the model and computes the
+`HeteroPNA` degree histograms.
+
+Scripts that need more control call `cli.run_training` with hooks:
+
+- `variables=False`: skips compiling `Variables` for samples already in model
+  format (required for heterogeneous data).
+- `loader_transform`: wraps each data loader (for example, a batch adapter).
+- `model_wrapper(model, config)`: wraps the model before DDP.
+- `deferred_loss_provider`: name of a loss computed outside the model.
+- `find_unused_parameters`: passed to DDP.
+- `before_train(model, optimizer, loaders, config)`: runs before training; a
+  truthy return skips training and saving.
+- `after_train(model)`: runs before the model is saved.
+
+See `examples/opf/train_opf_*.py` for examples.
 
 #### Custom Training Loop
 

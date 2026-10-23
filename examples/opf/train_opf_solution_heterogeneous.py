@@ -19,7 +19,6 @@ Arguments summary:
 import os
 import json
 import logging
-import argparse
 import copy
 import shutil
 import subprocess
@@ -88,6 +87,7 @@ def _patch_fast_tar_extraction():
 
 import hydragnn
 import time
+from hydragnn import cli
 
 
 def _diag(msg: str):
@@ -105,14 +105,10 @@ def _diag(msg: str):
     print(f"[diag][rank {rank}][{now:.3f}] {msg}", flush=True)
 
 
-from hydragnn.data.pickledataset import (
-    SimplePickleWriter,
-    SimplePickleDataset,
-)
+from hydragnn.data.pickledataset import SimplePickleWriter
 from hydragnn.distributed import nsplit
-from hydragnn.models.utils import print_model
 from hydragnn.utils.print import iterate_tqdm
-from hydragnn.config import edge_type_dims, update_config
+from hydragnn.config import edge_type_dims
 
 from opf_solution_utils import (
     EdgeAttrDatasetAdapter,
@@ -123,11 +119,9 @@ from opf_solution_utils import (
     OPFDomainLoss,
     assemble_edge_attr,
     build_solution_target as _build_solution_target,
-    compute_pna_deg_for_hetero_dataset,
     validate_opf_variable_schema,
     ensure_node_y_loc as _ensure_node_y_loc,
     info,
-    resolve_edge_feature_schema,
     resolve_node_target_type as _resolve_node_target_type,
 )
 from opf_svd_rpe import (
@@ -135,13 +129,12 @@ from opf_svd_rpe import (
     resolve_opf_positional_encoding_config,
 )
 
-from hydragnn.data.hdf5dataset import HDF5Writer, HDF5Dataset
+from hydragnn.data.hdf5dataset import HDF5Writer
 
 try:
-    from hydragnn.data.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.data.adiosdataset import AdiosWriter
 except ImportError:
     AdiosWriter = None
-    AdiosDataset = None
 
 
 def _ensure_non_scalar_attrs(data):
@@ -182,20 +175,6 @@ def _validate_node_stores_for_homogeneous(data):
                 "All node types must have predetermined targets for "
                 "homogeneous conversion. Refusing to auto-create zeros."
             )
-
-
-def _to_jsonable(obj):
-    if isinstance(obj, torch.Tensor):
-        return obj.item() if obj.numel() == 1 else obj.tolist()
-    if isinstance(obj, np.ndarray):
-        return obj.tolist()
-    if isinstance(obj, np.generic):
-        return obj.item()
-    if isinstance(obj, dict):
-        return {k: _to_jsonable(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_to_jsonable(v) for v in obj]
-    return obj
 
 
 def _raw_json_to_heterodata(filepath):
@@ -497,11 +476,11 @@ def _log_phase_time(comm, rank, label: str, elapsed_local: float):
 
 if __name__ == "__main__":
     _patch_fast_tar_extraction()
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-    parser.add_argument(
-        "--inputfile", type=str, default="opf_solution_heterogeneous.json"
+    parser = cli.build_parser(
+        default_inputfile="opf_solution_heterogeneous.json",
+        default_format="pickle",
+        preprocessing=False,
+        formats=("adios", "pickle", "hdf5"),
     )
     parser.add_argument("--data_root", type=str, default="dataset")
     parser.add_argument(
@@ -543,8 +522,6 @@ if __name__ == "__main__":
         default=None,
         help="Limit total number of samples across train/val/test splits",
     )
-    parser.add_argument("--batch_size", type=int, default=None)
-    parser.add_argument("--num_epoch", type=int, default=None)
     parser.add_argument(
         "--resume_from",
         type=str,
@@ -562,7 +539,6 @@ if __name__ == "__main__":
     parser.add_argument("--hidden_dim", type=int, default=None)
     parser.add_argument("--num_conv_layers", type=int, default=None)
     parser.add_argument("--learning_rate", type=float, default=None)
-    parser.add_argument("--log", type=str, default=None)
     domain_group = parser.add_mutually_exclusive_group()
     domain_group.add_argument(
         "--enable_domain_loss",
@@ -661,12 +637,6 @@ if __name__ == "__main__":
         choices=["bus", "generator"],
     )
 
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument("--adios", action="store_const", dest="format", const="adios")
-    group.add_argument("--pickle", action="store_const", dest="format", const="pickle")
-    group.add_argument("--hdf5", action="store_const", dest="format", const="hdf5")
-    parser.set_defaults(format="pickle")
-
     args = parser.parse_args()
 
     if (args.resume_from is None) != (args.epoch_start is None):
@@ -676,10 +646,7 @@ if __name__ == "__main__":
 
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     datadir = os.path.join(dirpwd, args.data_root)
-    input_filename = os.path.join(dirpwd, args.inputfile)
-
-    with open(input_filename, "r") as f:
-        config = json.load(f)
+    config = cli.load_config(os.path.join(dirpwd, args.inputfile), args)
 
     arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
     opf_pe_config = resolve_opf_positional_encoding_config(arch_config)
@@ -702,10 +669,6 @@ if __name__ == "__main__":
         config["NeuralNetwork"]["Training"]["Optimizer"][
             "learning_rate"
         ] = args.learning_rate
-    if args.batch_size is not None:
-        config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
-    if args.num_epoch is not None:
-        config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
 
     training_config = config.setdefault("NeuralNetwork", {}).setdefault("Training", {})
     if args.resume_from is not None:
@@ -771,18 +734,9 @@ if __name__ == "__main__":
         ]
     validate_opf_variable_schema(config, args.node_target_type)
 
-    comm_size, rank = hydragnn.distributed.setup_ddp()
+    rank, log_name, writer = cli.setup_run(args, args.modelname)
     comm = MPI.COMM_WORLD
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format=f"%(levelname)s (rank {rank}): %(message)s",
-        datefmt="%H:%M:%S",
-    )
-
-    log_name = args.log if args.log is not None else args.modelname
-    hydragnn.utils.print.setup_log(log_name)
-    writer = hydragnn.models.utils.get_summary_writer(log_name)
+    comm_size = comm.Get_size()
 
     requested_num_groups = data_ops.parse_num_groups(args.num_groups)
     serialized_training_only = args.format in ("adios", "hdf5") and not args.preonly
@@ -1290,38 +1244,18 @@ if __name__ == "__main__":
             dist.destroy_process_group()
         raise SystemExit(0)
 
-    if args.format == "adios":
-        if AdiosDataset is None:
-            raise RuntimeError("adios2 is not available in this environment.")
-        fname = os.path.join(datadir, f"{args.modelname}.bp")
-        if serialized_training_only and not os.path.isdir(fname):
-            raise RuntimeError(
-                f"Expected preprocessed ADIOS dataset at '{fname}' for training-only mode. "
-                "Run with --preonly --adios first."
-            )
-        train_base = AdiosDataset(fname, "trainset", comm, var_config=None)
-        val_base = AdiosDataset(fname, "valset", comm, var_config=None)
-        test_base = AdiosDataset(fname, "testset", comm, var_config=None)
-        trainset = HeteroFromHomogeneousDataset(train_base, edge_dim=edge_dim)
-        valset = HeteroFromHomogeneousDataset(val_base, edge_dim=edge_dim)
-        testset = HeteroFromHomogeneousDataset(test_base, edge_dim=edge_dim)
-    elif args.format == "hdf5":
-        basedir = os.path.join(datadir, f"{args.modelname}.h5")
-        if serialized_training_only and not os.path.isdir(basedir):
-            raise RuntimeError(
-                f"Expected preprocessed HDF5 dataset at '{basedir}' for training-only mode. "
-                "Run with --preonly --hdf5 first."
-            )
-        trainset = HDF5Dataset(basedir, "trainset")
-        valset = HDF5Dataset(basedir, "valset")
-        testset = HDF5Dataset(basedir, "testset")
-    else:
-        basedir = os.path.join(datadir, f"{args.modelname}.pickle")
-        trainset = SimplePickleDataset(
-            basedir=basedir, label="trainset", var_config=None
+    path = os.path.join(datadir, serialized_target)
+    if serialized_training_only and not os.path.isdir(path):
+        raise RuntimeError(
+            f"Expected preprocessed dataset at '{path}' for training-only mode. "
+            f"Run with --preonly --{args.format} first."
         )
-        valset = SimplePickleDataset(basedir=basedir, label="valset", var_config=None)
-        testset = SimplePickleDataset(basedir=basedir, label="testset", var_config=None)
+    trainset, valset, testset = cli.load_split_datasets(path, args.format, comm)
+    if args.format == "adios":
+        trainset, valset, testset = (
+            HeteroFromHomogeneousDataset(split, edge_dim=edge_dim)
+            for split in (trainset, valset, testset)
+        )
 
     resolved_node_target_type = _resolve_node_target_type(
         trainset[0], args.node_target_type
@@ -1336,78 +1270,22 @@ if __name__ == "__main__":
     ] = args.node_target_type
     validate_opf_variable_schema(config, args.node_target_type)
 
-    arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
-
-    trainset = EdgeAttrDatasetAdapter(trainset, edge_dim=edge_dim)
-    valset = EdgeAttrDatasetAdapter(valset, edge_dim=edge_dim)
-    testset = EdgeAttrDatasetAdapter(testset, edge_dim=edge_dim)
-
-    trainset = NodeTargetDatasetAdapter(
-        trainset, args.node_target_type, edge_dim=edge_dim
-    )
-    valset = NodeTargetDatasetAdapter(valset, args.node_target_type, edge_dim=edge_dim)
-    testset = NodeTargetDatasetAdapter(
-        testset, args.node_target_type, edge_dim=edge_dim
-    )
-
-    info(
-        "trainset,valset,testset size: %d %d %d"
-        % (len(trainset), len(valset), len(testset))
-    )
-
-    (
-        train_loader,
-        val_loader,
-        test_loader,
-    ) = hydragnn.preprocess.create_dataloaders(
-        trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
-    )
-
-    train_loader = NodeBatchAdapter(
-        train_loader, args.node_target_type, edge_dim=edge_dim
-    )
-    val_loader = NodeBatchAdapter(val_loader, args.node_target_type, edge_dim=edge_dim)
-    test_loader = NodeBatchAdapter(
-        test_loader, args.node_target_type, edge_dim=edge_dim
-    )
-
-    config = update_config(config, train_loader, val_loader, test_loader)
-    arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
-    if arch_config.get("mpnn_type") == "HeteroPNA" and not arch_config.get("pna_deg"):
-        info("Computing pna_deg for HeteroPNA from training dataset")
-        pna_deg = compute_pna_deg_for_hetero_dataset(trainset, verbosity=2)
-        arch_config["pna_deg"] = pna_deg
-        arch_config["max_neighbours"] = max(0, len(pna_deg) - 1)
-
-    config = _to_jsonable(config)
-    hydragnn.config.save_config(config, log_name)
-
-    precision = config["NeuralNetwork"]["Training"].get("precision", "fp32")
-    metadata = None
-    try:
-        metadata = trainset[0].metadata()
-    except Exception as exc:
-        info(f"Unable to fetch hetero metadata: {exc}")
-    node_input_dims = (
-        config.get("NeuralNetwork", {}).get("Architecture", {}).get("node_input_dims")
-    )
-    if node_input_dims is None:
-        raise RuntimeError(
-            "Missing NeuralNetwork.Architecture.node_input_dims in config. "
-            "Add node_input_dims to the config to initialize node embedders."
+    trainset, valset, testset = (
+        NodeTargetDatasetAdapter(
+            EdgeAttrDatasetAdapter(split, edge_dim=edge_dim),
+            args.node_target_type,
+            edge_dim=edge_dim,
         )
-    model_config = hydragnn.domain_losses.defer_domain_loss(
-        config["NeuralNetwork"], "optimal_power_flow"
-    )
-    model = hydragnn.models.create_model_config(
-        config=model_config,
-        verbosity=config["Verbosity"]["level"],
-        metadata=metadata,
-        node_input_dims=node_input_dims,
+        for split in (trainset, valset, testset)
     )
 
-    domain_loss_config = config["NeuralNetwork"]["Training"].get("loss")
-    if domain_loss_config is not None:
+    def wrap_loader(loader):
+        return NodeBatchAdapter(loader, args.node_target_type, edge_dim=edge_dim)
+
+    def wrap_model(model, config):
+        domain_loss_config = config["NeuralNetwork"]["Training"].get("loss")
+        if domain_loss_config is None:
+            return model
         dl_enabled = domain_loss_config.get("enabled", False)
         if rank == 0:
             info(
@@ -1418,7 +1296,7 @@ if __name__ == "__main__":
             )
         if dl_enabled and rank == 0:
             info("[Training.loss] Wrapping model with OPFEnhancedModelWrapper.")
-        model = OPFEnhancedModelWrapper(
+        return OPFEnhancedModelWrapper(
             model,
             OPFDomainLoss(
                 domain_loss_config,
@@ -1427,31 +1305,10 @@ if __name__ == "__main__":
             ),
         )
 
-    learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=5, min_lr=1e-5
-    )
-
-    model, optimizer = hydragnn.distributed.distributed_model_wrapper(
-        model,
-        optimizer,
-        config["Verbosity"]["level"],
-        find_unused_parameters=True,
-    )
-
-    _diag("Entering print_model")
-    print_model(model)
-    _diag("Exited print_model")
-
-    _diag("Entering load_existing_model_config")
-    hydragnn.models.utils.load_existing_model_config(
-        model, config["NeuralNetwork"]["Training"], optimizer=optimizer
-    )
-    _diag("Exited load_existing_model_config")
-
-    if args.eval_domain_penalties_only:
-        _diag("Entering eval_domain_penalties_only")
+    def eval_domain_penalties(model, optimizer, loaders, config):
+        if not args.eval_domain_penalties_only:
+            return False
+        val_loader = loaders[1]
         target_model = model.module if hasattr(model, "module") else model
         if not isinstance(target_model, OPFEnhancedModelWrapper):
             raise RuntimeError(
@@ -1482,37 +1339,31 @@ if __name__ == "__main__":
             ),
             flush=True,
         )
-        _diag("Exited eval_domain_penalties_only")
-        if dist.is_initialized():
-            dist.destroy_process_group()
-        raise SystemExit(0)
+        return True
 
-    _diag("Entering train_validate_test")
-    hydragnn.train.train_validate_test(
-        model,
-        optimizer,
-        train_loader,
-        val_loader,
-        test_loader,
-        writer,
-        scheduler,
+    def finalize_domain_state(model):
+        target_model = model.module if hasattr(model, "module") else model
+        if isinstance(target_model, OPFEnhancedModelWrapper):
+            target_model.finalize_domain_state()
+
+    cli.run_training(
         config,
+        trainset,
+        valset,
+        testset,
         log_name,
-        config["Verbosity"]["level"],
-        create_plots=False,
-        precision=precision,
+        writer,
+        precision=args.precision,
+        everyone=args.everyone,
+        comm=comm,
+        variables=False,
+        loader_transform=wrap_loader,
+        deferred_loss_provider="optimal_power_flow",
+        model_wrapper=wrap_model,
+        find_unused_parameters=True,
+        before_train=eval_domain_penalties,
+        after_train=finalize_domain_state,
     )
-    _diag("Exited train_validate_test")
-
-    if isinstance(model, OPFEnhancedModelWrapper):
-        model.finalize_domain_state()
-    elif hasattr(model, "module") and isinstance(model.module, OPFEnhancedModelWrapper):
-        model.module.finalize_domain_state()
-
-    hydragnn.models.utils.save_model(model, optimizer, log_name)
-    hydragnn.utils.profiling_and_tracing.print_timers(config["Verbosity"]["level"])
-    if writer is not None:
-        writer.close()
 
     comm.Barrier()
     if dist.is_initialized():

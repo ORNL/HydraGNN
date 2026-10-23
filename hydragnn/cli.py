@@ -10,10 +10,9 @@
 ##############################################################################
 """Shared training pipeline behind ``hydragnn train`` and the example scripts.
 
-Only homogeneous graphs (``torch_geometric.data.Data``) are supported.
-Heterogeneous graphs (``HeteroData``, ``Hetero*`` models) need hetero metadata,
-per-edge-type PNA degrees and dataset/loader adapters that this module does not
-provide yet; see the scripts in ``examples/opf`` for heterogeneous training.
+:func:`run_training` handles homogeneous (``Data``) and heterogeneous
+(``HeteroData``) samples. Writing datasets with :func:`write_split_datasets`
+is homogeneous-only because it stores a single PNA degree histogram.
 """
 
 import argparse
@@ -27,7 +26,11 @@ SPLITS = ("trainset", "valset", "testset")
 
 
 def build_parser(
-    description=None, default_inputfile=None, default_format="adios", preprocessing=True
+    description=None,
+    default_inputfile=None,
+    default_format="adios",
+    preprocessing=True,
+    formats=FORMATS,
 ):
     """Return a parser with the flags shared by every training script."""
     parser = argparse.ArgumentParser(
@@ -70,7 +73,7 @@ def build_parser(
         help="override Training.precision",
     )
     group = parser.add_mutually_exclusive_group()
-    for fmt in FORMATS:
+    for fmt in formats:
         group.add_argument(
             "--" + fmt,
             action="store_const",
@@ -195,6 +198,10 @@ def load_split_datasets(
                 for split, label in zip(splits, SPLITS)
             ]
             splits[0].pna_deg = pna_deg
+    elif fmt == "hdf5":
+        from hydragnn.data.hdf5dataset import HDF5Dataset
+
+        splits = [HDF5Dataset(path, label) for label in SPLITS]
     else:
         raise NotImplementedError("Unsupported format: %s" % fmt)
 
@@ -214,16 +221,39 @@ def run_training(
     precision=None,
     everyone=False,
     comm=None,
+    variables=True,
+    loader_transform=None,
+    deferred_loss_provider=None,
+    model_wrapper=None,
+    find_unused_parameters=False,
+    before_train=None,
+    after_train=None,
 ):
     """Build loaders, model and optimizer, then train, validate, test and save.
 
-    Homogeneous models only: no hetero ``metadata`` is passed to the model.
+    ``HeteroData`` samples get their metadata and ``node_input_dims`` passed to
+    the model, and ``HeteroPNA`` gets a degree histogram over all edge types.
+
+    Hooks for scripts that need more than the default pipeline:
+
+    * ``variables=False`` skips compiling ``Variables`` on each sample, for
+      datasets whose samples are already in model format (required for hetero).
+    * ``loader_transform(loader)`` wraps each loader after creation.
+    * ``deferred_loss_provider`` names a ``Training.loss`` provider that needs
+      the built model and is attached by ``model_wrapper`` instead.
+    * ``model_wrapper(model, config)`` returns the model to train.
+    * ``before_train(model, optimizer, loaders, config)`` runs after loading any
+      checkpoint; a truthy return skips training and saving.
+    * ``after_train(model)`` runs before the model is saved.
     """
     import torch
     from mpi4py import MPI
 
     import hydragnn
     import hydragnn.utils.profiling_and_tracing.tracer as tr
+    from hydragnn.preprocess.graph_samples_checks_and_updates import (
+        gather_hetero_deg,
+    )
     from hydragnn.utils.optimizer import select_optimizer
     from hydragnn.utils.print.print_utils import log
     from hydragnn.utils.profiling_and_tracing.time_utils import Timer
@@ -248,21 +278,43 @@ def run_training(
         testset,
         training["batch_size"],
         batching=training.get("Batching"),
-        variables=config["Variables"],
+        variables=config["Variables"] if variables else None,
     )
+    if loader_transform is not None:
+        train_loader, val_loader, test_loader = (
+            loader_transform(loader)
+            for loader in (train_loader, val_loader, test_loader)
+        )
     if precision is not None:
         training["precision"] = precision
     config = hydragnn.config.update_config(
         config, train_loader, val_loader, test_loader
     )
+    arch = config["NeuralNetwork"]["Architecture"]
+    sample = trainset[0]
+    hetero = hasattr(sample, "node_types")
+    # update_config only computes homogeneous PNA degrees.
+    if arch["mpnn_type"] == "HeteroPNA" and not arch.get("pna_deg"):
+        arch["pna_deg"] = gather_hetero_deg(trainset, verbosity)
+        arch["max_neighbours"] = len(arch["pna_deg"]) - 1
     precision = config["NeuralNetwork"]["Training"]["precision"]
     comm.Barrier()
     hydragnn.config.save_config(config, log_name)
     timer.stop()
 
+    model_config = config["NeuralNetwork"]
+    if deferred_loss_provider is not None:
+        model_config = hydragnn.domain_losses.defer_domain_loss(
+            model_config, deferred_loss_provider
+        )
     model = hydragnn.models.create_model_config(
-        config=config["NeuralNetwork"], verbosity=verbosity
+        config=model_config,
+        verbosity=verbosity,
+        metadata=sample.metadata() if hetero else None,
+        node_input_dims=arch.get("node_input_dims") if hetero else None,
     )
+    if model_wrapper is not None:
+        model = model_wrapper(model, config)
     optimizer = select_optimizer(
         model, config["NeuralNetwork"]["Training"]["Optimizer"]
     )
@@ -270,12 +322,21 @@ def run_training(
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
     model, optimizer = hydragnn.distributed.distributed_model_wrapper(
-        model, optimizer, verbosity, config=config
+        model,
+        optimizer,
+        verbosity,
+        find_unused_parameters=find_unused_parameters,
+        config=config,
     )
     hydragnn.models.utils.print_model(model)
     hydragnn.models.utils.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
+    loaders = (train_loader, val_loader, test_loader)
+    if before_train is not None and before_train(model, optimizer, loaders, config):
+        if writer is not None:
+            writer.close()
+        return model, config
 
     hydragnn.train.train_validate_test(
         model,
@@ -293,6 +354,8 @@ def run_training(
         precision=precision,
     )
 
+    if after_train is not None:
+        after_train(model)
     hydragnn.models.utils.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
     if writer is not None:
@@ -337,8 +400,8 @@ def main(argv=None):
         "train",
         parents=[train],
         add_help=False,
-        help="train a homogeneous GNN on a preprocessed ADIOS or pickle dataset",
-        description="Train a homogeneous GNN. Heterogeneous graphs are not supported.",
+        help="train a GNN on a preprocessed ADIOS or pickle dataset",
+        description="Train a GNN on a dataset written by an example's --preonly step.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     ).add_argument(
         "--dataset",
