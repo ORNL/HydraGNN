@@ -130,7 +130,10 @@ def write_split_datasets(path, fmt, trainset, valset, testset, comm=None):
     )
 
     comm = MPI.COMM_WORLD if comm is None else comm
-    hetero = len(trainset) > 0 and hasattr(trainset[0], "node_types")
+    # Empty shards must follow the same branch as the others to avoid collective hangs.
+    hetero = comm.allreduce(
+        len(trainset) > 0 and hasattr(trainset[0], "node_types"), op=MPI.LOR
+    )
     if hetero and fmt == "adios":
         raise NotImplementedError(
             "ADIOS cannot store HeteroData samples; use the pickle format."

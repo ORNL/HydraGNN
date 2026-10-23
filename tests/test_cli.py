@@ -269,6 +269,17 @@ def test_write_split_datasets_rejects_heterogeneous_adios(tmp_path):
         )
 
 
+def test_write_split_datasets_empty_shard_follows_hetero_ranks(tmp_path):
+    class PeerIsHeteroComm:
+        def allreduce(self, value, op):
+            return True
+
+    with pytest.raises(NotImplementedError, match="pickle"):
+        cli.write_split_datasets(
+            str(tmp_path / "h.bp"), "adios", [], [], [], comm=PeerIsHeteroComm()
+        )
+
+
 def test_gather_hetero_deg_rank_local(monkeypatch):
     import torch.distributed as dist
     from hydragnn.preprocess.graph_samples_checks_and_updates import (
