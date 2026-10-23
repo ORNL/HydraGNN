@@ -14,13 +14,13 @@ import os
 import json
 import logging
 import sys
+import torch
 from mpi4py import MPI
 
 import numpy as np
 
 import random
 
-import torch
 import torch.distributed as dist
 from torch_geometric.data import Data
 

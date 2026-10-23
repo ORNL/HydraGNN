@@ -10,9 +10,8 @@
 ##############################################################################
 import os
 import sys
-from mpi4py import MPI
-
 import torch
+from mpi4py import MPI
 
 # FIX random seed
 random_state = 0

@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import torch  # noqa: F401  (must load before mpi4py)
 from mpi4py import MPI
 
 import matplotlib as mpl

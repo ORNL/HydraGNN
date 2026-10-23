@@ -16,6 +16,7 @@ import csv
 import logging
 import sys
 from tqdm import tqdm
+import torch
 from mpi4py import MPI
 import math
 
@@ -31,7 +32,6 @@ from hydragnn.distributed import nsplit
 
 import numpy as np
 
-import torch
 import torch.distributed as dist
 
 # FIX random seed

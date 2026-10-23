@@ -12,12 +12,12 @@
 import json, os
 import logging
 from tqdm import tqdm
+import torch
 from mpi4py import MPI
 import argparse
 
 from itertools import chain
 
-import torch
 import numpy as np
 
 import hydragnn

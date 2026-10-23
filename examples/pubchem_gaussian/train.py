@@ -19,13 +19,13 @@ import tarfile
 import tempfile
 from pathlib import Path
 
+import torch
 import mpi4py
 
 mpi4py.rc.thread_level = "serialized"
 mpi4py.rc.threads = False
 
 from mpi4py import MPI
-import torch
 import torch.distributed as dist
 from torch_cluster import radius_graph
 from torch_geometric.data import Data

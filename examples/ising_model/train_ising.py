@@ -8,6 +8,7 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
+import torch
 import mpi4py
 
 mpi4py.rc.thread_level = "serialized"
@@ -17,7 +18,6 @@ import os
 import sys
 from mpi4py import MPI
 
-import torch
 import torch.distributed as dist
 
 # FIX random seed

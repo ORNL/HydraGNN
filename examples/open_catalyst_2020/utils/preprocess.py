@@ -13,6 +13,7 @@ Creates LMDB files with extracted graph features from provided *.extxyz files
 for the S2EF task.
 """
 
+import torch
 import mpi4py
 
 mpi4py.rc.thread_level = "serialized"
@@ -21,7 +22,6 @@ mpi4py.rc.threads = False
 import os
 
 import ase.io
-import torch
 from tqdm import tqdm
 
 

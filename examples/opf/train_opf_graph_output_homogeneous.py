@@ -3,9 +3,9 @@ import shutil
 import subprocess
 import sys
 import time
+import torch
 from mpi4py import MPI
 
-import torch
 import torch.distributed as dist
 from torch_geometric.datasets import OPFDataset
 import torch_geometric.datasets.opf as tg_opf

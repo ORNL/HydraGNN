@@ -11,10 +11,10 @@
 
 import json, os
 from tqdm import tqdm
+import torch
 from mpi4py import MPI
 import argparse
 
-import torch
 import numpy as np
 
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
