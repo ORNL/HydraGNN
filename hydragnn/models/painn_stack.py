@@ -38,7 +38,7 @@ class PAINNStack(Base):
         num_radial: int,
         radius: float,
         *args,
-        **kwargs
+        **kwargs,
     ):
         self.equivariant_attn_adapter_type = "PAINN"
         self.edge_dim = edge_dim

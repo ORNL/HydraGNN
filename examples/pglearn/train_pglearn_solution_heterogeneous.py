@@ -527,9 +527,10 @@ def _prepare_local_datasets(
         )
 
     schema_keys = None
-    with h5py.File(train_input_path, "r") as tr_in, h5py.File(
-        train_primal_path, "r"
-    ) as tr_out:
+    with (
+        h5py.File(train_input_path, "r") as tr_in,
+        h5py.File(train_primal_path, "r") as tr_out,
+    ):
         schema_keys = _validate_and_resolve_schema(task, tr_in, tr_out, static["n_gen"])
 
     with h5py.File(train_input_path, "r") as tr_in:
@@ -559,9 +560,10 @@ def _prepare_local_datasets(
     local_val = []
     local_test = []
 
-    with h5py.File(train_input_path, "r") as tr_in, h5py.File(
-        train_primal_path, "r"
-    ) as tr_out:
+    with (
+        h5py.File(train_input_path, "r") as tr_in,
+        h5py.File(train_primal_path, "r") as tr_out,
+    ):
         for idx in iterate_tqdm(
             local_train_idx, 2, desc="Preprocess train", leave=False
         ):
@@ -573,9 +575,10 @@ def _prepare_local_datasets(
                 _build_sample(static, tr_in, tr_out, idx, task, schema_keys)
             )
 
-    with h5py.File(test_input_path, "r") as te_in, h5py.File(
-        test_primal_path, "r"
-    ) as te_out:
+    with (
+        h5py.File(test_input_path, "r") as te_in,
+        h5py.File(test_primal_path, "r") as te_out,
+    ):
         for idx in iterate_tqdm(local_test_idx, 2, desc="Preprocess test", leave=False):
             local_test.append(
                 _build_sample(static, te_in, te_out, idx, task, schema_keys)

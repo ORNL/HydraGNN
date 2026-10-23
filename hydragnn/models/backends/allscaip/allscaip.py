@@ -122,8 +122,9 @@ class AllScAIPBackbone(nn.Module):
                 data, self.regress_stress, self.regress_forces, self.direct_forces
             )
 
-        with record_function("data_preprocess"), torch.autocast(
-            device_type=str(data.pos.device), enabled=False
+        with (
+            record_function("data_preprocess"),
+            torch.autocast(device_type=str(data.pos.device), enabled=False),
         ):
             x = self.data_preprocess(data)
 

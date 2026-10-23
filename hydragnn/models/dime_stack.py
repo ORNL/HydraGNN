@@ -53,7 +53,7 @@ class DIMEStack(Base):
         radius,
         *args,
         max_neighbours: Optional[int] = None,
-        **kwargs
+        **kwargs,
     ):
         self.equivariant_attn_adapter_type = "DimeNet"
         self.basis_emb_size = basis_emb_size
