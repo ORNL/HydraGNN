@@ -10,9 +10,8 @@
 ##############################################################################
 """Shared training pipeline behind ``hydragnn train`` and the example scripts.
 
-:func:`run_training` handles homogeneous (``Data``) and heterogeneous
-(``HeteroData``) samples. Writing datasets with :func:`write_split_datasets`
-is homogeneous-only because it stores a single PNA degree histogram.
+:func:`run_training` and :func:`write_split_datasets` handle homogeneous
+(``Data``) and heterogeneous (``HeteroData``) samples.
 """
 
 import argparse
@@ -123,15 +122,16 @@ def dataset_path(script_dir, name, fmt):
 
 
 def write_split_datasets(path, fmt, trainset, valset, testset, comm=None):
-    """Write rank-local splits to ``path`` and store the PNA degree histogram.
-
-    The degree histogram is homogeneous; ``HeteroData`` splits are not supported.
-    """
+    """Write rank-local splits to ``path`` and store the PNA degree histogram."""
     from mpi4py import MPI
-    from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
+    from hydragnn.preprocess.graph_samples_checks_and_updates import (
+        gather_deg,
+        gather_hetero_deg,
+    )
 
     comm = MPI.COMM_WORLD if comm is None else comm
-    deg = gather_deg(trainset)
+    hetero = len(trainset) > 0 and hasattr(trainset[0], "node_types")
+    deg = gather_hetero_deg(trainset, 0) if hetero else gather_deg(trainset)
     splits = dict(zip(SPLITS, (trainset, valset, testset)))
     if fmt == "adios":
         from hydragnn.data.adiosdataset import AdiosWriter
@@ -237,7 +237,7 @@ def run_training(
     Hooks for scripts that need more than the default pipeline:
 
     * ``variables=False`` skips compiling ``Variables`` on each sample, for
-      datasets whose samples are already in model format (required for hetero).
+      datasets whose samples are already in model format (implied for hetero).
     * ``loader_transform(loader)`` wraps each loader after creation.
     * ``deferred_loss_provider`` names a ``Training.loss`` provider that needs
       the built model and is attached by ``model_wrapper`` instead.
@@ -272,13 +272,16 @@ def run_training(
         % (len(trainset), len(valset), len(testset)),
         rank=0,
     )
+    sample = trainset[0]
+    hetero = hasattr(sample, "node_types")
     train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
         trainset,
         valset,
         testset,
         training["batch_size"],
         batching=training.get("Batching"),
-        variables=config["Variables"] if variables else None,
+        # The Variables schema compiler only handles homogeneous samples.
+        variables=config["Variables"] if variables and not hetero else None,
     )
     if loader_transform is not None:
         train_loader, val_loader, test_loader = (
@@ -291,8 +294,6 @@ def run_training(
         config, train_loader, val_loader, test_loader
     )
     arch = config["NeuralNetwork"]["Architecture"]
-    sample = trainset[0]
-    hetero = hasattr(sample, "node_types")
     # update_config only computes homogeneous PNA degrees.
     if arch["mpnn_type"] == "HeteroPNA" and not arch.get("pna_deg"):
         arch["pna_deg"] = gather_hetero_deg(trainset, verbosity)

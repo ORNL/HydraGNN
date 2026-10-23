@@ -1288,7 +1288,7 @@ Heterogeneous datasets (`HeteroData` samples) are detected automatically:
 Scripts that need more control call `cli.run_training` with hooks:
 
 - `variables=False`: skips compiling `Variables` for samples already in model
-  format (required for heterogeneous data).
+  format (always skipped for heterogeneous data).
 - `loader_transform`: wraps each data loader (for example, a batch adapter).
 - `model_wrapper(model, config)`: wraps the model before DDP.
 - `deferred_loss_provider`: name of a loss computed outside the model.

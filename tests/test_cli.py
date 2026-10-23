@@ -146,6 +146,32 @@ def _hetero_config(mpnn_type):
     }
 
 
+def test_hydragnn_train_heterogeneous_end_to_end(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    hydragnn.distributed.setup_ddp()
+    samples = _hetero_samples(8)
+    dataset = str(tmp_path / "hetero.pickle")
+    cli.write_split_datasets(
+        dataset, "pickle", samples[:4], samples[4:6], samples[6:], comm=MPI.COMM_SELF
+    )
+    inputfile = tmp_path / "cfg.json"
+    inputfile.write_text(json.dumps(_hetero_config("HeteroGIN")))
+
+    cli.main(
+        [
+            "train",
+            "--inputfile",
+            str(inputfile),
+            "--pickle",
+            "--dataset",
+            dataset,
+            "--log",
+            "cli_hetero",
+        ]
+    )
+    assert (tmp_path / "logs" / "cli_hetero" / "cli_hetero.pk").exists()
+
+
 def test_gather_hetero_deg_counts_all_edge_types():
     from hydragnn.preprocess.graph_samples_checks_and_updates import (
         gather_hetero_deg,
@@ -188,7 +214,6 @@ def test_run_training_heterogeneous_with_hooks(tmp_path, monkeypatch, mpnn_type)
         samples[6:],
         "hetero_" + mpnn_type,
         None,
-        variables=False,
         model_wrapper=wrap_model,
         before_train=before_train,
         after_train=lambda model: calls.append("after_train"),
@@ -214,7 +239,6 @@ def test_run_training_before_train_can_skip_training(tmp_path, monkeypatch):
         samples[4:],
         "hetero_skip",
         None,
-        variables=False,
         before_train=lambda *args: True,
         after_train=after.append,
     )
