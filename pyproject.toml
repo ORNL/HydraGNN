@@ -1,3 +1,107 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "HydraGNN"
+dynamic = ["version"]
+description = "Distributed PyTorch implementation of multi-headed graph neural networks"
+readme = "README.md"
+requires-python = ">=3.11,<3.15"
+license = "BSD-3-Clause"
+license-files = ["LICENSE", "LICENSES/PYG-MIT.txt"]
+authors = [
+    { name = "Massimiliano Lupo Pasini", email = "lupopasinim@ornl.gov" },
+    { name = "Samuel Temple Reeve" },
+    { name = "Pei Zhang" },
+    { name = "Jong Youl Choi" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+dependencies = [
+    "matplotlib==3.10.6",
+    "ase==3.26.0",
+    "tqdm==4.70.0",
+    "tensorboard==2.20.0",
+    "psutil==7.1.0",
+    "sympy==1.14.0",
+    "matscipy",
+    "scikit-learn==1.7.2",
+    "numpy==2.4.6",
+    "scipy==1.17.1",
+    "mpi4py==4.1.1",
+    "vesin==0.4.2",
+    # A range, so facility accelerator builds of torch are kept; [torch] pins exactly.
+    "torch>=2.13,<2.15",
+    "e3nn==0.5.1",
+    "torch-ema==0.3",
+    "torchmetrics==1.4.0",
+    "torch_geometric==2.8.0",
+]
+
+[project.optional-dependencies]
+torch = ["torch==2.13.0", "torchvision==0.28.0"]
+# Compiled extensions: install with -f https://data.pyg.org/whl/torch-<version>+<device>.html
+pyg = [
+    "torch_scatter==2.1.2",
+    "torch_sparse==0.6.18",
+    "torch_cluster==1.6.3",
+    "torch_spline_conv==1.2.2",
+]
+dev = [
+    "black==26.5.1",
+    "pre-commit",
+    "pytest==8.4.2",
+    "pytest-mpi",
+    "pyarrow",
+    "mendeleev==1.2.0",
+    "rdkit==2026.3.5",
+    "fairchem-core==2.22.0",
+]
+optional = [
+    "pymatgen",
+    "jarvis-tools",
+    "optuna",
+    "deephyper",
+    "h5py==3.16.0",
+    "p7zip",
+    "lmdb",
+    "orjson",
+    "pandas==2.3.3",
+    "pyarrow",
+    "pandapower==3.5.4",
+    "PyYAML",
+    "wandb",
+]
+deepspeed = ["deepspeed==0.17.0"]
+# Needs pip build isolation: omegaconf depends on the sdist-only antlr4-python3-runtime.
+uma = ["omegaconf", "monty"]
+
+[project.urls]
+Homepage = "https://github.com/ORNL/HydraGNN"
+
+[project.scripts]
+hydragnn = "hydragnn.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "hydragnn._version.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["hydragnn", "hydragnn.*"]
+
+[tool.setuptools.package-data]
+hydragnn = [
+    "third_party/uma/**/*.pt",
+    "third_party/uma/**/*.json",
+    "third_party/uma/*.md",
+    "third_party/uma/**/*.md",
+]
+
 [tool.black]
 # The UMA backbone is vendored from fairchem-core (Meta, MIT) under
 # hydragnn/third_party/uma/. Import paths, package initializers, and

@@ -193,9 +193,8 @@ pip_retry tensorflow_datasets
 pip_retry vesin==0.4.2
 
 subbanner "Install model-specific backbone dependencies"
-MODEL_REQUIREMENTS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)/requirements-specific-models.txt"
-[[ -f "$MODEL_REQUIREMENTS" ]] || { echo "Missing $MODEL_REQUIREMENTS" >&2; exit 1; }
-pip_retry -r "$MODEL_REQUIREMENTS"
+# Mirrors the pyproject.toml [uma] extra.
+pip_retry omegaconf monty
 
 # ============================================================
 # CUDA-aware PyTorch (pip wheels)
@@ -203,7 +202,7 @@ pip_retry -r "$MODEL_REQUIREMENTS"
 banner "Install CUDA PyTorch (Before PyG)"
 
 # Match cudatoolkit/13.0 => cu130 wheels. Pin the package versions so the
-# platform installer remains consistent with requirements-torch.txt.
+# platform installer stays within the torch range in pyproject.toml.
 TORCH_CUDA_TAG="${TORCH_CUDA_TAG:-cu130}"
 TORCH_VERSION="${TORCH_VERSION:-2.14.0}"
 TORCHVISION_VERSION="${TORCHVISION_VERSION:-0.29.0}"

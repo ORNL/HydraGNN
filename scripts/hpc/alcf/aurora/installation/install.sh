@@ -509,9 +509,8 @@ pip_retry Cython
 pip_retry setuptools wheel
 
 subbanner "Install model-specific backbone dependencies"
-MODEL_REQUIREMENTS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)/requirements-specific-models.txt"
-[[ -f "$MODEL_REQUIREMENTS" ]] || { echo "Missing $MODEL_REQUIREMENTS" >&2; exit 1; }
-pip_retry -r "$MODEL_REQUIREMENTS"
+# Mirrors the pyproject.toml [uma] extra.
+pip_retry omegaconf monty
 
 banner "Re-check NumPy pin (must be 2.4.6 in venv)"
 pip_retry "numpy==2.4.6"

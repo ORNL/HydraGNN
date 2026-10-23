@@ -42,5 +42,8 @@ torchvision 0.28.0, and PyTorch Geometric 2.8.0. HydraGNN accepts PyTorch 2.13
 or 2.14 so facility installers can retain tested accelerator wheels. Facility
 installers keep shared Python dependencies aligned but remain
 authoritative for accelerator-specific PyTorch wheels and framework modules.
-Do not install `requirements-torch.txt` over an environment created by a
+Do not install the `torch` extra over an environment created by a
 facility installer. HydraGNN does not require torchaudio.
+
+Batch job scripts live under `<facility>/<system>/jobs/` and are submitted
+from the repository root.

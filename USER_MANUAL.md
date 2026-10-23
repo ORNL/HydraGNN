@@ -113,11 +113,11 @@ Legacy-checkpoint compatibility is a separate issue.
 ```bash
 ./install_dependencies.sh
 ```
-This script installs the following requirements in order:
-- `requirements-base.txt`: Core Python dependencies for HydraGNN
-- `requirements-torch.txt`: PyTorch and related dependencies
-- `requirements-pyg.txt`: PyTorch Geometric and extensions
-- `requirements-specific-models.txt`: Dependencies used by supported model backbones
+This script installs HydraGNN in editable mode with these `pyproject.toml`
+extras, in order:
+- `torch`: pinned PyTorch and torchvision (core dependencies come along)
+- `pyg`: compiled PyTorch Geometric extensions
+- `uma`: dependencies used by the vendored UMA backbone
 
 You can also install development or optional dependencies:
 ```bash
@@ -137,17 +137,18 @@ You can also install development or optional dependencies:
 Unknown dependency-group names are rejected.
 
 #### Manual Installation (Advanced)
-If you prefer, you can install requirements manually:
+If you prefer, you can install the extras manually:
 ```bash
-pip install --no-build-isolation -v -r requirements-base.txt
-pip install --no-build-isolation -v -r requirements-torch.txt
-pip install --no-build-isolation -v -r requirements-pyg.txt
+pip install -e ".[torch]"
+pip install --no-build-isolation -e ".[pyg]" \
+  -f https://data.pyg.org/whl/torch-2.13.0+cpu.html
+pip install -e ".[uma]"
 # For development tools (optional)
-pip install --no-build-isolation -v -r requirements-dev.txt
+pip install -e ".[dev]"
 # For DeepSpeed support (optional)
-pip install --no-build-isolation -v -r requirements-deepspeed.txt
+pip install -e ".[deepspeed]"
 # For additional optional features
-pip install --no-build-isolation -v -r requirements-optional.txt
+pip install -e ".[optional]"
 ```
 
 #### Building pyg-lib from source
@@ -209,7 +210,7 @@ Tested installation scripts are organized by facility and system under
 - **Perlmutter** (NVIDIA A100; CUDA 13.0 and PyTorch 2.14 by default)
 - **Andes** (CPU)
 
-Use the facility installer instead of `requirements-torch.txt` when preparing
+Use the facility installer instead of the `torch` extra when preparing
 an accelerator-specific environment. The facility scripts select wheels or
 framework modules compatible with that system. In particular, the Frontier
 ROCm 7.2 installer selects PyTorch 2.14 and torchvision 0.29 from the ROCm 7.2
@@ -1575,7 +1576,7 @@ python examples/multibranch/train.py \
 
 ### Hyperparameter Optimization
 
-HydraGNN supports HPO through **DeepHyper** (distributed, scalable) and **Optuna** (TPE, random, CMA-ES samplers). Both are optional dependencies (see `requirements-optional.txt`).
+HydraGNN supports HPO through **DeepHyper** (distributed, scalable) and **Optuna** (TPE, random, CMA-ES samplers). Both are optional dependencies (see the `optional` extra in `pyproject.toml`).
 
 #### DeepHyper
 
@@ -1754,7 +1755,7 @@ Key features:
 cd examples/multibranch
 
 # Run with SLURM on HPC systems
-sbatch SC25-multibranch-omnistat.sh
+sbatch scripts/hpc/olcf/frontier/jobs/SC25-multibranch-omnistat.sh
 ```
 
 Features:
