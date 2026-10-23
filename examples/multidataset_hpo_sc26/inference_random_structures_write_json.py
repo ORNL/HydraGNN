@@ -36,6 +36,7 @@ import os
 import numpy as np
 
 from hydragnn.distributed import get_comm_size_and_rank, get_local_rank
+from hydragnn.domain_losses import uses_interatomic_potential
 
 from inference_random_structures import (
     build_argument_parser,
@@ -102,7 +103,7 @@ def main():
     arch = config["NeuralNetwork"]["Architecture"]
     radius = arch.get("radius", 5.0)
     max_neighbours = arch.get("max_neighbours", 20)
-    enable_ip = hydragnn.domain_losses.uses_interatomic_potential(config)
+    enable_ip = uses_interatomic_potential(config)
 
     # Use (seed + world_rank) so each GPU gets different random structures
     structures = generate_structures(

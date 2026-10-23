@@ -26,7 +26,6 @@ import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.models.utils import print_model
 from hydragnn.data.distdataset import DistDataset
-from hydragnn.data.pickledataset import SimplePickleDataset
 
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 
@@ -39,8 +38,7 @@ try:
 except ImportError:
     pass
 
-from scipy.interpolate import BSpline, make_interp_spline
-import adios2 as ad2
+from scipy.interpolate import make_interp_spline
 
 import torch.distributed as dist
 from torch.distributed.device_mesh import init_device_mesh

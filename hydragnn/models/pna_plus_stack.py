@@ -15,7 +15,6 @@ from typing import Any, Callable, Dict, List, Optional, Union, Tuple
 import torch
 from torch import Tensor
 from torch.utils.data import DataLoader
-import torch.nn.functional as F
 from torch.nn import ModuleList, Sequential
 from torch_geometric.nn import (
     Sequential as PyGSequential,

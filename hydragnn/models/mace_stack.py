@@ -32,7 +32,7 @@ import warnings
 
 # Torch
 import torch
-from torch.nn import ModuleList, Sequential, Linear
+from torch.nn import ModuleList
 from torch.utils.checkpoint import checkpoint, set_checkpoint_early_stop
 from torch_scatter import scatter
 
@@ -50,7 +50,7 @@ from hydragnn.models.backends.mace_utils.modules.blocks import (
 )
 
 # E3NN
-from e3nn import nn, o3
+from e3nn import o3
 from e3nn.util.jit import compile_mode
 
 # HydraGNN
@@ -66,7 +66,6 @@ from hydragnn.models.backends.mace_utils.modules.blocks import (
 from hydragnn.models.utils.operations import get_edge_vectors_and_lengths
 
 # Etc
-import numpy as np
 import math
 
 

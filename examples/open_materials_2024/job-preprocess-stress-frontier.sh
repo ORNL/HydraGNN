@@ -21,7 +21,7 @@ module unload darshan-runtime
 source activate ${HYDRAGNN_ROOT}/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
 
 export PYTHONNOUSERSITE=1
-export PYTHONPATH=${HYDRAGNN_ROOT}:${EXAMPLE_DIR}:${EXAMPLE_DIR}/fairchem:${PYTHONPATH:-}
+export PYTHONPATH=${HYDRAGNN_ROOT}:${EXAMPLE_DIR}:${PYTHONPATH:-}
 export HYDRAGNN_BACKEND=gloo
 export HYDRAGNN_AGGR_BACKEND=mpi
 export OMP_NUM_THREADS=7

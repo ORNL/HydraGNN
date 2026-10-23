@@ -8,22 +8,24 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
-import os, random, torch, glob, sys, pickle, shutil, traceback
+import os
+import random
+import torch
+import glob
+import shutil
+import traceback
 import queue, threading
 import numpy as np
 from mpi4py import MPI
-from yaml import full_load
 
 from hydragnn.data.abstractbasedataset import AbstractBaseDataset
-from torch_geometric.transforms import Distance, Spherical, LocalCartesian
+from torch_geometric.transforms import Distance
 from torch_geometric.data import Data
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
     RadiusGraph,
     RadiusGraphPBC,
     PBCDistance,
-    PBCLocalCartesian,
     pbc_as_tensor,
-    gather_deg,
     should_skip_self_loops,
 )
 from hydragnn.distributed import nsplit
@@ -44,9 +46,6 @@ from torch_geometric.data import Data, Dataset
 from ase.io import read
 from ase import Atoms
 import os
-from typing import List
-
-from hydragnn.utils.print.print_utils import iterate_tqdm, log
 
 
 class ExtendedXYZDataset(Dataset):
@@ -165,7 +164,7 @@ class ODAC2023(AbstractBaseDataset):
                 # dataset = ExtendedXYZDataset(total_file_list[index])
                 dataset = ExtendedXYZDataset(dataitem)
             except Exception as e:
-                print(f"Encountered {e} for {total_file_list[index]}. Ignoring ...")
+                print(f"Encountered {e} for {dataitem}. Ignoring ...")
                 os.remove(dataitem)
                 continue
 

@@ -47,7 +47,7 @@ def write_images_to_adios(
                 continue
 
         except Exception as e:
-            print(f"WARN:", type(error).__name__)
+            print("WARN:", type(e).__name__)
             continue
 
         for i, frame in enumerate(traj_frames):

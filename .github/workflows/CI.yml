@@ -65,7 +65,9 @@ jobs:
           python -m pip install --no-build-isolation -v "pyg_lib @ git+https://github.com/pyg-team/pyg-lib.git@26a2d1a06a4714da9bb804c19049afb4796971d7"
           # Derive the find-links wheel URL from the torch actually installed above.
           TORCH_VERSION="$(python -c 'import torch; print(torch.__version__.split("+")[0])')"
-          python -m pip install --upgrade --no-build-isolation -v -e ".[torch,dev]" --find-links "https://data.pyg.org/whl/torch-${TORCH_VERSION}+cpu.html"
+          # lmdb's py3-none-any wheel compiles at import from paths that do not exist.
+          python -m pip install --upgrade --no-build-isolation -v -e ".[torch,dev]" --no-binary lmdb --find-links "https://data.pyg.org/whl/torch-${TORCH_VERSION}+cpu.html"
+          python -c "import lmdb.cpython"
           # [uma] needs build isolation for omegaconf's sdist-only antlr4 dependency.
           python -m pip install -v --upgrade -e ".[uma]"
           python -m pip install --upgrade --no-build-isolation -v -e ".[deepspeed]" || echo "DeepSpeed installation failed, continuing without it"
@@ -84,7 +86,7 @@ jobs:
           # Run native parity once, serially, and fail if the frozen FAIR-Chem
           # reference is missing or resolves to an unexpected version.
           python -c "import importlib.metadata as m; assert m.version('fairchem-core') == '2.22.0'"
-          python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m fairchem tests/test_fairchem_native_parity.py
+          python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m fairchem tests/test_fairchem_native_parity.py tests/test_fairchem_ase_import.py
           # Check if DeepSpeed is available
           if python -c "import deepspeed" 2>/dev/null; then
             echo "DeepSpeed available - running serial tests"

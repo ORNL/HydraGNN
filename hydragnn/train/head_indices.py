@@ -49,15 +49,15 @@ def get_head_indices_graph(model, data):
 
 def get_head_indices_node_or_mixed(model, data):
     """this is for cases when outputs are node level or mixed graph-node level"""
-    batch_size = data.num_graphs
-    y_loc = data.y_loc
-    # head size for each sample
-    total_size = y_loc[:, -1]
     # feature index for all heads
     head_index = [None] * model.module.num_heads
     if model.module.num_heads == 1:
         head_index[0] = torch.arange(data.y.shape[0])
         return head_index
+    batch_size = data.num_graphs
+    y_loc = data.y_loc
+    # head size for each sample
+    total_size = y_loc[:, -1]
     # intermediate work list
     head_ind_temporary = [None] * batch_size
     # track the start loc of each sample

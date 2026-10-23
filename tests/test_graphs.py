@@ -9,7 +9,8 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
-import sys, os, json
+import os
+import json
 import pytest
 
 import torch

@@ -48,6 +48,7 @@ from hydragnn.train.precision import (
     get_autocast_and_scaler,
 )
 from hydragnn.distributed import get_device
+from hydragnn.domain_losses import uses_interatomic_potential
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -360,7 +361,7 @@ def main():
     arch = config["NeuralNetwork"]["Architecture"]
     radius = arch.get("radius", 5.0)
     max_neighbours = arch.get("max_neighbours", 20)
-    enable_ip = hydragnn.domain_losses.uses_interatomic_potential(config)
+    enable_ip = uses_interatomic_potential(config)
 
     structures = generate_structures(
         args.num_structures,

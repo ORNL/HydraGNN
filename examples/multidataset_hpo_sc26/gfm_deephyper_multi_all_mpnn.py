@@ -19,17 +19,10 @@ torch.backends.cudnn.enabled = False
 random_state = 0
 torch.manual_seed(random_state)
 
-# deprecated in torch_geometric 2.0
-try:
-    from torch_geometric.loader import DataLoader
-except:
-    from torch_geometric.data import DataLoader
-
 import pandas as pd
 import subprocess
 import re
 import argparse
-import time
 import glob
 
 pd.options.display.max_columns = None

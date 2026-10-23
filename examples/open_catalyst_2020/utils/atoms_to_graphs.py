@@ -23,13 +23,13 @@ import numpy as np
 
 import torch
 from torch_geometric.data import Data
-from torch_geometric.transforms import Distance, Spherical, LocalCartesian
+from torch_geometric.data import InMemoryDataset
+from torch_geometric.transforms import Distance
 
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
     RadiusGraph,
     RadiusGraphPBC,
     PBCDistance,
-    PBCLocalCartesian,
     pbc_as_tensor,
 )
 
@@ -223,7 +223,7 @@ class AtomsToGraphs:
                 data_list.append(data)
 
         if collate_and_save:
-            data, slices = collate(data_list)
+            data, slices = InMemoryDataset.collate(data_list)
             torch.save((data, slices), processed_file_path)
 
         return data_list

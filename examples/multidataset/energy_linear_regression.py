@@ -8,24 +8,15 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
-import os, json
-import sys
+import os
 from mpi4py import MPI
 import argparse
 
-import torch
 import numpy as np
 
-import hydragnn
 from hydragnn.distributed import nsplit
 from hydragnn.data.adiosdataset import AdiosWriter, AdiosDataset
 from tqdm import tqdm
-
-# This import requires having installed the package mpi_list
-try:
-    from mpi_list import Context, DFM
-except ImportError:
-    print("mpi_list requires having installed: https://github.com/frobnitzem/mpi_list")
 
 
 def solve_least_squares_svd(A, b):

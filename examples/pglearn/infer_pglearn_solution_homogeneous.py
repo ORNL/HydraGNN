@@ -7,7 +7,6 @@ import matplotlib as mpl
 mpl.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
 import torch.distributed as dist
 from mpi4py import MPI
 
@@ -26,9 +25,9 @@ except ImportError:
     AdiosDataset = None
 
 
-def _plot_parity(true_values, pred_values, out_dir, name="bus_solution"):
-    true_arr = true_values.detach().cpu().numpy().reshape(-1, true_values.shape[-1])
-    pred_arr = pred_values.detach().cpu().numpy().reshape(-1, pred_values.shape[-1])
+def _plot_parity(true_values, pred_values, out_dir, dim, name="bus_solution"):
+    true_arr = true_values.detach().cpu().numpy().reshape(-1, dim)
+    pred_arr = pred_values.detach().cpu().numpy().reshape(-1, dim)
 
     for dim in range(true_arr.shape[1]):
         t = true_arr[:, dim]
@@ -122,6 +121,7 @@ def main():
         valset,
         testset,
         config["NeuralNetwork"]["Training"]["batch_size"],
+        variables=config["Variables"],
     )
 
     config = update_config(config, train_loader, val_loader, test_loader)
@@ -167,7 +167,12 @@ def main():
             p = predicted_values[ihead].detach().cpu().numpy()
             mae = float(np.mean(np.abs(p - t)))
             metrics["mae"].append(mae)
-            _plot_parity(true_values[ihead], predicted_values[ihead], out_dir)
+            _plot_parity(
+                true_values[ihead],
+                predicted_values[ihead],
+                out_dir,
+                config["NeuralNetwork"]["Variables_of_interest"]["output_dim"][ihead],
+            )
 
         with open(os.path.join(out_dir, "test_metrics.json"), "w") as fh:
             json.dump(metrics, fh, indent=2)

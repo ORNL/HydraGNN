@@ -17,13 +17,11 @@
 ## Maybe do PNA aggregation for vectorial? To maintain equivariance, aggregation could only the Identity, but all scalers are valid.
 
 from typing import Any, Callable, Dict, List, Optional, Union
-import pdb
 
 # Torch
 import torch
 from torch import nn, Tensor
 from torch.nn import ModuleList
-from torch.utils.checkpoint import checkpoint
 
 # Torch Geo
 from torch_geometric import nn as geom_nn

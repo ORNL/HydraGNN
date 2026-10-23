@@ -87,6 +87,7 @@ if TYPE_CHECKING:
 
     from hydragnn.third_party.uma.fairchem.core.datasets.atomic_data import AtomicData
     from hydragnn.third_party.uma.fairchem.core.units.mlip_unit.api.inference import InferenceSettings
+    from hydragnn.third_party.uma.fairchem.core.units.mlip_unit.mlip_unit import Task
 
 
 ESCNMD_DEFAULT_EDGE_ACTIVATION_CHECKPOINT_CHUNK_SIZE = 1024 * 128

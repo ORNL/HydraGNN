@@ -8,11 +8,7 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
-import pdb
-import torch
-import torch.nn.functional as F
-from torch.nn import ModuleList
-from torch_geometric.nn import CGConv, BatchNorm, global_mean_pool, Sequential
+from torch_geometric.nn import CGConv, Sequential
 from .base import Base
 
 

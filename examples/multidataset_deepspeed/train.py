@@ -38,14 +38,7 @@ try:
 except ImportError:
     pass
 
-from scipy.interpolate import BSpline, make_interp_spline
-import adios2 as ad2
-
-# import deepspeed
-try:
-    import deepspeed
-except:
-    pass
+from scipy.interpolate import make_interp_spline
 
 ## FIMME
 torch.backends.cudnn.enabled = False

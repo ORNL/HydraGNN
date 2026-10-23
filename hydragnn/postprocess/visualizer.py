@@ -13,8 +13,7 @@ import matplotlib as mpl
 
 mpl.use("Agg")
 import matplotlib.pyplot as plt
-from itertools import chain
-import time, pickle
+import pickle
 import numpy as np
 from math import sqrt, floor, ceil
 from hydragnn.config import sanitize_filename_component

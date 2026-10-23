@@ -127,7 +127,7 @@ output head selected by ``uma_vector_head_index``.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import torch
 from torch.nn import Identity, ModuleList

@@ -9,11 +9,8 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
-import torch
-import torch.nn.functional as F
 import torch.nn as nn
-from torch.nn import ModuleList
-from torch_geometric.nn import GINConv, BatchNorm, Sequential
+from torch_geometric.nn import GINConv, Sequential
 
 from .base import Base
 

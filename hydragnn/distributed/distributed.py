@@ -17,8 +17,8 @@ import hashlib
 import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, MixedPrecision
-from torch.distributed.fsdp import ShardingStrategy
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp import ShardingStrategy  # noqa: F401  (used via eval)
 from torch.distributed.optim import PostLocalSGDOptimizer
 
 from hydragnn.utils.print.print_utils import print_distributed

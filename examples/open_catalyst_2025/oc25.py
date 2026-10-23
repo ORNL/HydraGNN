@@ -9,9 +9,9 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 import glob
+import logging
 import os
 import random
-import sys
 import traceback
 import bisect
 from concurrent.futures import as_completed
@@ -21,7 +21,6 @@ from functools import partial
 import numpy as np
 import torch
 from mpi4py import MPI
-from torch_cluster import radius_graph
 from torch_geometric.data import Data
 from torch_geometric.transforms import Distance
 from tqdm import tqdm
@@ -35,19 +34,289 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
 )
 from hydragnn.data.abstractbasedataset import AbstractBaseDataset
 from hydragnn.distributed import nsplit
-from hydragnn.utils.print.print_utils import iterate_tqdm
 
-# Ensure the bundled fairchem package is importable when not installed system-wide.
-dirpwd = os.path.dirname(os.path.abspath(__file__))
-fairchem_path = os.path.join(dirpwd, "fairchem")
-if fairchem_path not in sys.path:
-    sys.path.insert(0, fairchem_path)
-
-from fairchem.core.datasets import AseDBDataset  # noqa: E402
+from ase import Atoms
+from ase.calculators.singlepoint import SinglePointCalculator
+from fairchem.core.datasets import AseDBDataset
 
 # Coordinate transforms
 transform_coordinates = Distance(norm=False, cat=False)
 transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
+
+
+def _decode_legacy_ndarray(value):
+    if isinstance(value, dict) and "__ndarray__" in value:
+        raw = value["__ndarray__"]
+        # ASE layout: [shape, dtype, flat_values].
+        if (
+            isinstance(raw, (list, tuple))
+            and len(raw) == 3
+            and isinstance(raw[0], (list, tuple))
+            and isinstance(raw[1], str)
+        ):
+            try:
+                return np.asarray(raw[2], dtype=raw[1]).reshape(raw[0])
+            except (ValueError, TypeError):
+                pass
+        try:
+            arr = np.asarray(raw)
+        except (ValueError, TypeError):
+            try:
+                if isinstance(raw, list) and len(raw) > 0:
+                    if all(hasattr(x, "__len__") for x in raw):
+                        lengths = {len(x) for x in raw if hasattr(x, "__len__")}
+                        if len(lengths) == 1:
+                            arr = np.stack(raw)
+                        else:
+                            arr = np.array(raw, dtype=object)
+                    else:
+                        arr = np.array(raw, dtype=object)
+                else:
+                    arr = raw
+            except Exception:
+                arr = raw
+
+        dtype = value.get("dtype")
+        if dtype is not None:
+            try:
+                arr = np.asarray(arr).astype(dtype)
+            except Exception:
+                pass
+        return arr
+    return value
+
+
+def _normalize_numbers(value):
+    if value is None:
+        return value
+    scalars = []
+
+    def _collect(x):
+        if x is None:
+            return
+        if isinstance(x, (list, tuple, np.ndarray)):
+            for xi in x:
+                _collect(xi)
+        else:
+            scalars.append(x)
+
+    _collect(value)
+    cleaned = [
+        s
+        for s in scalars
+        if not (isinstance(s, str) and s.lower() in {"int64", "int32", "int16"})
+    ]
+    try:
+        arr = np.array(cleaned, dtype=int)
+    except Exception:
+        raise ValueError("atomic numbers field is not convertible to 1D ints")
+    arr = np.asarray(arr).reshape(-1)
+    invalid = (arr < 1) | (arr > 118)
+    if np.any(invalid):
+        arr = arr.copy()
+        arr[invalid] = 1
+    return arr
+
+
+def _normalize_matrix(value, dims=(3, 3), fill=None):
+    if value is None:
+        return None
+    try:
+        arr = np.array(value, dtype=float)
+    except Exception:
+        arr = np.array(value, dtype=object)
+    arr = np.squeeze(arr)
+    if arr.shape == dims:
+        return arr
+    if arr.ndim == 1 and arr.size == dims[0] * dims[1]:
+        return arr.reshape(dims)
+    if fill is not None:
+        return np.full(dims, fill, dtype=float)
+    raise ValueError(
+        f"matrix field has incompatible shape {arr.shape}, expected {dims}"
+    )
+
+
+def _normalize_positions(value):
+    if value is None:
+        return None
+    scalars = []
+
+    def _collect_pos(x):
+        if x is None or isinstance(x, str):
+            return
+        if isinstance(x, (list, tuple, np.ndarray)):
+            for xi in x:
+                _collect_pos(xi)
+        else:
+            scalars.append(x)
+
+    try:
+        arr = np.array(value, dtype=float)
+        if arr.dtype == object:
+            scalars = []
+            _collect_pos(value)
+        else:
+            scalars = None
+    except Exception:
+        scalars = []
+        _collect_pos(value)
+
+    if scalars is not None:
+        if len(scalars) == 0:
+            raise ValueError("positions field has no numeric entries")
+        arr = np.array(scalars, dtype=float)
+
+    arr = np.squeeze(arr)
+    if arr.ndim == 1:
+        if arr.size % 3 != 0:
+            arr = np.pad(arr, (0, 3 - arr.size % 3), constant_values=0.0)
+        arr = arr.reshape(-1, 3)
+    elif arr.ndim == 2:
+        if arr.shape[0] == 3 and arr.shape[1] != 3:
+            arr = arr.T
+        elif arr.shape[1] != 3:
+            raise ValueError("positions field must be Nx3 or 3xN")
+    else:
+        raise ValueError("positions field has invalid dimensions")
+    return arr.astype(float)
+
+
+def _try_normalize(name, value, func):
+    try:
+        return func(value)
+    except Exception as exc:
+        logging.debug(f"Normalization for {name} failed: {exc}")
+        return value
+
+
+def _get_first(mapping, keys):
+    if not isinstance(mapping, dict):
+        return None
+    for k in keys:
+        if k in mapping:
+            return mapping[k]
+    return None
+
+
+def _to_forces(val):
+    if val is None:
+        return None
+    try:
+        arr = np.squeeze(np.asarray(val, dtype=float))
+    except Exception:
+        return None
+    if arr.ndim == 1:
+        if arr.size % 3 != 0:
+            return None
+        arr = arr.reshape(-1, 3)
+    elif arr.ndim == 2:
+        if arr.shape[0] == 3 and arr.shape[1] != 3:
+            arr = arr.T
+        elif arr.shape[1] != 3:
+            return None
+    else:
+        return None
+    return arr
+
+
+def _get_atoms(dataset, idx):
+    """``AseDBDataset.get_atoms`` that also repairs legacy OC25 shards."""
+    db_idx = bisect.bisect(dataset._idlen_cumulative, idx)
+    el_idx = idx if db_idx == 0 else idx - dataset._idlen_cumulative[db_idx - 1]
+    assert el_idx >= 0
+    atoms_row = dataset.dbs[db_idx]._get_row(dataset.db_ids[db_idx][el_idx])
+
+    numbers = _decode_legacy_ndarray(getattr(atoms_row, "numbers", None))
+    numbers = _try_normalize("numbers", numbers, _normalize_numbers)
+    positions = _decode_legacy_ndarray(getattr(atoms_row, "positions", None))
+    positions = _try_normalize("positions", positions, _normalize_positions)
+
+    try:
+        if numbers is not None and positions is not None:
+            n_atoms = positions.shape[0]
+            if numbers.shape[0] < n_atoms:
+                pad = np.full(
+                    n_atoms - numbers.shape[0],
+                    numbers[-1] if numbers.size else 1,
+                    dtype=int,
+                )
+                numbers = np.concatenate([numbers, pad])
+            elif numbers.shape[0] > n_atoms:
+                numbers = numbers[:n_atoms]
+    except Exception:
+        logging.debug("Could not align numbers/positions length")
+
+    cell = _decode_legacy_ndarray(getattr(atoms_row, "cell", None))
+    cell = _try_normalize(
+        "cell", cell, lambda v: _normalize_matrix(v, dims=(3, 3), fill=0.0)
+    )
+
+    pbc = _decode_legacy_ndarray(getattr(atoms_row, "pbc", None))
+    if pbc is not None:
+        try:
+            pbc_arr = np.asarray(pbc).astype(bool).reshape(-1)
+            pbc = None if pbc_arr.size == 0 else pbc_arr[:3]
+        except Exception:
+            logging.debug("Normalization for pbc failed")
+
+    # Write the repaired fields back so Row.toatoms sees decoded arrays.
+    for target, value in (
+        ("numbers", numbers),
+        ("positions", positions),
+        ("cell", cell),
+        ("pbc", pbc),
+    ):
+        try:
+            if hasattr(atoms_row, "_row") and isinstance(atoms_row._row, dict):
+                atoms_row._row[target] = value
+            elif hasattr(atoms_row, "_row") and hasattr(atoms_row._row, target):
+                setattr(atoms_row._row, target, value)
+            else:
+                setattr(atoms_row, target, value)
+        except Exception:
+            pass
+
+    try:
+        atoms = atoms_row.toatoms()
+    except (KeyError, ValueError, TypeError) as err:
+        if isinstance(err, KeyError) and "__ndarray__" not in str(err):
+            raise
+        atoms = Atoms(numbers=numbers, positions=positions, cell=cell, pbc=pbc)
+
+    data_dict = (
+        atoms_row.data if isinstance(getattr(atoms_row, "data", None), dict) else {}
+    )
+    if atoms.calc is None:
+        energy_keys = ["energy", "total_energy", "potential_energy", "E"]
+        energy_val = _get_first(atoms.info, energy_keys)
+        if energy_val is None:
+            energy_val = _get_first(data_dict, energy_keys)
+        try:
+            energy_val = float(np.asarray(energy_val, dtype=float).reshape(-1)[0])
+        except Exception:
+            energy_val = 0.0
+
+        forces_val = _get_first(atoms.info, ["forces", "force", "F"])
+        if forces_val is None:
+            forces_val = _get_first(data_dict, ["forces", "force", "F"])
+        forces_val = _to_forces(forces_val)
+        if forces_val is None and positions is not None:
+            try:
+                forces_val = np.zeros_like(np.asarray(positions, dtype=float))
+            except Exception:
+                forces_val = None
+        try:
+            atoms.calc = SinglePointCalculator(
+                atoms, energy=energy_val, forces=forces_val
+            )
+        except Exception:
+            pass
+
+    atoms.info.update(data_dict)
+    if "sid" not in atoms.info:
+        atoms.info["sid"] = idx
+    return atoms
 
 
 def _get_row_fields(dataset, index):
@@ -118,8 +387,7 @@ def _create_pytorch_data_object(
     forces_norm_threshold,
 ):
     try:
-        atoms = dataset.get_atoms(index)
-
+        atoms = _get_atoms(dataset, index)
         row_fields = _get_row_fields(dataset, index)
 
         positions = None

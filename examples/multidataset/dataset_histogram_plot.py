@@ -8,9 +8,7 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
-import adios2 as ad2
 import numpy as np
-import pickle
 import os
 from tqdm import tqdm
 
