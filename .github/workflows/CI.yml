@@ -81,7 +81,7 @@ jobs:
         id: adios2-cache
         with:
           path: ~/adios2
-          key: adios2-${{ env.ADIOS2_VERSION }}-mpi4py-4.1.1-${{ runner.os }}-${{ env.pythonLocation }}
+          key: adios2-${{ env.ADIOS2_VERSION }}-pydir2-mpi4py-4.1.1-${{ runner.os }}-${{ env.pythonLocation }}
       - name: Build ADIOS2 from source
         if: steps.adios2-cache.outputs.cache-hit != 'true'
         run: |
@@ -89,7 +89,7 @@ jobs:
           cmake -S /tmp/ADIOS2 -B /tmp/adios2-build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=$HOME/adios2 \
-            -DCMAKE_INSTALL_PYTHONDIR=python \
+            -DCMAKE_INSTALL_PYTHONDIR:STRING=python \
             -DPython_EXECUTABLE="$(which python)" \
             -DPython_FIND_STRATEGY=LOCATION \
             -DADIOS2_USE_MPI=ON \

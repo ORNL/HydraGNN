@@ -10,10 +10,10 @@
 ##############################################################################
 """Every example built on ``hydragnn.cli`` imports, parses ``--help``, and ships its config."""
 
+import ast
 import glob
 import json
 import os
-import re
 import subprocess
 import sys
 
@@ -40,19 +40,36 @@ def _cli_scripts():
 SCRIPTS = _cli_scripts()
 
 
+def _default_inputfiles(source):
+    found = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Call) and getattr(node.func, "attr", None) == (
+            "build_parser"
+        ):
+            kw = {k.arg: k.value for k in node.keywords}
+            value = kw.get(
+                "default_inputfile", node.args[1] if len(node.args) > 1 else None
+            )
+            if value is not None:
+                found.append(ast.literal_eval(value))
+    return found
+
+
 def test_cli_scripts_discovered():
     assert len(SCRIPTS) >= 25
 
 
 @pytest.mark.parametrize("script", SCRIPTS)
-def test_example_cli_script(script):
+def test_example_cli_script(script, tmp_path):
     if script in OPTIONAL_IMPORTS:
         pytest.importorskip(OPTIONAL_IMPORTS[script])
     path = os.path.join(EXAMPLES, script)
     workdir = os.path.dirname(path)
     with open(path) as f:
         source = f.read()
-    for inputfile in re.findall(r'default_inputfile="([^"]+)"', source):
+    inputfiles = _default_inputfiles(source)
+    assert inputfiles, f"{script}: no default_inputfile passed to build_parser"
+    for inputfile in inputfiles:
         with open(os.path.join(workdir, inputfile)) as f:
             config = json.load(f)
         assert "NeuralNetwork" in config, inputfile
@@ -61,6 +78,8 @@ def test_example_cli_script(script):
     env["PYTHONPATH"] = os.pathsep.join(
         p for p in (REPO_ROOT, env.get("PYTHONPATH")) if p
     )
+    # Some examples run gcloud at import time; keep it off the user's config.
+    env["CLOUDSDK_CONFIG"] = str(tmp_path / "gcloud")
     result = subprocess.run(
         [sys.executable, os.path.basename(path), "--help"],
         cwd=workdir,
