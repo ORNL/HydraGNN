@@ -23,12 +23,6 @@ torch.manual_seed(random_state)
 from hydragnn import cli
 from hydragnn.preprocess.load_data import split_dataset
 
-# Ensure the bundled fairchem package is importable when not installed system-wide.
-dirpwd = os.path.dirname(os.path.abspath(__file__))
-fairchem_path = os.path.join(dirpwd, "fairchem")
-if fairchem_path not in sys.path:
-    sys.path.insert(0, fairchem_path)
-
 from oc25 import OpenCatalystDataset
 
 ## FIMME

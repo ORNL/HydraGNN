@@ -13,26 +13,6 @@ import logging
 import sys
 from mpi4py import MPI
 
-###############################################################################################
-import importlib.util
-
-# Path to the outer directory that contains 'ase_db_backends'
-local_path = "/lustre/orion/lrn070/world-shared/mlupopa/HydraGNN/examples/open_polymers_2026/fairchem/core/datasets"
-
-# Ensure this path is searched first
-sys.path.insert(0, local_path)
-
-# Now explicitly load your local ase_db_backends package
-package_init = os.path.join(
-    local_path, "ase_db_backends", "ase_db_backends", "__init__.py"
-)
-spec = importlib.util.spec_from_file_location("ase_db_backends", package_init)
-mod = importlib.util.module_from_spec(spec)
-sys.modules["ase_db_backends"] = mod
-spec.loader.exec_module(mod)
-
-###############################################################################################
-
 import torch
 import torch.distributed as dist
 

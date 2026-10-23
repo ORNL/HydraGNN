@@ -11,7 +11,6 @@
 import glob
 import os
 import random
-import sys
 import traceback
 import bisect
 from concurrent.futures import as_completed
@@ -37,13 +36,8 @@ from hydragnn.data.abstractbasedataset import AbstractBaseDataset
 from hydragnn.distributed import nsplit
 from hydragnn.utils.print.print_utils import iterate_tqdm
 
-# Ensure the bundled fairchem package is importable when not installed system-wide.
-dirpwd = os.path.dirname(os.path.abspath(__file__))
-fairchem_path = os.path.join(dirpwd, "fairchem")
-if fairchem_path not in sys.path:
-    sys.path.insert(0, fairchem_path)
-
-from fairchem.core.datasets import AseDBDataset  # noqa: E402
+from ase import Atoms
+from fairchem.core.datasets import AseDBDataset
 
 # Coordinate transforms
 transform_coordinates = Distance(norm=False, cat=False)
@@ -118,9 +112,15 @@ def _create_pytorch_data_object(
     forces_norm_threshold,
 ):
     try:
-        atoms = dataset.get_atoms(index)
-
         row_fields = _get_row_fields(dataset, index)
+        try:
+            atoms = dataset.get_atoms(index)
+        except KeyError:
+            # Legacy shards store "__ndarray__" dicts that Row.toatoms rejects.
+            atoms = Atoms(
+                numbers=row_fields.get("numbers"),
+                positions=row_fields.get("positions"),
+            )
 
         positions = None
         try:
