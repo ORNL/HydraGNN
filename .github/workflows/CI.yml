@@ -84,7 +84,7 @@ jobs:
           # Run native parity once, serially, and fail if the frozen FAIR-Chem
           # reference is missing or resolves to an unexpected version.
           python -c "import importlib.metadata as m; assert m.version('fairchem-core') == '2.22.0'"
-          python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m fairchem tests/test_fairchem_native_parity.py
+          python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m fairchem tests/test_fairchem_native_parity.py tests/test_fairchem_ase_import.py
           # Check if DeepSpeed is available
           if python -c "import deepspeed" 2>/dev/null; then
             echo "DeepSpeed available - running serial tests"

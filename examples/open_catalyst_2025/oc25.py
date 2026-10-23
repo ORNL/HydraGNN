@@ -47,6 +47,17 @@ transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 def _decode_legacy_ndarray(value):
     if isinstance(value, dict) and "__ndarray__" in value:
         raw = value["__ndarray__"]
+        # ASE layout: [shape, dtype, flat_values].
+        if (
+            isinstance(raw, (list, tuple))
+            and len(raw) == 3
+            and isinstance(raw[0], (list, tuple))
+            and isinstance(raw[1], str)
+        ):
+            try:
+                return np.asarray(raw[2], dtype=raw[1]).reshape(raw[0])
+            except (ValueError, TypeError):
+                pass
         try:
             arr = np.asarray(raw)
         except (ValueError, TypeError):
