@@ -8,6 +8,7 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
+import torch
 import mpi4py
 
 mpi4py.rc.thread_level = "serialized"
@@ -28,8 +29,6 @@ from hydragnn.distributed import get_device
 from hydragnn.preprocess.load_data import split_dataset
 
 import numpy as np
-
-import torch
 
 # FIX random seed
 random_state = 0

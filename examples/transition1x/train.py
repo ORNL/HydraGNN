@@ -8,6 +8,7 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
+import torch
 import mpi4py
 from mpi4py import MPI
 
@@ -23,7 +24,6 @@ import sys
 
 import numpy as np
 
-import torch
 import torch.distributed as dist
 
 from torch_geometric.data import Data

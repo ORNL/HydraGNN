@@ -11,10 +11,9 @@
 import os, json
 import logging
 import sys
+import torch
 from mpi4py import MPI
 import argparse
-
-import torch
 
 # FIX random seed
 random_state = 0

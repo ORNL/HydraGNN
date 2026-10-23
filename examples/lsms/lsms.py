@@ -11,6 +11,7 @@
 import os, json
 import logging
 import sys
+import torch
 from mpi4py import MPI
 import argparse
 
@@ -29,7 +30,6 @@ try:
 except ImportError:
     pass
 
-import torch
 import torch.distributed as dist
 
 # FIX random seed

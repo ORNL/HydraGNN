@@ -8,6 +8,7 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
+import torch
 import mpi4py
 
 mpi4py.rc.thread_level = "serialized"
@@ -33,7 +34,6 @@ from hydragnn.preprocess.load_data import split_dataset
 
 import numpy as np
 
-import torch
 import torch.distributed as dist
 
 # FIXME: this works fine for now because we train on GDB-9 molecules
