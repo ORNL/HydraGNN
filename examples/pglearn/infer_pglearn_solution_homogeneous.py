@@ -7,7 +7,6 @@ import matplotlib as mpl
 mpl.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
 import torch.distributed as dist
 from mpi4py import MPI
 
@@ -122,6 +121,7 @@ def main():
         valset,
         testset,
         config["NeuralNetwork"]["Training"]["batch_size"],
+        variables=config["Variables"],
     )
 
     config = update_config(config, train_loader, val_loader, test_loader)

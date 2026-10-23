@@ -12,7 +12,6 @@
 import pytest
 import torch
 from torch_geometric.data import HeteroData
-from torch_geometric.loader import DataLoader
 
 import hydragnn
 from hydragnn.models.create import create_model
@@ -150,6 +149,34 @@ def test_graph_conditioning_parameters_exist_before_optimizer_and_preserve_dtype
     output = model(data)[0]
 
     assert output.dtype == torch.float64
+
+
+@pytest.mark.parametrize("mpnn_type", ["HeteroGAT", "HeteroRGAT"])
+def test_concat_node_conditioning_with_multihead_attention(mpnn_type):
+    args = _graph_head_model_args(
+        mpnn_type,
+        None,
+        use_graph_attr_conditioning=True,
+        graph_attr_dim=2,
+        graph_attr_conditioning_mode="concat_node",
+        hetero_attention_heads=4,
+    )
+    model = create_model(**args)
+    data = _build_simple_hetero_graph()
+    data.graph_attr = torch.tensor([1.0, 2.0])
+    model.eval()
+    assert model(data)[0].shape == (1, 2)
+
+
+def test_single_head_node_indices_without_y_loc():
+    from types import SimpleNamespace
+    from hydragnn.train.head_indices import get_head_indices_node_or_mixed
+
+    model = SimpleNamespace(module=SimpleNamespace(num_heads=1))
+    data = HeteroData()
+    data.y = torch.zeros(5, 2)
+    (index,) = get_head_indices_node_or_mixed(model, data)
+    torch.testing.assert_close(index, torch.arange(5))
 
 
 def test_node_only_heterogeneous_model_rejects_pool_conditioner():

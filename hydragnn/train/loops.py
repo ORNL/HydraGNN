@@ -467,8 +467,8 @@ def test(
                 if model.module.var_output:
                     pred = pred[0]
                 for ihead in range(model.module.num_heads):
-                    head_pre = pred[ihead].reshape(-1, 1)
                     head_val = ytrue[head_index[ihead]]
+                    head_pre = pred[ihead].reshape(head_val.shape)
                     true_values[ihead].append(head_val)
                     predicted_values[ihead].append(head_pre)
             if use_ddstore:

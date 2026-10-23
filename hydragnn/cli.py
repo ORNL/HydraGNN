@@ -97,12 +97,12 @@ def load_config(path, args=None):
     return config
 
 
-def setup_run(args, default_log):
+def setup_run(args, default_log, use_deepspeed=False):
     """Initialize distributed state and logging; return ``(rank, log_name, writer)``."""
     import hydragnn
     from hydragnn.utils.print.print_utils import log
 
-    _, rank = hydragnn.distributed.setup_ddp()
+    _, rank = hydragnn.distributed.setup_ddp(use_deepspeed=use_deepspeed)
     logging.basicConfig(
         level=logging.INFO,
         format="%%(levelname)s (rank %d): %%(message)s" % rank,
@@ -116,8 +116,8 @@ def setup_run(args, default_log):
 
 
 def dataset_path(script_dir, name, fmt):
-    """Return the conventional ``dataset/<name>.bp|.pickle`` location."""
-    suffix = {"adios": "bp", "pickle": "pickle"}[fmt]
+    """Return the conventional ``dataset/<name>.bp|.pickle|.h5`` location."""
+    suffix = {"adios": "bp", "pickle": "pickle", "hdf5": "h5"}[fmt]
     return os.path.join(script_dir, "dataset", "%s.%s" % (name, suffix))
 
 
@@ -163,6 +163,14 @@ def write_split_datasets(path, fmt, trainset, valset, testset, comm=None):
                 comm=comm,
                 attrs={"pna_deg": deg} if label == "trainset" else dict(),
             )
+    elif fmt == "hdf5":
+        from hydragnn.data.hdf5dataset import HDF5Writer
+
+        # HDF5 has no global attributes; update_config recomputes pna_deg.
+        writer = HDF5Writer(path, comm)
+        for label, split in splits.items():
+            writer.add(label, list(split))
+        writer.save()
     else:
         raise NotImplementedError("Unsupported format: %s" % fmt)
 
@@ -238,6 +246,7 @@ def run_training(
     find_unused_parameters=False,
     before_train=None,
     after_train=None,
+    use_deepspeed=False,
 ):
     """Build loaders, model and optimizer, then train, validate, test and save.
 
@@ -340,11 +349,15 @@ def run_training(
         optimizer,
         verbosity,
         find_unused_parameters=find_unused_parameters,
+        use_deepspeed=use_deepspeed,
         config=config,
     )
     hydragnn.models.utils.print_model(model)
     hydragnn.models.utils.load_existing_model_config(
-        model, config["NeuralNetwork"]["Training"], optimizer=optimizer
+        model,
+        config["NeuralNetwork"]["Training"],
+        optimizer=optimizer,
+        use_deepspeed=use_deepspeed,
     )
     loaders = (train_loader, val_loader, test_loader)
     if before_train is not None and before_train(model, optimizer, loaders, config):
@@ -366,11 +379,14 @@ def run_training(
         create_plots=False,
         compute_grad_energy=hydragnn.domain_losses.uses_interatomic_potential(config),
         precision=precision,
+        use_deepspeed=use_deepspeed,
     )
 
     if after_train is not None:
         after_train(model)
-    hydragnn.models.utils.save_model(model, optimizer, log_name)
+    hydragnn.models.utils.save_model(
+        model, optimizer, log_name, use_deepspeed=use_deepspeed
+    )
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
     if writer is not None:
         writer.close()

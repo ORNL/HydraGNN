@@ -1,8 +1,5 @@
-import argparse
-import copy
 import gzip
 import json
-import logging
 import os
 import shutil
 
@@ -13,25 +10,9 @@ import torch.distributed as dist
 from mpi4py import MPI
 from torch_geometric.data import Data
 
-import hydragnn
 from __init__ import data_ops
-from hydragnn.data.pickledataset import (
-    SimplePickleDataset,
-    SimplePickleWriter,
-)
-from hydragnn.config.config_utils import update_config
-from hydragnn.models.utils import print_model
-from hydragnn.utils.profiling_and_tracing import print_timers
+from hydragnn import cli
 from hydragnn.utils.print import iterate_tqdm
-
-from hydragnn.data.hdf5dataset import HDF5Dataset, HDF5Writer
-
-try:
-    from hydragnn.data.adiosdataset import AdiosDataset, AdiosWriter
-except ImportError:
-    AdiosDataset = None
-    AdiosWriter = None
-
 
 TASK_PF = "pf"
 TASK_OPF = "opf"
@@ -129,7 +110,7 @@ def _validate_and_resolve_schema(task, input_h5, primal_h5, n_gen):
 
 
 def _check_task_token(sample, expected_task):
-    graph_attr = getattr(sample, "graph_attr", None)
+    graph_attr = getattr(sample, "context", None)
     if not isinstance(graph_attr, torch.Tensor) or graph_attr.numel() < 2:
         raise RuntimeError(
             "Serialized samples do not carry a PF/OPF task token. "
@@ -141,20 +122,6 @@ def _check_task_token(sample, expected_task):
         raise RuntimeError(
             f"Serialized dataset task token {got} does not match requested task '{expected_task}'."
         )
-
-
-def _to_jsonable(obj):
-    if isinstance(obj, torch.Tensor):
-        return obj.item() if obj.numel() == 1 else obj.tolist()
-    if isinstance(obj, np.ndarray):
-        return obj.tolist()
-    if isinstance(obj, np.generic):
-        return obj.item()
-    if isinstance(obj, dict):
-        return {k: _to_jsonable(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_to_jsonable(v) for v in obj]
-    return obj
 
 
 def _subset_for_rank(indices, rank, world_size):
@@ -300,14 +267,13 @@ def _build_sample(static, input_h5, primal_h5, idx, task, schema_keys):
     )
     edge_attr = np.concatenate([static["branch_static"], branch_status_full], axis=1)
 
-    data = Data(
-        x=torch.tensor(x, dtype=torch.float32),
-        y=torch.tensor(y, dtype=torch.float32),
+    return Data(
+        node_features=torch.tensor(x, dtype=torch.float32),
+        bus_solution=torch.tensor(y, dtype=torch.float32),
         edge_index=static["edge_index"],
-        edge_attr=torch.tensor(edge_attr, dtype=torch.float32),
+        branch_features=torch.tensor(edge_attr, dtype=torch.float32),
+        context=torch.tensor([[reserve_req, TASK_TOKEN[task]]], dtype=torch.float32),
     )
-    data.graph_attr = torch.tensor([reserve_req, TASK_TOKEN[task]], dtype=torch.float32)
-    return data
 
 
 def _open_case_data(case_json_gz):
@@ -410,81 +376,14 @@ def _prepare_local_datasets(
     return local_train, local_val, local_test
 
 
-def _serialize_splits(args, datadir, trainset, valset, testset, comm, rank):
-    if args.format == "adios":
-        if AdiosWriter is None:
-            raise RuntimeError("adios2 is not available in this environment.")
-        out_path = os.path.join(datadir, f"{args.modelname}.bp")
-        if rank == 0 and os.path.exists(out_path):
-            if os.path.isdir(out_path):
-                shutil.rmtree(out_path, ignore_errors=True)
-            else:
-                os.remove(out_path)
-        comm.Barrier()
-        writer = AdiosWriter(out_path, comm)
-        writer.add("trainset", trainset)
-        writer.add("valset", valset)
-        writer.add("testset", testset)
-        writer.save()
-        return
-
-    if args.format == "hdf5":
-        out_path = os.path.join(datadir, f"{args.modelname}.h5")
-        if rank == 0 and os.path.isdir(out_path):
-            shutil.rmtree(out_path, ignore_errors=True)
-        comm.Barrier()
-        writer = HDF5Writer(out_path, comm)
-        writer.add("trainset", trainset)
-        writer.add("valset", valset)
-        writer.add("testset", testset)
-        writer.save()
-        return
-
-    out_path = os.path.join(datadir, f"{args.modelname}.pickle")
-    if rank == 0 and os.path.isdir(out_path):
-        shutil.rmtree(out_path, ignore_errors=True)
-    comm.Barrier()
-    SimplePickleWriter(trainset, out_path, "trainset", use_subdir=True)
-    SimplePickleWriter(valset, out_path, "valset", use_subdir=True)
-    SimplePickleWriter(testset, out_path, "testset", use_subdir=True)
-
-
-def _load_serialized_splits(args, datadir, comm):
-    if args.format == "adios":
-        if AdiosDataset is None:
-            raise RuntimeError("adios2 is not available in this environment.")
-        base = os.path.join(datadir, f"{args.modelname}.bp")
-        return (
-            AdiosDataset(base, "trainset", comm, var_config=None),
-            AdiosDataset(base, "valset", comm, var_config=None),
-            AdiosDataset(base, "testset", comm, var_config=None),
-        )
-
-    if args.format == "hdf5":
-        base = os.path.join(datadir, f"{args.modelname}.h5")
-        return (
-            HDF5Dataset(base, "trainset"),
-            HDF5Dataset(base, "valset"),
-            HDF5Dataset(base, "testset"),
-        )
-
-    base = os.path.join(datadir, f"{args.modelname}.pickle")
-    return (
-        SimplePickleDataset(base, "trainset", var_config=None),
-        SimplePickleDataset(base, "valset", var_config=None),
-        SimplePickleDataset(base, "testset", var_config=None),
-    )
-
-
 def parse_args():
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-    parser.add_argument(
-        "--inputfile", type=str, default="pglearn_solution_homogeneous.json"
+    parser = cli.build_parser(
+        "Train HydraGNN on PGLearn bus solutions.",
+        "pglearn_solution_homogeneous.json",
+        default_format="pickle",
+        formats=("adios", "hdf5", "pickle"),
     )
     parser.add_argument("--data_root", type=str, default="dataset")
-    parser.add_argument("--modelname", type=str, default="PGLearn_Solution")
     parser.add_argument("--repo", type=str, default="PGLearn/PGLearn-Small")
     parser.add_argument("--case_name", type=str, default="14_ieee")
     parser.add_argument("--formulation", type=str, default="ACOPF")
@@ -495,16 +394,7 @@ def parse_args():
         default="auto",
         help="PF/OPF task mode. 'auto' infers task from formulation.",
     )
-    parser.add_argument("--preonly", action="store_true")
     parser.add_argument("--max_samples", type=int, default=None)
-    parser.add_argument("--batch_size", type=int, default=None)
-    parser.add_argument("--num_epoch", type=int, default=None)
-
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument("--adios", action="store_const", dest="format", const="adios")
-    group.add_argument("--hdf5", action="store_const", dest="format", const="hdf5")
-    group.add_argument("--pickle", action="store_const", dest="format", const="pickle")
-    parser.set_defaults(format="pickle")
     return parser.parse_args()
 
 
@@ -516,33 +406,18 @@ def main():
         else _normalize_task(args.task)
     )
     _validate_task_and_formulation(task, args.formulation)
-
-    comm_size, rank = hydragnn.distributed.setup_ddp()
-    comm = MPI.COMM_WORLD
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format=f"%(levelname)s (rank {rank}): %(message)s",
-        datefmt="%H:%M:%S",
-    )
+    modelname = args.modelname or "PGLearn_Solution"
 
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     datadir = os.path.join(dirpwd, args.data_root)
-    cfg_path = os.path.join(dirpwd, args.inputfile)
-
-    with open(cfg_path, "r") as fh:
-        config = json.load(fh)
-
+    config = cli.load_config(os.path.join(dirpwd, args.inputfile), args)
     config.setdefault("Task", {})
     config["Task"]["kind"] = task
     config["Task"]["formulation"] = args.formulation
     config["Task"]["task_token"] = TASK_TOKEN[task]
 
-    if args.batch_size is not None:
-        config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
-    if args.num_epoch is not None:
-        config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
-
+    rank, log_name, writer = cli.setup_run(args, modelname)
+    comm = MPI.COMM_WORLD
     data_ops.ensure_pglearn_downloaded(
         root=datadir,
         repo=args.repo,
@@ -552,109 +427,35 @@ def main():
         comm=comm,
     )
 
-    # Preprocess + serialize when explicitly requested or when serialized data is absent.
-    if args.format == "adios":
-        serialized_exists = os.path.isdir(os.path.join(datadir, f"{args.modelname}.bp"))
-    elif args.format == "hdf5":
-        serialized_exists = os.path.isdir(os.path.join(datadir, f"{args.modelname}.h5"))
-    else:
-        serialized_exists = os.path.isdir(
-            os.path.join(datadir, f"{args.modelname}.pickle")
-        )
-
-    if args.preonly or not serialized_exists:
-        trainset, valset, testset = _prepare_local_datasets(
+    suffix = {"adios": "bp", "hdf5": "h5", "pickle": "pickle"}[args.format]
+    path = os.path.join(datadir, f"{modelname}.{suffix}")
+    if args.preonly or not os.path.isdir(path):
+        splits = _prepare_local_datasets(
             datadir=datadir,
             case_name=args.case_name,
             formulation=args.formulation,
             task=task,
             rank=rank,
-            world_size=comm_size,
+            world_size=comm.Get_size(),
             max_samples=args.max_samples,
         )
-
-        _serialize_splits(args, datadir, trainset, valset, testset, comm, rank)
+        if rank == 0 and os.path.isdir(path):
+            shutil.rmtree(path)
+        comm.Barrier()
+        cli.write_split_datasets(path, args.format, *splits, comm=comm)
         if args.preonly:
             comm.Barrier()
             if dist.is_initialized():
                 dist.destroy_process_group()
             return
 
-    trainset, valset, testset = _load_serialized_splits(args, datadir, comm)
-
-    # Synchronize config with actual tensor dimensions from preprocessed samples.
-    sample0 = trainset[0]
-    _check_task_token(sample0, task)
-    x_dim = int(sample0.x.shape[1])
-    edge_dim = int(sample0.edge_attr.shape[1])
-
-    voi = config["NeuralNetwork"]["Variables_of_interest"]
-    voi["input_node_features"] = list(range(x_dim))
-    voi["node_feature_dims"] = [x_dim]
-    config["NeuralNetwork"]["Architecture"]["edge_dim"] = edge_dim
-
-    log_name = args.modelname
-    hydragnn.utils.print.setup_log(log_name)
-    writer = hydragnn.models.utils.get_summary_writer(log_name)
-
-    train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
-        trainset,
-        valset,
-        testset,
-        config["NeuralNetwork"]["Training"]["batch_size"],
+    splits = cli.load_split_datasets(
+        path, args.format, comm, args.shmem, args.ddstore, args.ddstore_width
     )
-
-    config = update_config(config, train_loader, val_loader, test_loader)
-    config = _to_jsonable(config)
-    hydragnn.config.save_config(config, log_name)
-
-    model = hydragnn.models.create_model_config(
-        config=config["NeuralNetwork"],
-        verbosity=config["Verbosity"]["level"],
+    _check_task_token(splits[0][0], task)
+    cli.run_training(
+        config, *splits, log_name, writer, args.precision, args.everyone, comm
     )
-
-    if config["NeuralNetwork"]["Architecture"].get("mpnn_type") == "PNA":
-        deg = config["NeuralNetwork"]["Architecture"].get("pna_deg")
-        if not deg:
-            # Keep sane fallback if degree computation could not infer automatically.
-            config["NeuralNetwork"]["Architecture"]["pna_deg"] = [0, 1, 1, 1]
-
-    learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=5, min_lr=1e-5
-    )
-
-    model, optimizer = hydragnn.distributed.distributed_model_wrapper(
-        model, optimizer, config["Verbosity"]["level"]
-    )
-
-    print_model(model)
-    hydragnn.models.utils.load_existing_model_config(
-        model, config["NeuralNetwork"]["Training"], optimizer=optimizer
-    )
-
-    hydragnn.train.train_validate_test(
-        model,
-        optimizer,
-        train_loader,
-        val_loader,
-        test_loader,
-        writer,
-        scheduler,
-        config["NeuralNetwork"],
-        log_name,
-        config["Verbosity"]["level"],
-        create_plots=False,
-        precision=config["NeuralNetwork"]["Training"].get("precision", "fp32"),
-    )
-
-    hydragnn.models.utils.save_model(model, optimizer, log_name)
-    print_timers(config["Verbosity"]["level"])
-    if writer is not None:
-        writer.close()
-
-    comm.Barrier()
     if dist.is_initialized():
         dist.destroy_process_group()
 

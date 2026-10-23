@@ -1,10 +1,20 @@
 from dataclasses import dataclass
 
-from .download_and_uncompress_data import ensure_opflearn_prepared
+try:
+    from .download_and_uncompress_data import ensure_opflearn_prepared
+except ImportError:  # Direct-script execution from this directory.
+    from download_and_uncompress_data import ensure_opflearn_prepared
 
 
 def _serialize_parquet_to_hdf5(*args, **kwargs):
-    from .opflearn_pipeline.utils.pyg_serialization import serialize_parquet_to_hdf5
+    try:
+        from .opflearn_pipeline.utils.pyg_serialization import (
+            serialize_parquet_to_hdf5,
+        )
+    except ImportError:  # Direct-script execution from this directory.
+        from opflearn_pipeline.utils.pyg_serialization import (
+            serialize_parquet_to_hdf5,
+        )
 
     return serialize_parquet_to_hdf5(*args, **kwargs)
 

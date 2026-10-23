@@ -122,6 +122,10 @@ class SchemaPreparedDataset(Dataset):
             raise TypeError("Named-variable datasets must return PyG Data objects")
         return prepare_data_from_schema(data.clone(), self.schema)
 
+    def __iter__(self):
+        for index in range(len(self)):
+            yield self[index]
+
     def __getattr__(self, name):
         if name in {"dataset", "schema"}:
             raise AttributeError(name)

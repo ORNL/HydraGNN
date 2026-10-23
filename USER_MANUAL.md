@@ -1383,10 +1383,11 @@ load_existing_model_config(model, config["Training"], optimizer=optimizer)
 
 #### Running with DeepSpeed
 
-Initialize the model and optimizer with `deepspeed.initialize`, then pass the
-resulting engine and explicit loaders to `train_validate_test` with
-`use_deepspeed=True`. See `examples/ogb/train_gap.py` for the complete setup;
-HydraGNN no longer hides this initialization inside a convenience wrapper.
+Call `hydragnn.distributed.setup_ddp(use_deepspeed=True)` and pass
+`use_deepspeed=True` to `distributed_model_wrapper`, `load_existing_model_config`,
+`train_validate_test`, and `save_model`. `hydragnn.cli.setup_run` and
+`hydragnn.cli.run_training` accept the same flag; see
+`examples/ogb/train_gap.py --use_deepspeed`.
 
 ### Infrequent synchronization with post-local SGD
 

@@ -8,63 +8,35 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
-import os, json
-import matplotlib.pyplot as plt
+import os
 import random
 import pandas
-import pickle, csv
+import csv
 
 import logging
 import sys
 from tqdm import tqdm
 from mpi4py import MPI
-import argparse
 import math
 
 import hydragnn
+from hydragnn import cli
 from hydragnn.preprocess.load_data import split_dataset
-from hydragnn.utils.print.print_utils import print_distributed
-from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-from hydragnn.data.pickledataset import (
-    SimplePickleWriter,
-    SimplePickleDataset,
-)
-from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
-from hydragnn.models.utils import print_model
 from hydragnn.data.descriptors_and_embeddings.smiles_utils import (
     generate_graphdata_from_smilestr,
 )
-from hydragnn.config.config_utils import (
-    parse_deepspeed_config,
-    sanitize_filename_component,
-)
-from hydragnn.distributed import get_deepspeed_init_args
+from hydragnn.config.config_utils import sanitize_filename_component
+from hydragnn.data import AbstractBaseDataset
 from hydragnn.distributed import nsplit
 
 import numpy as np
 
-try:
-    from hydragnn.data.adiosdataset import AdiosWriter, AdiosDataset
-except ImportError:
-    pass
-
-import torch_geometric.data
 import torch
 import torch.distributed as dist
 
 # FIX random seed
 random_state = 0
 torch.manual_seed(random_state)
-
-deepspeed_available = True
-try:
-    import deepspeed
-except ImportError:
-    deepspeed_available = False
-
-# import warnings
-
-# warnings.filterwarnings("error")
 
 ogb_node_types = {
     "H": 0,
@@ -105,28 +77,20 @@ def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
-from hydragnn.data import AbstractBaseDataset
-
-
-def smiles_to_graph(datadir, files_list):
-
+def smiles_to_graph(datadir, files_list, var_config, comm):
     subset = []
-
     for filename in files_list:
-
         df = pandas.read_csv(os.path.join(datadir, filename))
-        rx = list(nsplit(range(len(df)), comm_size))[rank]
+        rx = list(nsplit(range(len(df)), comm.Get_size()))[comm.Get_rank()]
 
         for smile_id in tqdm(range(len(df))[rx.start : rx.stop]):
-            ## get atomic positions and numbers
             dfrow = df.iloc[smile_id]
-
-            if math.isnan(float(dfrow[-1])):
+            if math.isnan(float(dfrow.iloc[-1])):
                 continue
 
-            smilestr = dfrow[0]
+            smilestr = dfrow.iloc[0]
             ytarget = (
-                torch.tensor(float(dfrow[-1]))
+                torch.tensor(float(dfrow.iloc[-1]))
                 .unsqueeze(0)
                 .unsqueeze(1)
                 .to(torch.float32)
@@ -139,7 +103,6 @@ def smiles_to_graph(datadir, files_list):
                     ogb_node_types,
                     var_config,
                 )
-
                 subset.append(data)
             except KeyError:
                 print("KeyError: ", smilestr)
@@ -149,26 +112,14 @@ def smiles_to_graph(datadir, files_list):
 
 
 class OGBDataset(AbstractBaseDataset):
-    """OGBDataset datasets class"""
+    """Rank-local OGB samples built from every CSV file in ``dirpath``."""
 
-    def __init__(self, dirpath, var_config, dist=False):
+    def __init__(self, dirpath, var_config, comm):
         super().__init__()
-
-        self.var_config = var_config
-        self.dist = dist
-        if self.dist:
-            assert torch.distributed.is_initialized()
-            self.world_size = torch.distributed.get_world_size()
-            self.rank = torch.distributed.get_rank()
-
-        if os.path.isdir(dirpath):
-            dirfiles = sorted(os.listdir(dirpath))
-        else:
+        if not os.path.isdir(dirpath):
             raise ValueError("OGBDataset takes dirpath as directory")
-
-        setids_files = [x for x in dirfiles if x.endswith("csv")]
-
-        self.dataset.extend(smiles_to_graph(dirpath, setids_files))
+        files = sorted(x for x in os.listdir(dirpath) if x.endswith("csv"))
+        self.dataset.extend(smiles_to_graph(dirpath, files, var_config, comm))
 
     def len(self):
         return len(self.dataset)
@@ -186,9 +137,6 @@ def ogb_datasets_load(datafile, sampling=None, seed=None):
     trainsmiles = []
     valsmiles = []
     testsmiles = []
-    trainidxs = []
-    validxs = []
-    testidxs = []
     with open(datafile, "r") as file:
         csvreader = csv.reader(file)
         print(next(csvreader))
@@ -262,85 +210,75 @@ class OGBRawDataset(torch.utils.data.Dataset):
         return data
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("inputfilesubstr", help="input file substr")
-    parser.add_argument("--sampling", type=float, help="sampling ratio", default=None)
-    parser.add_argument(
-        "--preonly",
-        action="store_true",
-        help="preprocess only. Adios saving and no train",
-    )
-    parser.add_argument("--shmem", action="store_true", help="use shmem")
-    parser.add_argument("--mae", action="store_true", help="do mae calculation")
+def plot_mae(model, loaders, var_config, log_name, verbosity, rank):
+    import matplotlib.pyplot as plt
 
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "--adios",
-        help="Adios dataset",
-        action="store_const",
-        dest="format",
-        const="adios",
+    fig, axs = plt.subplots(1, 3, figsize=(18, 6))
+    for isub, (loader, setname) in enumerate(zip(loaders, ["train", "val", "test"])):
+        error, rmse_task, true_values, predicted_values = hydragnn.train.test(
+            loader, model, verbosity
+        )
+        ihead = 0
+        head_true = np.asarray(true_values[ihead].cpu()).squeeze()
+        head_pred = np.asarray(predicted_values[ihead].cpu()).squeeze()
+        varname = var_config["outputs"][ihead]["name"]
+
+        ax = axs[isub]
+        error_mae = np.mean(np.abs(head_pred - head_true))
+        error_rmse = np.sqrt(np.mean(np.abs(head_pred - head_true) ** 2))
+        print(varname, ": ev, mae=", error_mae, ", rmse= ", error_rmse)
+
+        ax.scatter(
+            head_true,
+            head_pred,
+            s=7,
+            linewidth=0.5,
+            edgecolor="b",
+            facecolor="none",
+        )
+        minv = np.minimum(np.amin(head_pred), np.amin(head_true))
+        maxv = np.maximum(np.amax(head_pred), np.amax(head_true))
+        ax.plot([minv, maxv], [minv, maxv], "r--")
+        ax.set_title(setname + "; " + varname + " (eV)", fontsize=16)
+        ax.text(
+            minv + 0.1 * (maxv - minv),
+            maxv - 0.1 * (maxv - minv),
+            "MAE: {:.2f}".format(error_mae),
+        )
+    if rank == 0:
+        filename = sanitize_filename_component(varname) + "_all.png"
+        fig.savefig(os.path.join("logs", log_name, filename))
+    plt.close()
+
+
+if __name__ == "__main__":
+    parser = cli.build_parser(
+        default_inputfile="ogb_gap.json", formats=cli.FORMATS + ("csv",)
     )
-    group.add_argument(
-        "--pickle",
-        help="Pickle dataset",
-        action="store_const",
-        dest="format",
-        const="pickle",
-    )
-    group.add_argument(
-        "--csv", help="CSV dataset", action="store_const", dest="format", const="csv"
-    )
-    parser.add_argument(
-        "--use_deepspeed",
-        help="Use Deepspeed",
-        action="store_true",
-        dest="use_deepspeed",
-    )
-    parser.set_defaults(format="adios")
+    parser.add_argument("--mae", action="store_true", help="do mae calculation")
+    parser.add_argument("--use_deepspeed", action="store_true", help="Use Deepspeed")
     args = parser.parse_args()
 
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     datadir = os.path.join(dirpwd, "dataset/")
-    ##################################################################################################################
-    inputfilesubstr = args.inputfilesubstr
-    input_filename = os.path.join(dirpwd, "ogb_" + inputfilesubstr + ".json")
-    ##################################################################################################################
-    # Configurable run choices (JSON file that accompanies this example script).
-    with open(input_filename, "r") as f:
-        config = json.load(f)
+    config = cli.load_config(os.path.join(dirpwd, args.inputfile), args)
     verbosity = config["Verbosity"]["level"]
     var_config = config["Variables"]
-    ##################################################################################################################
-    # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.distributed.setup_ddp(use_deepspeed=args.use_deepspeed)
-    ##################################################################################################################
-
+    default_log = os.path.splitext(os.path.basename(args.inputfile))[0]
+    rank, log_name, writer = cli.setup_run(
+        args, default_log, use_deepspeed=args.use_deepspeed
+    )
     comm = MPI.COMM_WORLD
-
-    ## Set up logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%%(levelname)s (rank %d): %%(message)s" % (rank),
-        datefmt="%H:%M:%S",
+    path = (
+        cli.dataset_path(dirpwd, args.modelname or default_log, args.format)
+        if args.format != "csv"
+        else None
     )
 
-    log_name = "ogb_" + inputfilesubstr
-    hydragnn.utils.print.setup_log(log_name)
-    writer = hydragnn.models.utils.get_summary_writer(log_name)
-    hydragnn.config.save_config(config, log_name)
-
-    modelname = "ogb_" + inputfilesubstr
     if args.preonly:
-        norm_yflag = False  # True
-
-        ## local data
-        total = OGBDataset(
-            os.path.join(datadir),
-            var_config,
-            dist=True,
-        )
+        if args.format == "csv":
+            raise ValueError("--preonly writes adios or pickle datasets")
+        total = OGBDataset(datadir, var_config, comm)
         ## This is a local split
         trainset, valset, testset = split_dataset(
             dataset=total,
@@ -348,235 +286,40 @@ if __name__ == "__main__":
             stratify_splitting=False,
         )
         print("Local splitting: ", len(total), len(trainset), len(valset), len(testset))
-
-        deg = gather_deg(trainset)
-        config["pna_deg"] = deg
-
-        setnames = ["trainset", "valset", "testset"]
-
-        ## local data
-        if args.format == "pickle":
-
-            ## pickle
-            basedir = os.path.join(
-                os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
-            )
-            attrs = dict()
-            attrs["pna_deg"] = deg
-            SimplePickleWriter(
-                trainset,
-                basedir,
-                "trainset",
-                # minmax_node_feature=total.minmax_node_feature,
-                # minmax_graph_feature=total.minmax_graph_feature,
-                use_subdir=True,
-                attrs=attrs,
-            )
-            SimplePickleWriter(
-                valset,
-                basedir,
-                "valset",
-                # minmax_node_feature=total.minmax_node_feature,
-                # minmax_graph_feature=total.minmax_graph_feature,
-                use_subdir=True,
-            )
-            SimplePickleWriter(
-                testset,
-                basedir,
-                "testset",
-                # minmax_node_feature=total.minmax_node_feature,
-                # minmax_graph_feature=total.minmax_graph_feature,
-                use_subdir=True,
-            )
-
-        if args.format == "adios":
-            fname = os.path.join(os.path.dirname(__file__), "dataset", "ogb_gap.bp")
-            adwriter = AdiosWriter(fname, comm)
-            adwriter.add("trainset", trainset)
-            adwriter.add("valset", valset)
-            adwriter.add("testset", testset)
-            adwriter.add_global("pna_deg", deg)
-            adwriter.save()
-
+        cli.write_split_datasets(path, args.format, trainset, valset, testset)
         sys.exit(0)
 
-    timer = Timer("load_data")
-    timer.start()
-    if args.format == "adios":
-        opt = {"preload": True, "shmem": False}
-        if args.shmem:
-            opt = {"preload": False, "shmem": True}
-        fname = os.path.join(os.path.dirname(__file__), "dataset", "ogb_gap.bp")
-        trainset = AdiosDataset(fname, "trainset", comm, **opt)
-        valset = AdiosDataset(fname, "valset", comm, **opt)
-        testset = AdiosDataset(fname, "testset", comm, **opt)
-    elif args.format == "csv":
-        fname = os.path.join(os.path.dirname(__file__), "dataset", "pcqm4m_gap.csv")
+    if args.format == "csv":
+        fname = os.path.join(datadir, "pcqm4m_gap.csv")
         fact = OGBRawDatasetFactory(
             fname, var_config=var_config, sampling=args.sampling
         )
-        trainset = OGBRawDataset(fact, "trainset")
-        valset = OGBRawDataset(fact, "valset")
-        testset = OGBRawDataset(fact, "testset")
-    elif args.format == "pickle":
-        info("Pickle load")
-        basedir = os.path.join(
-            os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
-        )
-        trainset = SimplePickleDataset(
-            basedir=basedir, label="trainset", var_config=var_config
-        )
-        valset = SimplePickleDataset(
-            basedir=basedir, label="valset", var_config=var_config
-        )
-        testset = SimplePickleDataset(
-            basedir=basedir, label="testset", var_config=var_config
-        )
-        pna_deg = trainset.pna_deg
+        splits = [OGBRawDataset(fact, label) for label in cli.SPLITS]
     else:
-        raise NotImplementedError("No supported format: %s" % (args.format))
-
-    info(
-        "trainset,valset,testset size: %d %d %d"
-        % (len(trainset), len(valset), len(testset))
-    )
-
-    (
-        train_loader,
-        val_loader,
-        test_loader,
-    ) = hydragnn.preprocess.create_dataloaders(
-        trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
-    )
-
-    config = hydragnn.config.update_config(
-        config, train_loader, val_loader, test_loader
-    )
-    timer.stop()
-
-    model = hydragnn.models.create_model_config(
-        config=config["NeuralNetwork"],
-        verbosity=verbosity,
-    )
-
-    if rank == 0:
-        print_model(model)
-    dist.barrier()
-
-    if not args.use_deepspeed:
-
-        learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"][
-            "learning_rate"
-        ]
-        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
+        splits = cli.load_split_datasets(
+            path,
+            args.format,
+            shmem=args.shmem,
+            ddstore=args.ddstore,
+            ddstore_width=args.ddstore_width,
         )
 
-        model, optimizer = hydragnn.distributed.distributed_model_wrapper(
-            model, optimizer, verbosity, config=config
-        )
-
-        # Print details of neural network architecture
-        print_model(model)
-
-        hydragnn.models.utils.load_existing_model_config(
-            model, config["NeuralNetwork"]["Training"], optimizer=optimizer
-        )
-
-    else:
-        assert deepspeed_available, "deepspeed package not installed"
-        # first, create optimizer and scheduler for deepspeed initialization
-        learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"][
-            "learning_rate"
-        ]
-        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
-        )
-
-        # create temporary deepspeed configuration
-        ds_config = parse_deepspeed_config(config)
-
-        # create deepspeed model
-        # FIXME: need to check if it also works on ALCF-Aurora with Intel GPUs
-        model, optimizer, _, _ = deepspeed.initialize(
-            args=get_deepspeed_init_args(),
-            model=model,
-            config=ds_config,
-            dist_init_required=False,
-            optimizer=optimizer,
-        )  # scheduler is not managed by deepspeed because it is per-epoch instead of per-step
-
-        hydragnn.models.utils.load_existing_model_config(
-            model, config["NeuralNetwork"]["Training"], use_deepspeed=True
-        )
-
-    ##################################################################################################################
-
-    hydragnn.train.train_validate_test(
-        model,
-        optimizer,
-        train_loader,
-        val_loader,
-        test_loader,
-        writer,
-        scheduler,
+    loaders = []
+    model, config = cli.run_training(
         config,
+        *splits,
         log_name,
-        verbosity,
-        create_plots=False,
+        writer,
+        precision=args.precision,
+        everyone=args.everyone,
+        variables=False,
+        before_train=lambda model, optimizer, split_loaders, config: loaders.extend(
+            split_loaders
+        ),
         use_deepspeed=args.use_deepspeed,
     )
-
-    hydragnn.models.utils.save_model(model, optimizer, log_name)
-    hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
-    if writer is not None:
-        writer.close()
-
     if args.mae:
-        ##################################################################################################################
-        fig, axs = plt.subplots(1, 3, figsize=(18, 6))
-        for isub, (loader, setname) in enumerate(
-            zip([train_loader, val_loader, test_loader], ["train", "val", "test"])
-        ):
-            error, rmse_task, true_values, predicted_values = hydragnn.train.test(
-                loader, model, verbosity
-            )
-            ihead = 0
-            head_true = np.asarray(true_values[ihead].cpu()).squeeze()
-            head_pred = np.asarray(predicted_values[ihead].cpu()).squeeze()
-            varname = var_config["outputs"][ihead]["name"]
+        plot_mae(model, loaders, var_config, log_name, verbosity, rank)
 
-            ax = axs[isub]
-            error_mae = np.mean(np.abs(head_pred - head_true))
-            error_rmse = np.sqrt(np.mean(np.abs(head_pred - head_true) ** 2))
-            print(varname, ": ev, mae=", error_mae, ", rmse= ", error_rmse)
-
-            ax.scatter(
-                head_true,
-                head_pred,
-                s=7,
-                linewidth=0.5,
-                edgecolor="b",
-                facecolor="none",
-            )
-            minv = np.minimum(np.amin(head_pred), np.amin(head_true))
-            maxv = np.maximum(np.amax(head_pred), np.amax(head_true))
-            ax.plot([minv, maxv], [minv, maxv], "r--")
-            ax.set_title(setname + "; " + varname + " (eV)", fontsize=16)
-            ax.text(
-                minv + 0.1 * (maxv - minv),
-                maxv - 0.1 * (maxv - minv),
-                "MAE: {:.2f}".format(error_mae),
-            )
-        if rank == 0:
-            filename = sanitize_filename_component(varname) + "_all.png"
-            fig.savefig(os.path.join("logs", log_name, filename))
-        plt.close()
-
-    if args.shmem:
-        trainset.unlink()
-
-    dist.destroy_process_group()
-    sys.exit(0)
+    if dist.is_initialized():
+        dist.destroy_process_group()

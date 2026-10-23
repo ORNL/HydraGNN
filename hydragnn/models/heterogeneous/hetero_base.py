@@ -1031,7 +1031,12 @@ class HeteroBase(
             else:
                 x_dict = conv(x_dict, data.edge_index_dict, edge_attr_dict)
             for node_type, x in x_dict.items():
-                x = self._apply_graph_conditioning(x, batch_dict[node_type], data)
+                # Like GATStack: concat_node only applies at hidden_dim width, not multi-head widths.
+                if not (
+                    self.graph_attr_conditioning_mode == "concat_node"
+                    and x.size(-1) != self.hidden_dim
+                ):
+                    x = self._apply_graph_conditioning(x, batch_dict[node_type], data)
                 x = node_norms[node_type](x)
                 x = self.activation_function(x)
                 x_dict[node_type] = x
