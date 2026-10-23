@@ -17,6 +17,7 @@ import pytest
 import torch
 
 pytest.importorskip("mpi4py.MPI")
+pytest.importorskip("h5py")
 
 from tests._script_runner import REPO_ROOT  # noqa: E402
 

@@ -23,8 +23,12 @@ from tests._script_runner import REPO_ROOT
 
 EXAMPLES = os.path.join(REPO_ROOT, "examples")
 OPTIONAL_IMPORTS = {
-    "mptrj/train.py": "jarvis",
-    "qcml/train.py": "tensorflow",
+    "ani1_x/train.py": ("h5py",),
+    "ani1_x/train_mlip.py": ("h5py",),
+    "mptrj/train.py": ("jarvis",),
+    "qm7x/train.py": ("h5py",),
+    "qm7x/train_mlip.py": ("h5py",),
+    "transition1x/train.py": ("h5py",),
 }
 
 
@@ -61,8 +65,8 @@ def test_cli_scripts_discovered():
 
 @pytest.mark.parametrize("script", SCRIPTS)
 def test_example_cli_script(script, tmp_path):
-    if script in OPTIONAL_IMPORTS:
-        pytest.importorskip(OPTIONAL_IMPORTS[script])
+    for module in OPTIONAL_IMPORTS.get(script, ()):
+        pytest.importorskip(module)
     path = os.path.join(EXAMPLES, script)
     workdir = os.path.dirname(path)
     with open(path) as f:
