@@ -14,7 +14,7 @@ from torch.nn import Linear, Module, ModuleDict, ModuleList
 from torch_geometric.data import HeteroData
 from torch_geometric.nn import BatchNorm, HEATConv
 
-from .HeteroBase import HeteroBase
+from .hetero_base import HeteroBase
 
 
 class _HeteroHEATConvAdapter(Module):

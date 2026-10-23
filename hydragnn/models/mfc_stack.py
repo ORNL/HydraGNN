@@ -11,39 +11,43 @@
 
 import torch
 import torch.nn.functional as F
-import torch.nn as nn
 from torch.nn import ModuleList
-from torch_geometric.nn import GINConv, BatchNorm, Sequential
+from torch.nn import ReLU, Linear
+from torch_geometric.nn import MFConv, BatchNorm, global_mean_pool, Sequential
 
-from .Base import Base
+from .base import Base
 
 
-class GINStack(Base):
-    def __init__(self, *args, **kwargs):
+class MFCStack(Base):
+    def __init__(
+        self,
+        input_args,
+        conv_args,
+        max_degree: int,
+        *args,
+        **kwargs,
+    ):
+        self.max_degree = max_degree
         self.is_edge_model = False  # specify that mpnn cannot handle edge features
-        super().__init__(*args, **kwargs)
+        super().__init__(input_args, conv_args, *args, **kwargs)
 
     def get_conv(self, input_dim, output_dim, edge_dim=None):
-        gin = GINConv(
-            nn.Sequential(
-                nn.Linear(input_dim, output_dim),
-                nn.ReLU(),
-                nn.Linear(output_dim, output_dim),
-            ),
-            eps=100.0,
-            train_eps=True,
+        mfc = MFConv(
+            in_channels=input_dim,
+            out_channels=output_dim,
+            max_degree=self.max_degree,
         )
 
         return Sequential(
             self.input_args,
             [
-                (gin, self.conv_args + " -> inv_node_feat"),
+                (mfc, self.conv_args + " -> inv_node_feat"),
                 (
-                    lambda x, equiv_node_feat: [x, equiv_node_feat],
+                    lambda x, pos: [x, pos],
                     "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
                 ),
             ],
         )
 
     def __str__(self):
-        return "GINStack"
+        return "MFCStack"

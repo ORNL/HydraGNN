@@ -39,9 +39,9 @@ from fairchem.core.models.uma.escn_md import (  # noqa: E402
     eSCNMDBackbone as NativeUMABackbone,
 )
 
-from hydragnn.models.AllScAIPStack import _FairChemAdapter  # noqa: E402
-from hydragnn.models.UMAStack import _UMADataDict  # noqa: E402
-from hydragnn.models.backends.allscaip.AllScAIP import (  # noqa: E402
+from hydragnn.models.allscaip_stack import _FairChemAdapter  # noqa: E402
+from hydragnn.models.uma_stack import _UMADataDict  # noqa: E402
+from hydragnn.models.backends.allscaip.allscaip import (  # noqa: E402
     AllScAIPBackbone,
 )
 from hydragnn.models.backends.allscaip.utils.allscaip_radius_graph import (  # noqa: E402

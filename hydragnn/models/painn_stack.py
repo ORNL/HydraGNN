@@ -20,7 +20,7 @@ from torch_geometric import nn as geom_nn
 from torch.utils.checkpoint import checkpoint
 from torch_geometric.typing import OptTensor
 
-from .Base import Base
+from .base import Base
 from hydragnn.models.utils.operations import get_edge_vectors_and_lengths
 
 

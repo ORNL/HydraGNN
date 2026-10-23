@@ -12,7 +12,7 @@
 from torch.nn import ModuleDict, ModuleList
 from torch_geometric.nn import BatchNorm, HGTConv
 
-from .HeteroBase import HeteroBase
+from .hetero_base import HeteroBase
 
 
 class HeteroHGTStack(HeteroBase):

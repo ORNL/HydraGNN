@@ -13,7 +13,7 @@ import torch
 import torch.nn.functional as F
 from torch.nn import ModuleList
 from torch_geometric.nn import CGConv, BatchNorm, global_mean_pool, Sequential
-from .Base import Base
+from .base import Base
 
 
 class CGCNNStack(Base):

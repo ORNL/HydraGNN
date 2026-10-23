@@ -132,7 +132,7 @@ from typing import Any, Dict, List, Optional
 import torch
 from torch.nn import Identity, ModuleList
 
-from hydragnn.models.Base import Base
+from hydragnn.models.base import Base
 
 # NOTE: the vendored FairChem UMA backbone is imported lazily (see
 # ``_load_uma_backbones``) rather than at module import time. This keeps

@@ -18,7 +18,7 @@ from torch_geometric.nn import BatchNorm, HeteroConv
 
 from hydragnn.models.utils import activation_function_selection
 from hydragnn.distributed import get_device
-from hydragnn.models.attention.HeteroGPS import HeteroGPSConv
+from hydragnn.models.attention.hetero_gps import HeteroGPSConv
 from hydragnn.models.attention.structural import StructuralAttentionContext
 from hydragnn.models.common.graph_conditioning import (
     GraphConditioningMixin,

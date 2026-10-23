@@ -20,21 +20,21 @@ New architectures register themselves with ``@register_model("Name")``.
 from types import SimpleNamespace
 from typing import Callable, Dict
 
-from hydragnn.models.GINStack import GINStack
-from hydragnn.models.PNAStack import PNAStack
-from hydragnn.models.PNAPlusStack import PNAPlusStack
-from hydragnn.models.GATStack import GATStack
-from hydragnn.models.MFCStack import MFCStack
-from hydragnn.models.CGCNNStack import CGCNNStack
-from hydragnn.models.SAGEStack import SAGEStack
-from hydragnn.models.SCFStack import SCFStack
-from hydragnn.models.DIMEStack import DIMEStack
-from hydragnn.models.EGCLStack import EGCLStack
-from hydragnn.models.PNAEqStack import PNAEqStack
-from hydragnn.models.PAINNStack import PAINNStack
-from hydragnn.models.MACEStack import MACEStack
-from hydragnn.models.AllScAIPStack import AllScAIPStack
-from hydragnn.models.UMAStack import UMAStack
+from hydragnn.models.gin_stack import GINStack
+from hydragnn.models.pna_stack import PNAStack
+from hydragnn.models.pna_plus_stack import PNAPlusStack
+from hydragnn.models.gat_stack import GATStack
+from hydragnn.models.mfc_stack import MFCStack
+from hydragnn.models.cgcnn_stack import CGCNNStack
+from hydragnn.models.sage_stack import SAGEStack
+from hydragnn.models.scf_stack import SCFStack
+from hydragnn.models.dime_stack import DIMEStack
+from hydragnn.models.egcl_stack import EGCLStack
+from hydragnn.models.pna_eq_stack import PNAEqStack
+from hydragnn.models.painn_stack import PAINNStack
+from hydragnn.models.mace_stack import MACEStack
+from hydragnn.models.allscaip_stack import AllScAIPStack
+from hydragnn.models.uma_stack import UMAStack
 from hydragnn.models.heterogeneous import (
     HeteroGINStack,
     HeteroSAGEStack,

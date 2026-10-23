@@ -3,7 +3,7 @@ import types
 import torch
 
 from hydragnn.models.attention.gps import HydraGPSConv
-from hydragnn.models.Base import Base
+from hydragnn.models.base import Base
 
 
 def _make_toy_base_for_embedding(hidden_dim=8, pe_dim=3, x_dim=5):

@@ -139,8 +139,8 @@ from hydragnn.models.backends.escaip.utils.nn_utils import (
     get_normalization_layer,
 )
 
-from hydragnn.models.Base import Base
-from hydragnn.models.backends.allscaip.AllScAIP import AllScAIPBackbone
+from hydragnn.models.base import Base
+from hydragnn.models.backends.allscaip.allscaip import AllScAIPBackbone
 
 # Map HydraGNN activation-function names to AllScAIP-supported ones.
 # AllScAIP accepts: squared_relu, gelu, leaky_relu, relu, smelu, star_relu.

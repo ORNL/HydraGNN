@@ -33,8 +33,8 @@ import numpy as np
 from torch_geometric.data import Data
 
 from hydragnn.models.create import create_model
-from hydragnn.models.PNAEqStack import PainnMessage
-from hydragnn.models.PAINNStack import PainnMessage as PainnMessagePA
+from hydragnn.models.pna_eq_stack import PainnMessage
+from hydragnn.models.painn_stack import PainnMessage as PainnMessagePA
 
 # Hide noisy TorchScript annotation warnings to keep test output readable.
 warnings.filterwarnings(

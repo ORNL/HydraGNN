@@ -9,16 +9,18 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
+import torch
+import torch.nn.functional as F
 import torch.nn as nn
-from torch_geometric.nn import GINConv
+from torch.nn import ModuleList
+from torch_geometric.nn import GINConv, BatchNorm, Sequential
 
-from .HeteroBase import HeteroBase
+from .base import Base
 
 
-class HeteroGINStack(HeteroBase):
-    def __init__(self, edge_dim, *args, **kwargs):
-        self.edge_dim = edge_dim
-        self.is_edge_model = False
+class GINStack(Base):
+    def __init__(self, *args, **kwargs):
+        self.is_edge_model = False  # specify that mpnn cannot handle edge features
         super().__init__(*args, **kwargs)
 
     def get_conv(self, input_dim, output_dim, edge_dim=None):
@@ -31,7 +33,17 @@ class HeteroGINStack(HeteroBase):
             eps=100.0,
             train_eps=True,
         )
-        return gin
+
+        return Sequential(
+            self.input_args,
+            [
+                (gin, self.conv_args + " -> inv_node_feat"),
+                (
+                    lambda x, equiv_node_feat: [x, equiv_node_feat],
+                    "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                ),
+            ],
+        )
 
     def __str__(self):
-        return "HeteroGINStack"
+        return "GINStack"

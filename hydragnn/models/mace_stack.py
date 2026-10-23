@@ -54,7 +54,7 @@ from e3nn import nn, o3
 from e3nn.util.jit import compile_mode
 
 # HydraGNN
-from .Base import Base
+from .base import Base
 from hydragnn.models.utils.operations import get_edge_vectors_and_lengths
 from hydragnn.models.utils.irreps_tools import create_irreps_string
 from hydragnn.models.backends.mace_utils.modules.blocks import (

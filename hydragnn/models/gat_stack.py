@@ -15,7 +15,7 @@ from torch.nn import ModuleList
 from torch.nn import ReLU, Linear, Identity
 from torch_geometric.nn import GATv2Conv, BatchNorm, Sequential
 
-from .Base import Base
+from .base import Base
 
 
 class GATStack(Base):

@@ -33,7 +33,7 @@ from torch_geometric.nn.models.dimenet import BesselBasisLayer
 from torch_geometric.typing import Adj
 
 # HydraGNN
-from .Base import Base
+from .base import Base
 from hydragnn.models.utils.operations import get_edge_vectors_and_lengths
 
 

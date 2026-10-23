@@ -7,13 +7,13 @@ import pytest
 import torch
 from torch_geometric.data import Batch, HeteroData
 
-from hydragnn.models.attention.HeteroGPS import (
+from hydragnn.models.attention.hetero_gps import (
     StructuralCoordinatePerformerAttention,
     HeteroGPSConv,
 )
 from hydragnn.models.attention.structural import StructuralAttentionContext
-from hydragnn.models.heterogeneous.HeteroBase import HeteroBase
-from hydragnn.models.heterogeneous.HeteroSAGEStack import HeteroSAGEStack
+from hydragnn.models.heterogeneous.hetero_base import HeteroBase
+from hydragnn.models.heterogeneous.hetero_sage_stack import HeteroSAGEStack
 
 _MODULE_PATH = Path(__file__).parents[1] / "examples" / "opf" / "opf_svd_rpe.py"
 _SPEC = importlib.util.spec_from_file_location("opf_svd_rpe", _MODULE_PATH)
