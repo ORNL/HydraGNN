@@ -17,7 +17,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from hydragnn.models.Base import Base
+from hydragnn.models.base import Base
 
 
 class _NodeHead(torch.nn.Linear):

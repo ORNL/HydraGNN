@@ -8,11 +8,11 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
-from .Base import Base
-from .GATStack import GATStack
-from .GINStack import GINStack
-from .PNAStack import PNAStack
-from .GINStack import GINStack
+from .base import Base
+from .gat_stack import GATStack
+from .gin_stack import GINStack
+from .pna_stack import PNAStack
+from .gin_stack import GINStack
 from .heterogeneous import (
     HeteroBase,
     HeteroGINStack,
@@ -24,5 +24,5 @@ from .heterogeneous import (
     HeteroRGATStack,
 )
 from .create import create_model, create_model_config
-from .MultiTaskModelMP import MultiTaskModelMP, DualOptimizer
+from .multi_task_model_mp import MultiTaskModelMP, DualOptimizer
 from hydragnn.models.attention.structural import StructuralAttentionContext

@@ -22,7 +22,7 @@ condition in the spherical-harmonic basis.
 import pytest
 import torch
 
-from hydragnn.models.UMAStack import _UMAEquivariantVectorHead
+from hydragnn.models.uma_stack import _UMAEquivariantVectorHead
 
 
 def _random_node_embedding(num_nodes, lmax, channels, dtype):

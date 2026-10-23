@@ -10,9 +10,9 @@
 ##############################################################################
 
 from torch.nn import Linear, Module, ModuleDict, ModuleList
-from torch_geometric.nn import BatchNorm, GATv2Conv, HeteroConv
+from torch_geometric.nn import BatchNorm, GATConv, HeteroConv
 
-from .HeteroBase import HeteroBase
+from .hetero_base import HeteroBase
 
 
 class _ProjectedHeteroConv(Module):
@@ -41,7 +41,7 @@ class _ProjectedHeteroConv(Module):
             proj.reset_parameters()
 
 
-class HeteroGATStack(HeteroBase):
+class HeteroRGATStack(HeteroBase):
     def __init__(
         self,
         heads: int,
@@ -56,34 +56,34 @@ class HeteroGATStack(HeteroBase):
         self.is_edge_model = True
         super().__init__(*args, **kwargs)
 
-    def _build_hetero_gat_conv(self, input_dim: int, output_dim: int, concat: bool):
+    def _build_hetero_rgat_conv(self, input_dim: int, output_dim: int, concat: bool):
         self._validate_shared_edge_dims()
         conv_dict = {}
         shared_conv = None
         for edge_type in self._metadata[1]:
-            resolved_edge_dim = self._resolve_edge_dim_for_type(edge_type)
+            edge_dim = self._resolve_edge_dim_for_type(edge_type)
             if self.share_relation_weights:
                 if shared_conv is None:
-                    shared_conv = GATv2Conv(
+                    shared_conv = GATConv(
                         in_channels=input_dim,
                         out_channels=output_dim,
                         heads=self.heads,
                         negative_slope=self.negative_slope,
                         dropout=self.dropout,
                         add_self_loops=False,
-                        edge_dim=resolved_edge_dim,
+                        edge_dim=edge_dim,
                         concat=concat,
                     )
                 conv_dict[edge_type] = shared_conv
             else:
-                conv_dict[edge_type] = GATv2Conv(
+                conv_dict[edge_type] = GATConv(
                     in_channels=input_dim,
                     out_channels=output_dim,
                     heads=self.heads,
                     negative_slope=self.negative_slope,
                     dropout=self.dropout,
                     add_self_loops=False,
-                    edge_dim=resolved_edge_dim,
+                    edge_dim=edge_dim,
                     concat=concat,
                 )
         return HeteroConv(conv_dict, aggr="sum")
@@ -95,7 +95,7 @@ class HeteroGATStack(HeteroBase):
         if self.use_global_attn:
             # Match non-hetero GATStack: concat heads are projected back to
             # hidden_dim before GPS sees the local branch output.
-            mpnn = self._build_hetero_gat_conv(self.hidden_dim, self.hidden_dim, True)
+            mpnn = self._build_hetero_rgat_conv(self.hidden_dim, self.hidden_dim, True)
             mpnn = _ProjectedHeteroConv(
                 mpnn,
                 self._metadata[0],
@@ -109,7 +109,7 @@ class HeteroGATStack(HeteroBase):
             self.feature_layers.append(node_norms)
 
             for _ in range(self.num_conv_layers - 2):
-                mpnn = self._build_hetero_gat_conv(
+                mpnn = self._build_hetero_rgat_conv(
                     self.hidden_dim, self.hidden_dim, True
                 )
                 mpnn = _ProjectedHeteroConv(
@@ -125,7 +125,7 @@ class HeteroGATStack(HeteroBase):
                 self.feature_layers.append(node_norms)
 
             if self.num_conv_layers > 1:
-                mpnn = self._build_hetero_gat_conv(
+                mpnn = self._build_hetero_rgat_conv(
                     self.hidden_dim, self.hidden_dim, False
                 )
                 self.graph_convs.append(self._apply_global_attn(mpnn))
@@ -137,7 +137,7 @@ class HeteroGATStack(HeteroBase):
         else:
             # First layer: concat=True -> hidden_dim * heads
             self.graph_convs.append(
-                self._build_hetero_gat_conv(self.hidden_dim, self.hidden_dim, True)
+                self._build_hetero_rgat_conv(self.hidden_dim, self.hidden_dim, True)
             )
             node_norms = ModuleDict({})
             for node_type in self._metadata[0]:
@@ -147,7 +147,7 @@ class HeteroGATStack(HeteroBase):
             # Middle layers: concat=True -> hidden_dim * heads
             for _ in range(self.num_conv_layers - 2):
                 self.graph_convs.append(
-                    self._build_hetero_gat_conv(
+                    self._build_hetero_rgat_conv(
                         self.hidden_dim * self.heads, self.hidden_dim, True
                     )
                 )
@@ -159,7 +159,7 @@ class HeteroGATStack(HeteroBase):
             # Final layer: concat=False -> hidden_dim
             if self.num_conv_layers > 1:
                 self.graph_convs.append(
-                    self._build_hetero_gat_conv(
+                    self._build_hetero_rgat_conv(
                         self.hidden_dim * self.heads, self.hidden_dim, False
                     )
                 )
@@ -169,8 +169,8 @@ class HeteroGATStack(HeteroBase):
                 self.feature_layers.append(node_norms)
 
         self._initialized = True
-        if "node" not in self.config_heads:
-            return
+
+    def _init_node_conv(self):
         nodeconfiglist = self.config_heads["node"]
         assert (
             self.num_branches == len(nodeconfiglist) or self.num_branches == 1
@@ -197,7 +197,7 @@ class HeteroGATStack(HeteroBase):
             batch_norms_node_output = ModuleList()
 
             convs_node_hidden.append(
-                self._build_hetero_gat_conv(self.hidden_dim, hidden_dim_node[0], True)
+                self._build_hetero_rgat_conv(self.hidden_dim, hidden_dim_node[0], True)
             )
             bn_dict = ModuleDict({})
             for node_type in self._metadata[0]:
@@ -206,7 +206,7 @@ class HeteroGATStack(HeteroBase):
 
             for ilayer in range(num_conv_layers_node - 1):
                 convs_node_hidden.append(
-                    self._build_hetero_gat_conv(
+                    self._build_hetero_rgat_conv(
                         hidden_dim_node[ilayer] * self.heads,
                         hidden_dim_node[ilayer + 1],
                         True,
@@ -221,7 +221,7 @@ class HeteroGATStack(HeteroBase):
 
             for ihead in node_feature_ind:
                 convs_node_output.append(
-                    self._build_hetero_gat_conv(
+                    self._build_hetero_rgat_conv(
                         hidden_dim_node[-1] * self.heads,
                         self.head_dims[ihead],
                         False,
@@ -237,17 +237,5 @@ class HeteroGATStack(HeteroBase):
             self.convs_node_output[branchtype] = convs_node_output
             self.batch_norms_node_output[branchtype] = batch_norms_node_output
 
-    def get_conv(self, input_dim, output_dim, edge_dim=None):
-        return GATv2Conv(
-            in_channels=input_dim,
-            out_channels=output_dim,
-            heads=self.heads,
-            negative_slope=self.negative_slope,
-            dropout=self.dropout,
-            add_self_loops=False,
-            edge_dim=edge_dim,
-            concat=False,
-        )
-
     def __str__(self):
-        return "HeteroGATStack"
+        return "HeteroRGATStack"

@@ -27,7 +27,7 @@ from torch_geometric.nn.models.dimenet import (
 )
 from torch_geometric.utils import scatter
 
-from .Base import Base
+from .base import Base
 from hydragnn.models.utils.operations import get_edge_vectors_and_lengths
 
 

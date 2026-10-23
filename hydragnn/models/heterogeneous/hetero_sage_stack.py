@@ -11,7 +11,7 @@
 
 from torch_geometric.nn import SAGEConv
 
-from .HeteroBase import HeteroBase
+from .hetero_base import HeteroBase
 
 
 class HeteroSAGEStack(HeteroBase):

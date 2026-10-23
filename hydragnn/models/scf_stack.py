@@ -25,7 +25,7 @@ from torch_geometric.nn.models.schnet import (
 )
 from torch_geometric.typing import OptTensor
 
-from .Base import Base
+from .base import Base
 
 from hydragnn.models.utils import unsorted_segment_mean
 from hydragnn.models.utils.operations import get_edge_vectors_and_lengths

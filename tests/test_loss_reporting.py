@@ -11,7 +11,7 @@ from hydragnn.loss_reporting import (
     reset_loss_report,
     supervised_loss_report,
 )
-from hydragnn.models.Base import Base
+from hydragnn.models.base import Base
 from hydragnn.config.variable_schema import parse_variable_schema
 from hydragnn.utils.print.print_utils import setup_log
 

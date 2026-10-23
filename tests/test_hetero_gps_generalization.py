@@ -1,7 +1,7 @@
 import torch
 from torch_geometric.nn import GATConv, HeteroConv
 
-from hydragnn.models.attention.HeteroGPS import (
+from hydragnn.models.attention.hetero_gps import (
     HeteroGPSConv,
     StructuralCoordinatePerformerAttention,
 )

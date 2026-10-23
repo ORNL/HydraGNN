@@ -10,37 +10,23 @@
 ##############################################################################
 
 import torch
-from torch_geometric.nn import PNAConv
-from torch.nn import Module
-
-from .HeteroBase import HeteroBase
-
-
-class _BipartitePNAWrapper(Module):
-    def __init__(self, conv: PNAConv):
-        super().__init__()
-        self.conv = conv
-
-    def forward(self, x, edge_index, edge_attr=None):
-        if isinstance(x, tuple):
-            x_src, x_dst = x
-            x_cat = torch.cat([x_src, x_dst], dim=0)
-            edge_index_cat = torch.stack(
-                [edge_index[0], edge_index[1] + x_src.size(0)], dim=0
-            )
-            out = self.conv(x_cat, edge_index_cat, edge_attr=edge_attr)
-            return out[x_src.size(0) :]
-        return self.conv(x, edge_index, edge_attr=edge_attr)
+import torch.nn.functional as F
+from torch.nn import ModuleList
+from torch_geometric.nn import PNAConv, BatchNorm, global_mean_pool, Sequential
+from .base import Base
 
 
-class HeteroPNAStack(HeteroBase):
+class PNAStack(Base):
     def __init__(
         self,
+        input_args,
+        conv_args,
         deg: list,
         edge_dim: int,
         *args,
         **kwargs,
     ):
+
         self.aggregators = ["mean", "min", "max", "std"]
         self.scalers = [
             "identity",
@@ -50,14 +36,11 @@ class HeteroPNAStack(HeteroBase):
         ]
         self.deg = torch.Tensor(deg)
         self.edge_dim = edge_dim
-        self.is_edge_model = True
-        super().__init__(*args, **kwargs)
+        self.is_edge_model = True  # specify that mpnn can handle edge features
+        super().__init__(input_args, conv_args, *args, **kwargs)
 
     def get_conv(self, input_dim, output_dim, edge_dim=None):
-        # Use the per-type edge_dim passed by _build_hetero_conv.
-        # For uniform (int) edge_dim, _resolve_edge_dim_for_type returns the
-        # same int for every edge type, so this is backward-compatible.
-        conv = PNAConv(
+        pna = PNAConv(
             in_channels=input_dim,
             out_channels=output_dim,
             aggregators=self.aggregators,
@@ -68,7 +51,20 @@ class HeteroPNAStack(HeteroBase):
             post_layers=1,
             divide_input=False,
         )
-        return _BipartitePNAWrapper(conv)
+
+        return Sequential(
+            self.input_args,
+            [
+                (pna, self.conv_args + " -> inv_node_feat"),
+                (
+                    lambda inv_node_feat, equiv_node_feat: [
+                        inv_node_feat,
+                        equiv_node_feat,
+                    ],
+                    "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                ),
+            ],
+        )
 
     def __str__(self):
-        return "HeteroPNAStack"
+        return "PNAStack"
