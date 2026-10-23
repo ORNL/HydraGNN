@@ -8,11 +8,8 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
-import pdb
-import torch
-import torch.nn.functional as F
 from torch.nn import ModuleList
-from torch.nn import ReLU, Linear, Identity
+from torch.nn import Linear, Identity
 from torch_geometric.nn import GATv2Conv, BatchNorm, Sequential
 
 from .base import Base

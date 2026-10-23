@@ -10,19 +10,10 @@
 ##############################################################################
 import sys
 import os, json
-import pdb
 import torch
 import torch.distributed as dist
-import torch_geometric
 from torch_geometric.datasets import ZINC
-import torch_geometric.transforms as T
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
-
-# deprecated in torch_geometric 2.0
-try:
-    from torch_geometric.loader import DataLoader
-except:
-    from torch_geometric.data import DataLoader
 
 import hydragnn
 

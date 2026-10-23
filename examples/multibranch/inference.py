@@ -26,11 +26,10 @@ import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.models.utils import print_model
 from hydragnn.data.distdataset import DistDataset
-from hydragnn.data.pickledataset import SimplePickleDataset
 
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 
-from hydragnn.utils.print.print_utils import log, log0
+from hydragnn.utils.print.print_utils import log0
 from hydragnn.distributed import nsplit
 from hydragnn.distributed import get_device
 from hydragnn.train.loops import test
@@ -40,13 +39,11 @@ try:
 except ImportError:
     pass
 
-from scipy.interpolate import BSpline, make_interp_spline
-import adios2 as ad2
+from scipy.interpolate import make_interp_spline
 
 import torch.distributed as dist
 from torch.distributed.device_mesh import init_device_mesh
 from hydragnn.models import MultiTaskModelMP
-from contextlib import nullcontext
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.interpolate import griddata

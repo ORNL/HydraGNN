@@ -10,9 +10,7 @@
 ##############################################################################
 
 import torch
-import torch.nn.functional as F
-from torch.nn import ModuleList
-from torch_geometric.nn import PNAConv, BatchNorm, global_mean_pool, Sequential
+from torch_geometric.nn import PNAConv, Sequential
 from .base import Base
 
 

@@ -105,7 +105,7 @@ if __name__ == "__main__":
     prepare_splits(load_base_config())
 
     # Choose the sampler (e.g., TPESampler or RandomSampler)
-    from deephyper.evaluator import Evaluator, ProcessPoolEvaluator, queued
+    from deephyper.evaluator import ProcessPoolEvaluator, queued
     from deephyper.problem import HpProblem
     from deephyper.search.hps import CBO
     from hydragnn.utils.hpo.deephyper import read_node_list

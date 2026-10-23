@@ -8,23 +8,23 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
-import os, random, torch, glob, sys, shutil, pdb
+import os
+import random
+import torch
+import glob
 import numpy as np
 from fairchem.core.datasets import AseDBDataset
 from mpi4py import MPI
-from yaml import full_load
 
 from hydragnn.data.abstractbasedataset import AbstractBaseDataset
-from torch_geometric.transforms import Distance, Spherical, LocalCartesian
+from torch_geometric.transforms import Distance
 from torch_geometric.data import Data
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
     RadiusGraph,
     RadiusGraphPBC,
     PBCDistance,
-    PBCLocalCartesian,
     pbc_as_tensor,
     should_skip_self_loops,
-    gather_deg,
 )
 from hydragnn.distributed import nsplit
 

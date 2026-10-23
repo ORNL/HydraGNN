@@ -33,7 +33,7 @@ try:
 except ImportError:
     pass
 
-from scipy.interpolate import BSpline, make_interp_spline
+from scipy.interpolate import make_interp_spline
 
 ## FIMME
 torch.backends.cudnn.enabled = False

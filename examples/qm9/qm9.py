@@ -9,20 +9,12 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 import os
-import pdb
 import json
 import torch
 import torch.distributed as dist
-import torch_geometric
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
 import argparse
 from pathlib import Path
-
-# deprecated in torch_geometric 2.0
-try:
-    from torch_geometric.loader import DataLoader
-except ImportError:
-    from torch_geometric.data import DataLoader
 
 import hydragnn
 import hydragnn.utils.profiling_and_tracing.tracer as tr

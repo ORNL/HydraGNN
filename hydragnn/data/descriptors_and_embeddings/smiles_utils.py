@@ -8,9 +8,7 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
-import sys
 import torch
-import pickle, csv
 
 #########################################################
 from rdkit import Chem
@@ -19,7 +17,6 @@ from rdkit.Chem.rdchem import HybridizationType
 import torch.nn.functional as F
 from torch_scatter import scatter
 from torch_geometric.data import Data
-import hydragnn
 from hydragnn.config.variable_schema import (
     VariableSchema,
     parse_variable_schema,

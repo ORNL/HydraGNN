@@ -64,7 +64,7 @@ class AdiosDataset(AbstractBaseDataset):
             Option to use Distributed Data Store
         """
         # Test import of adios2. Let it fail with an ImportError if ADIOS2 is not installed
-        import adios2
+        import adios2  # noqa: F401
 
         self.filename = filename
         self.label = label

@@ -14,7 +14,7 @@ from tests.test_graphs import unittest_train_model
 
 # Check if deepspeed is available
 try:
-    import deepspeed
+    import deepspeed  # noqa: F401
 
     deepspeed_available = True
 except Exception:

@@ -27,7 +27,6 @@ Usage::
 import argparse
 import json
 import os
-from itertools import groupby
 
 import matplotlib
 

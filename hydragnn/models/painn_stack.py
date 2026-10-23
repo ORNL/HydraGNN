@@ -17,7 +17,6 @@
 import torch
 from torch import nn
 from torch_geometric import nn as geom_nn
-from torch.utils.checkpoint import checkpoint
 from torch_geometric.typing import OptTensor
 
 from .base import Base

@@ -13,7 +13,7 @@ import torch
 from torch_scatter import scatter
 from torch_geometric.transforms import RadiusGraph
 from torch_geometric.data import Data
-from torch_geometric.utils import remove_self_loops, degree
+from torch_geometric.utils import degree
 from torch_geometric.data.datapipes import functional_transform
 from torch_geometric.transforms import LocalCartesian, Distance
 from torch_geometric.nn.models.schnet import RadiusInteractionGraph
@@ -22,7 +22,6 @@ import ase
 import ase.neighborlist
 import numpy as np
 import os
-from typing import Tuple
 
 from hydragnn.distributed import get_device
 

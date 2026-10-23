@@ -10,9 +10,6 @@
 ##############################################################################
 
 from typing import Callable, Optional, Tuple
-from torch_geometric.typing import SparseTensor
-
-import pdb
 
 import torch
 from torch import Tensor
@@ -25,7 +22,6 @@ from torch_geometric.nn.models.dimenet import (
     OutputPPBlock,
     SphericalBasisLayer,
 )
-from torch_geometric.utils import scatter
 
 from .base import Base
 from hydragnn.models.utils.operations import get_edge_vectors_and_lengths

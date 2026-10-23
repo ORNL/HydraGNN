@@ -8,8 +8,7 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
-from typing import List, Tuple
-import numpy as np
+from typing import Tuple
 import torch
 
 

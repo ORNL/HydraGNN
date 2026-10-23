@@ -8,7 +8,6 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
-import os
 import tempfile
 from importlib import import_module
 

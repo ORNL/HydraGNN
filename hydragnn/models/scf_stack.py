@@ -11,12 +11,11 @@
 
 from typing import Optional
 from math import pi as PI
-import pdb
 import torch
 from torch import nn
 from torch import Tensor
 from torch_cluster import radius_graph
-from torch.nn import Identity, Linear, ReLU, Sequential
+from torch.nn import Linear, ReLU, Sequential
 from torch_geometric.nn import Sequential as PyGSeq
 from torch_geometric.nn import MessagePassing
 from torch_geometric.nn.models.schnet import (
@@ -79,8 +78,6 @@ class SCFStack(Base):
         self.num_gaussians = num_gaussians
         self.is_edge_model = True  # specify that mpnn can handle edge features
         super().__init__(input_args, conv_args, *args, **kwargs)
-
-        pass
 
     def _init_conv(self):
         self.distance_expansion = GaussianSmearing(0.0, self.radius, self.num_gaussians)

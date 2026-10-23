@@ -18,11 +18,8 @@ production named-data loader does none of these implicitly. See
 """
 
 import os
-import shutil
-import math
 import torch
 import pickle
-import numpy
 from pathlib import Path
 from torch_geometric.data import Data
 from torch_geometric.transforms import RadiusGraph
