@@ -20,7 +20,7 @@ import logging
 import os
 import sys
 
-FORMATS = ("adios", "pickle")
+FORMATS = ("adios", "pickle", "hdf5")
 SPLITS = ("trainset", "valset", "testset")
 
 
@@ -430,13 +430,13 @@ def main(argv=None):
         "train",
         parents=[train],
         add_help=False,
-        help="train a GNN on a preprocessed ADIOS or pickle dataset",
+        help="train a GNN on a preprocessed ADIOS, pickle, or HDF5 dataset",
         description="Train a GNN on a dataset written by an example's --preonly step.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     ).add_argument(
         "--dataset",
         required=True,
-        help="path to a dataset written with --preonly (.bp directory or .pickle)",
+        help="path to a dataset written with --preonly (.bp directory, .pickle, or .h5)",
     )
     args = parser.parse_args(argv)
 
