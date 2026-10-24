@@ -566,11 +566,24 @@ HYDRAGNN_SRC="${HYDRAGNN_SRC:-${PWD}/HydraGNN}"
 echo "HYDRAGNN_SRC = $HYDRAGNN_SRC"
 
 if [[ -d "$HYDRAGNN_SRC" ]]; then
-  pip_retry -e "$HYDRAGNN_SRC"
+  # pip rejects frameworks' torch 2.13.0a0 for torch>=2.13 and would pull CUDA torch + generic mpi4py,
+  # so install HydraGNN's remaining deps explicitly and the package itself with --no-deps.
+  pip_retry "matplotlib==3.10.6" "sympy==1.14.0" matscipy lightning-utilities "pretty-errors==1.2.25"
+  python -m pip install --no-deps "torch-ema==0.3" "torchmetrics==1.4.0"
+  python -m pip install --no-deps -e "$HYDRAGNN_SRC"
 else
   echo "⚠️  HydraGNN source directory not found at: $HYDRAGNN_SRC"
   echo "    Export HYDRAGNN_SRC=/path/to/HydraGNN and rerun the HydraGNN install step."
 fi
+
+banner "Sanity check: torch and mpi4py must come from frameworks, not the venv"
+python - <<PY
+import torch, mpi4py
+for m in (torch, mpi4py):
+    print(m.__name__, m.__version__, m.__file__)
+    if m.__file__.startswith("${VENV_PATH}"):
+        raise SystemExit(f"❌ {m.__name__} is shadowed by a venv install; pip uninstall it from the venv")
+PY
 
 # ============================================================
 # Final summary / activation instructions

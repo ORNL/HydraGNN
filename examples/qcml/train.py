@@ -11,12 +11,12 @@
 import os
 import logging
 import sys
+import torch
 from mpi4py import MPI
 
 import numpy as np
 
 import random
-import torch
 import torch.distributed as dist
 
 # FIX random seed
@@ -45,8 +45,6 @@ def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
-import tensorflow as tf
-import tensorflow_datasets as tfds
 from utils import balanced_block
 
 # transform_coordinates = Spherical(norm=False, cat=False)
@@ -98,6 +96,9 @@ class QCMLDataset(AbstractBaseDataset):
         self.convert_tensorflow_data_objects_to_graphs()
 
     def convert_tensorflow_data_objects_to_graphs(self):
+        # Imported lazily: TensorFlow's bundled LLVM conflicts with ROCm PyTorch.
+        import tensorflow as tf
+        import tensorflow_datasets as tfds
 
         force_field_ds = tfds.load(
             "qcml/dft_force_field", split="full", data_dir=LOCAL_DATA_DIR

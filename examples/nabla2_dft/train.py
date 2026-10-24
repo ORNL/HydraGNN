@@ -8,6 +8,7 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
+import torch
 import mpi4py
 from mpi4py import MPI
 
@@ -28,7 +29,6 @@ from hydragnn.utils.print.print_utils import iterate_tqdm, log
 from hydragnn.distributed import nsplit
 from hydragnn.preprocess.load_data import split_dataset
 
-import torch
 import torch.distributed as dist
 
 from torch_geometric.data import Data

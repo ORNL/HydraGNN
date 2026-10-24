@@ -13,6 +13,7 @@ import time
 import glob
 import logging
 import sys
+import torch
 from mpi4py import MPI
 import numpy as np
 import random
@@ -21,7 +22,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import partial
 from tqdm import tqdm
 
-import torch
 import torch.distributed as dist
 
 # FIX random seed

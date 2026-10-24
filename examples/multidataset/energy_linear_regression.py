@@ -9,6 +9,7 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 import os
+import torch  # noqa: F401  (must load before mpi4py)
 from mpi4py import MPI
 import argparse
 

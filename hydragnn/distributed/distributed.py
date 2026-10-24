@@ -157,6 +157,17 @@ def get_comm_size_and_rank():
     return int(world_size), int(world_rank)
 
 
+_GPU_ASSIGNMENT_VARS = (
+    "ROCR_VISIBLE_DEVICES",
+    "HIP_VISIBLE_DEVICES",
+    "CUDA_VISIBLE_DEVICES",
+    "SLURM_GPUS_ON_NODE",
+    "SLURM_STEP_GPUS",
+    "SLURM_JOB_GPUS",
+    "ZE_AFFINITY_MASK",
+)
+
+
 def setup_ddp(use_deepspeed=False):
     """ "Initialize DDP"""
 
@@ -171,11 +182,27 @@ def setup_ddp(use_deepspeed=False):
     elif hasattr(torch, "xpu") and torch.xpu.is_available():
         backend = "xccl"
     elif torch.distributed.is_gloo_available():
+        assigned = [
+            v
+            for v in _GPU_ASSIGNMENT_VARS
+            if os.getenv(v, "").strip() not in ("", "-1", "NoDevFiles")
+            # SLURM_GPUS_ON_NODE is a count, not a device mask.
+            and not (v == "SLURM_GPUS_ON_NODE" and os.environ[v].strip() == "0")
+        ]
+        if assigned:
+            raise RuntimeError(
+                f"GPUs are assigned ({', '.join(assigned)}) but torch sees none; "
+                "refusing to fall back to gloo. Check that torch is imported before "
+                "mpi4py and that only one ROCm/CUDA runtime is loaded, or set "
+                "HYDRAGNN_BACKEND=gloo explicitly."
+            )
         backend = "gloo"
     else:
         raise RuntimeError("No parallel backends available")
 
     world_size, world_rank = init_comm_size_and_rank()
+    if world_rank == 0:
+        print(f"HydraGNN distributed backend: {backend}", flush=True)
 
     def _derive_master_port(default_port: int = 8889) -> str:
         user_port = os.getenv("HYDRAGNN_MASTER_PORT")

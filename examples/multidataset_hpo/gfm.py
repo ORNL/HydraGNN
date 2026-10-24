@@ -11,10 +11,10 @@
 import os, json
 import logging
 import sys
+import torch
 from mpi4py import MPI
 import argparse
 
-import torch
 import numpy as np
 
 import hydragnn

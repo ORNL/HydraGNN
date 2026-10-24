@@ -11,9 +11,9 @@
 import os
 import logging
 import sys
+import torch
 from mpi4py import MPI
 
-import torch
 import torch.distributed as dist
 
 # FIX random seed

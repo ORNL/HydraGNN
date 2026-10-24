@@ -36,6 +36,7 @@ export OMP_NUM_THREADS=7
 export HYDRAGNN_NUM_WORKERS=0
 export HYDRAGNN_USE_VARIABLE_GRAPH_SIZE=1
 export HYDRAGNN_AGGR_BACKEND=mpi
+export HYDRAGNN_BACKEND=nccl
 export HYDRAGNN_VALTEST=0
 
 ## Getting error without these after 20 nodes
