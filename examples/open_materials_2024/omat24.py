@@ -1,24 +1,34 @@
-import os, random, torch, glob, sys, traceback
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
+import os
+import random
+import torch
+import glob
+import traceback
 import numpy as np
 from fairchem.core.datasets import AseDBDataset
 from mpi4py import MPI
-from yaml import full_load
 
-from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
-from torch_geometric.transforms import Distance, Spherical, LocalCartesian
+from hydragnn.data.abstractbasedataset import AbstractBaseDataset
+from torch_geometric.transforms import Distance
 from torch_geometric.data import Data
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
     RadiusGraph,
     RadiusGraphPBC,
     PBCDistance,
-    PBCLocalCartesian,
     pbc_as_tensor,
-    gather_deg,
-    should_skip_self_loops,
 )
-from hydragnn.utils.distributed import nsplit
+from hydragnn.distributed import nsplit
+from hydragnn.data.materials import normalize_stress, validate_materials_sample
 from utils import balance_load
-
 
 # transform_coordinates = Spherical(norm=False, cat=False)
 # transform_coordinates = LocalCartesian(norm=False, cat=False)
@@ -186,10 +196,15 @@ class OMat2024(AbstractBaseDataset):
 
             energy = torch.as_tensor(
                 atoms.get_total_energy(), dtype=torch.float32
-            ).unsqueeze(0)
+            ).reshape(1, 1)
 
             energy_per_atom = energy.detach().clone() / natoms
             forces = torch.as_tensor(atoms.get_forces(), dtype=torch.float32)
+            stress = normalize_stress(
+                atoms.get_stress(apply_constraint=False, voigt=False),
+                source_unit="ev_per_angstrom_cubed",
+                source_sign="tension_positive",
+            )
 
             chemical_formula = atoms.get_chemical_formula()
 
@@ -222,19 +237,12 @@ class OMat2024(AbstractBaseDataset):
                 cell = torch.eye(3, dtype=torch.float32)
                 pbc = torch.tensor([False, False, False], dtype=torch.bool)
 
-            x = torch.cat([atomic_numbers, pos, forces], dim=1)
-
             # Calculate chemical composition
             atomic_number_list = atomic_numbers.tolist()
             assert len(atomic_number_list) == natoms
             ## 118: number of atoms in the periodic table
             hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
             chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
-
-            # charge and spinfrom dataset info
-            charge = atoms.info.get("charge", 0)
-            spin = atoms.info.get("spin", 1)
-            graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
 
             data_object = Data(
                 dataset_name="omat24",
@@ -244,20 +252,14 @@ class OMat2024(AbstractBaseDataset):
                 pbc=pbc,
                 edge_index=None,
                 edge_attr=None,
-                atomic_numbers=atomic_numbers,
+                atomic_numbers=atomic_numbers.long().view(-1),
                 chemical_composition=chemical_composition,
                 smiles_string=None,
-                x=x,
                 energy=energy,
                 energy_per_atom=energy_per_atom,
                 forces=forces,
-                graph_attr=graph_attr,
+                stress=stress,
             )
-
-            if self.energy_per_atom:
-                data_object.y = data_object.energy_per_atom
-            else:
-                data_object.y = data_object.energy
 
             if data_object.pbc.any():
                 try:
@@ -274,9 +276,11 @@ class OMat2024(AbstractBaseDataset):
                 data_object = self.radius_graph(data_object)
                 data_object = transform_coordinates(data_object)
 
-            # Skip samples that still contain self-loops
-            if should_skip_self_loops(data_object, context="omat24"):
-                continue
+            try:
+                validate_materials_sample(data_object, require_stress=True)
+            except ValueError as error:
+                print(f"Skipping sample: {error}. Context: omat24", flush=True)
+                return
 
             # Default edge_shifts for when radius_graph_pbc is not activated
             if not hasattr(data_object, "edge_shifts"):

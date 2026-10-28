@@ -1,13 +1,23 @@
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 import pytest
 
 from tests.test_graphs import unittest_train_model
 
 # Check if deepspeed is available
 try:
-    import deepspeed
+    import deepspeed  # noqa: F401
 
     deepspeed_available = True
-except ImportError:
+except Exception:
     deepspeed_available = False
 
 
@@ -17,7 +27,7 @@ except ImportError:
 @pytest.mark.gpu
 @pytest.mark.deepspeed
 @pytest.mark.skipif(not deepspeed_available, reason="deepspeed package not installed")
-def pytest_train_model_vectoroutput_w_deepspeed(model_type, overwrite_data=False):
+def test_train_model_vectoroutput_w_deepspeed(model_type, overwrite_data=False):
     unittest_train_model(
         model_type,
         None,
@@ -40,7 +50,7 @@ def pytest_train_model_vectoroutput_w_deepspeed(model_type, overwrite_data=False
 @pytest.mark.gpu
 @pytest.mark.deepspeed
 @pytest.mark.skipif(not deepspeed_available, reason="deepspeed package not installed")
-def pytest_train_model_vectoroutput_w_deepspeed_global_attention(
+def test_train_model_vectoroutput_w_deepspeed_global_attention(
     model_type, global_attn_engine, global_attn_type, overwrite_data=False
 ):
     unittest_train_model(
@@ -59,7 +69,7 @@ def pytest_train_model_vectoroutput_w_deepspeed_global_attention(
 # @pytest.mark.parametrize("model_type", ["PNA"])
 # @pytest.mark.parametrize("zero_stage", [1, 2, 3])
 # @pytest.mark.mpi
-# def pytest_train_model_vectoroutput_w_deepspeed_zero(
+# def test_train_model_vectoroutput_w_deepspeed_zero(
 #     model_type, zero_stage, overwrite_data=False
 # ):
 #     overwrite_config = {

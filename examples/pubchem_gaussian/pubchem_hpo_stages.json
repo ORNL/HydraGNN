@@ -1,0 +1,38 @@
+[
+    {
+        "name": "screen",
+        "train_samples": 50000,
+        "val_samples": 10000,
+        "test_samples": 10000,
+        "epochs": 3,
+        "primary_tolerance": 0.02,
+        "keep": 128
+    },
+    {
+        "name": "refine",
+        "train_samples": 300000,
+        "val_samples": 50000,
+        "test_samples": 50000,
+        "epochs": 8,
+        "primary_tolerance": 0.02,
+        "keep": 32
+    },
+    {
+        "name": "confirm",
+        "train_samples": 1000000,
+        "val_samples": 50000,
+        "test_samples": 50000,
+        "epochs": 15,
+        "primary_tolerance": 0.01,
+        "keep": 8
+    },
+    {
+        "name": "full",
+        "train_samples": 3000000,
+        "val_samples": 50000,
+        "test_samples": 50000,
+        "epochs": 25,
+        "primary_tolerance": 0.01,
+        "keep": 3
+    }
+]

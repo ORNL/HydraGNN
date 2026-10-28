@@ -2,7 +2,7 @@
     "Verbosity": {
         "level": 2
     },
-   "NeuralNetwork": {
+    "NeuralNetwork": {
         "Architecture": {
             "mpnn_type": "PNAEq",
             "equivariance": true,
@@ -24,7 +24,6 @@
             "global_attn_type": "",
             "hidden_dim": 50,
             "num_conv_layers": 3,
-            "enable_interatomic_potential": true,
             "output_heads": {
                 "node": [
                     {
@@ -50,16 +49,9 @@
                     }
                 ]
             },
-                "task_weights": [
-                    1.0
-                ]
-            },
-        "Variables_of_interest": {
-            "input_node_features": [0, 1, 2, 3],
-            "output_names": ["energy"],
-            "output_index": [0],
-            "output_dim": [1],
-            "type": ["node"]
+            "task_weights": [
+                1.0
+            ]
         },
         "Training": {
             "num_epoch": 250,
@@ -70,7 +62,39 @@
             "continue": 0,
             "Optimizer": {
                 "type": "AdamW",
-                "learning_rate": 1e-3
+                "learning_rate": 0.001
+            },
+            "loss": {
+                "enabled": true,
+                "provider": "interatomic_potential",
+                "supervised": {
+                    "default_metric": "mae",
+                    "terms": [
+                        {
+                            "variable": "energy",
+                            "weight": 1.0,
+                            "normalization": "per_structure"
+                        },
+                        {
+                            "variable": "energy_per_atom",
+                            "weight": 1.0,
+                            "normalization": "per_atom"
+                        },
+                        {
+                            "variable": "forces",
+                            "weight": 1.0,
+                            "prediction": {
+                                "operator": "negative_gradient",
+                                "of": "energy",
+                                "with_respect_to": "positions"
+                            }
+                        }
+                    ]
+                },
+                "constraints": [],
+                "constraint_optimizer": {
+                    "type": "fixed_penalty"
+                }
             }
         }
     },
@@ -78,5 +102,28 @@
         "plot_init_solution": true,
         "plot_hist_solution": false,
         "create_plots": true
+    },
+    "Variables": {
+        "graph_type": "homogeneous",
+        "inputs": [
+            {
+                "name": "atomic_numbers",
+                "level": "node",
+                "dim": 1
+            },
+            {
+                "name": "pos",
+                "role": "position",
+                "level": "node",
+                "dim": 3
+            }
+        ],
+        "outputs": [
+            {
+                "name": "energy",
+                "level": "node",
+                "dim": 1
+            }
+        ]
     }
 }

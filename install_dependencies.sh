@@ -5,32 +5,58 @@
 
 set -e  # Exit on any error
 
+INSTALL_DEV=0
+INSTALL_OPTIONAL=0
+for group in "$@"; do
+    case "${group}" in
+        all)
+            INSTALL_DEV=1
+            INSTALL_OPTIONAL=1
+            ;;
+        dev)
+            INSTALL_DEV=1
+            ;;
+        optional)
+            INSTALL_OPTIONAL=1
+            ;;
+        *)
+            echo "Unknown dependency group: ${group}" >&2
+            echo "Usage: $0 [all|dev|optional] [...]" >&2
+            exit 2
+            ;;
+    esac
+done
+
+PYTHON_MINOR_VERSION=$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+case "${PYTHON_MINOR_VERSION}" in
+    3.11|3.12|3.13|3.14)
+        ;;
+    *)
+        echo "Unsupported Python ${PYTHON_MINOR_VERSION}. HydraGNN supports Python 3.11 through 3.14." >&2
+        exit 1
+        ;;
+esac
+
 echo "Installing HydraGNN dependencies with consistent settings..."
 
-# Install base dependencies
-echo "Installing base dependencies..."
-pip install --no-build-isolation -v -r requirements-base.txt 
+EXTRAS="torch"
+[ "${INSTALL_DEV}" -eq 1 ] && EXTRAS="${EXTRAS},dev"
+[ "${INSTALL_OPTIONAL}" -eq 1 ] && EXTRAS="${EXTRAS},optional"
 
-# Install PyTorch dependencies
-echo "Installing PyTorch dependencies..."
-pip install --no-build-isolation -v -r requirements-torch.txt 
+python -m pip install --upgrade "setuptools>=77" wheel
 
-# Install PyTorch Geometric dependencies
-echo "Installing PyTorch Geometric dependencies..."
-pip install --no-build-isolation -v -r requirements-pyg.txt 
+# PyTorch must be present before the PyG extensions build.
+echo "Installing PyTorch..."
+python -m pip install -v torch==2.13.0 torchvision==0.28.0
 
-# Install development dependencies (optional)
-if [ "$1" == "dev" ]; then
-    echo "Installing development dependencies..."
-    pip install --no-build-isolation -v -r requirements-dev.txt
-fi
+echo "Installing HydraGNN with extras [${EXTRAS}]..."
+python -m pip install --no-build-isolation -v -e ".[${EXTRAS}]"
 
-# Install optional dependencies (optional)
-if [ "$1" == "all" ] || [ "$2" == "optional" ]; then
-    echo "Installing optional dependencies..."
-    pip install --no-build-isolation -v -r requirements-optional.txt
-fi
+# Build isolation stays enabled so omegaconf's sdist-only antlr4 dependency can build.
+echo "Installing model-specific backbone dependencies..."
+python -m pip install -v -e ".[uma]"
 
 echo "Installation complete!"
+echo "HydraGNN source version: $(python -c 'import hydragnn._version as v; print(v.__version__)')"
 echo "Installed package versions:"
-pip list | grep -E "(numpy|scipy|torch|scikit-learn|matplotlib|ase)"
+python -m pip list | grep -E "(numpy|scipy|torch|scikit-learn|matplotlib|ase)"

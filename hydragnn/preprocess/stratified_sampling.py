@@ -1,3 +1,13 @@
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 import torch
 from torch_geometric.data import Data
 from hydragnn.utils.print.print_utils import print_distributed, iterate_tqdm
@@ -29,7 +39,7 @@ def stratified_sampling(dataset: [Data], subsample_percentage: float, verbosity=
         frequencies = sorted(frequencies[frequencies > 0].tolist())
         category = 0
         for index, frequency in enumerate(frequencies):
-            category += frequency * (100 ** index)
+            category += frequency * (100**index)
         dataset_categories.append(category)
 
     subsample_indices = []

@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# Copyright (c) 2022, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -13,10 +13,10 @@ import matplotlib as mpl
 
 mpl.use("Agg")
 import matplotlib.pyplot as plt
-from itertools import chain
-import time, pickle
+import pickle
 import numpy as np
 from math import sqrt, floor, ceil
+from hydragnn.config import sanitize_filename_component
 
 plt.rcParams.update({"font.size": 18})
 
@@ -103,6 +103,30 @@ class Visualizer:
         )
         return xcen_pasr, mean1d_cond
 
+    def __point_density(self, x, y, bins=60):
+        x = np.asarray(x).ravel()
+        y = np.asarray(y).ravel()
+
+        mask = np.isfinite(x) & np.isfinite(y)
+        density = np.zeros_like(x, dtype=float)
+        if not np.any(mask):
+            return density
+
+        x_valid = x[mask]
+        y_valid = y[mask]
+        hist2d, xedges, yedges = np.histogram2d(x_valid, y_valid, bins=bins)
+
+        xbin = np.clip(np.digitize(x_valid, xedges) - 1, 0, hist2d.shape[0] - 1)
+        ybin = np.clip(np.digitize(y_valid, yedges) - 1, 0, hist2d.shape[1] - 1)
+        density_valid = hist2d[xbin, ybin]
+
+        max_density = np.max(density_valid)
+        if max_density > 0:
+            density_valid = density_valid / max_density
+
+        density[mask] = density_valid
+        return density
+
     def __scatter_impl(
         self,
         ax,
@@ -116,8 +140,26 @@ class Visualizer:
         y_label=None,
         xylim_equal=False,
     ):
+        x = np.asarray(x).ravel()
+        y = np.asarray(y).ravel()
+        marker = "o" if marker is None else marker
+        point_size = 18 if s is None else s
 
-        ax.scatter(x, y, s=s, edgecolor="b", marker=marker, facecolor="none")
+        density = self.__point_density(x, y)
+        plot_order = np.argsort(density)
+        scatter = ax.scatter(
+            x[plot_order],
+            y[plot_order],
+            s=point_size,
+            c=density[plot_order],
+            cmap="viridis",
+            marker=marker,
+            edgecolors="none",
+            alpha=0.85,
+        )
+
+        colorbar = ax.figure.colorbar(scatter, ax=ax, fraction=0.046, pad=0.04)
+        colorbar.set_label("Point concentration")
 
         ax.set_title(title + ", number of samples =" + str(len(x)))
         ax.set_xlabel(x_label)
@@ -178,11 +220,9 @@ class Visualizer:
             vsum_true = []
             vsum_pred = []
             for isamp in range(nshape[0]):
-                vlen_true.append(
-                    sqrt(sum([comp ** 2 for comp in true_values[isamp][:]]))
-                )
+                vlen_true.append(sqrt(sum([comp**2 for comp in true_values[isamp][:]])))
                 vlen_pred.append(
-                    sqrt(sum([comp ** 2 for comp in predicted_values[isamp][:]]))
+                    sqrt(sum([comp**2 for comp in predicted_values[isamp][:]]))
                 )
                 vsum_true.append(sum(true_values[isamp][:]))
                 vsum_pred.append(sum(predicted_values[isamp][:]))
@@ -269,9 +309,10 @@ class Visualizer:
             )
 
         if save_plot:
+            filename = sanitize_filename_component(varname)
             fig.savefig(
                 f"./logs/{self.model_with_config_name}/"
-                + varname
+                + filename
                 + "_scatter_condm_err.png"
             )
             plt.close()
@@ -371,16 +412,19 @@ class Visualizer:
                 left=0.05, bottom=0.05, right=0.98, top=0.95, wspace=0.1, hspace=0.25
             )
         if save_plot:
+            filename = sanitize_filename_component(varname)
             if iepoch:
                 fig.savefig(
                     f"./logs/{self.model_with_config_name}/"
-                    + varname
+                    + filename
                     + "_"
                     + str(iepoch).zfill(4)
                     + ".png"
                 )
             else:
-                fig.savefig(f"./logs/{self.model_with_config_name}/" + varname + ".png")
+                fig.savefig(
+                    f"./logs/{self.model_with_config_name}/" + filename + ".png"
+                )
             plt.close()
         return
 
@@ -448,10 +492,11 @@ class Visualizer:
                 left=0.075, bottom=0.1, right=0.98, top=0.9, wspace=0.2, hspace=0.35
             )
             if save_plot:
+                filename = sanitize_filename_component(varname)
                 if iepoch:
                     fig.savefig(
                         f"./logs/{self.model_with_config_name}/"
-                        + varname
+                        + filename
                         + "_error_hist1d_"
                         + str(iepoch).zfill(4)
                         + ".png"
@@ -459,7 +504,7 @@ class Visualizer:
                 else:
                     fig.savefig(
                         f"./logs/{self.model_with_config_name}/"
-                        + varname
+                        + filename
                         + "_error_hist1d.png"
                     )
                 plt.close()
@@ -503,16 +548,19 @@ class Visualizer:
         )
 
         if save_plot:
+            filename = sanitize_filename_component(varname)
             if iepoch:
                 fig.savefig(
                     f"./logs/{self.model_with_config_name}/"
-                    + varname
+                    + filename
                     + "_"
                     + str(iepoch).zfill(4)
                     + ".png"
                 )
             else:
-                fig.savefig(f"./logs/{self.model_with_config_name}/" + varname + ".png")
+                fig.savefig(
+                    f"./logs/{self.model_with_config_name}/" + filename + ".png"
+                )
             plt.close()
 
     # FIXME: this function is currently unused and is explicitly written for 3d vectors.
@@ -599,16 +647,19 @@ class Visualizer:
         )
 
         if save_plot:
+            filename = sanitize_filename_component(varname)
             if iepoch:
                 fig.savefig(
                     f"./logs/{self.model_with_config_name}/"
-                    + varname
+                    + filename
                     + "_"
                     + str(iepoch).zfill(4)
                     + ".png"
                 )
             else:
-                fig.savefig(f"./logs/{self.model_with_config_name}/" + varname + ".png")
+                fig.savefig(
+                    f"./logs/{self.model_with_config_name}/" + filename + ".png"
+                )
             plt.close()
 
     def add_identity(self, axes, *line_args, **line_kwargs):

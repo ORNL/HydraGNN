@@ -1,3 +1,13 @@
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 import os
 import shutil
 import numpy as np
@@ -40,7 +50,7 @@ def E_dimensionless(config, L, spin_function, scale_spin):
                 spin[x, y, z] = spin_function(config[x, y, z])
 
     count_pos = 0
-    number_nodes = L ** 3
+    number_nodes = L**3
     positions = np.zeros((number_nodes, 3))
     atomic_features = np.zeros((number_nodes, 5))
     for x in range(L):
@@ -79,15 +89,15 @@ def create_dataset(
 
     count_config = 0
 
-    for num_downs in tqdm(range(0, L ** 3)):
+    for num_downs in tqdm(range(0, L**3)):
 
-        primal_configuration = np.ones((L ** 3,))
+        primal_configuration = np.ones((L**3,))
         for down in range(0, num_downs):
             primal_configuration[down] = -1.0
 
         # If the current composition has a total number of possible configurations above
         # the hard cutoff threshold, a random configurational subset is picked
-        if scipy.special.binom(L ** 3, num_downs) > histogram_cutoff:
+        if scipy.special.binom(L**3, num_downs) > histogram_cutoff:
             for num_config in range(0, histogram_cutoff):
                 config = np.random.permutation(primal_configuration)
                 config = np.reshape(config, (L, L, L))

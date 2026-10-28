@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2024, Oak Ridge National Laboratory                          #
+# Copyright (c) 2025, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -16,7 +16,7 @@ This test validates the enhanced forward method functionality for molecular simu
 
 import torch
 import torch_scatter
-from torch_geometric.data import Data
+from torch_geometric.data import Batch, Data
 import pytest
 
 
@@ -73,6 +73,7 @@ def create_mock_molecular_data(num_atoms=10, num_graphs=2):
 
     data = Data(
         x=x,
+        atomic_numbers=x[:, 0].long(),
         pos=pos,
         edge_index=edge_index,
         batch=batch,
@@ -87,11 +88,202 @@ def create_mock_molecular_data(num_atoms=10, num_graphs=2):
     return data
 
 
+def create_interatomic_model(*terms):
+    from hydragnn.models.create import create_model
+    from hydragnn.models.utils.model import update_multibranch_heads
+
+    output_heads = {
+        "node": {
+            "num_sharedlayers": 1,
+            "dim_sharedlayers": 16,
+            "num_headlayers": 1,
+            "dim_headlayers": [1],
+            "type": "mlp",
+        }
+    }
+    return create_model(
+        mpnn_type="EGNN",
+        input_dim=1,
+        hidden_dim=16,
+        output_dim=[1],
+        pe_dim=6,
+        global_attn_engine="",
+        global_attn_type="",
+        global_attn_heads=1,
+        output_type=["node"],
+        output_heads=update_multibranch_heads(output_heads),
+        activation_function="relu",
+        loss_function_type="mse",
+        task_weights=[1.0],
+        num_conv_layers=1,
+        num_nodes=3,
+        domain_loss_config={
+            "enabled": True,
+            "provider": "interatomic_potential",
+            "supervised": {"default_metric": "mse", "terms": list(terms)},
+            "constraints": [],
+            "constraint_optimizer": {"type": "fixed_penalty"},
+        },
+        use_gpu=False,
+    )
+
+
 @pytest.mark.mpi_skip()
-def pytest_model_creation_with_enhancement():
+def test_force_only_loss_does_not_require_energy():
+    model = create_interatomic_model(
+        {
+            "variable": "forces",
+            "weight": 1.0,
+            "prediction": {
+                "operator": "negative_gradient",
+                "of": "energy",
+                "with_respect_to": "positions",
+            },
+        }
+    )
+    data = create_mock_molecular_data(num_atoms=3, num_graphs=1)
+    del data.energy
+    loss, tasks = model.energy_force_loss(model(data), data)
+    assert loss.requires_grad
+    assert len(tasks) == 1
+
+
+@pytest.mark.mpi_skip()
+def test_energy_and_force_loss_still_works():
+    model = create_interatomic_model(
+        {"variable": "energy", "weight": 1.0, "normalization": "per_structure"},
+        {
+            "variable": "forces",
+            "weight": 1.0,
+            "prediction": {
+                "operator": "negative_gradient",
+                "of": "energy",
+                "with_respect_to": "positions",
+            },
+        },
+    )
+    data = create_mock_molecular_data(num_atoms=3, num_graphs=1)
+    loss, tasks = model.energy_force_loss(model(data), data)
+    assert loss.requires_grad
+    assert len(tasks) == 2
+
+
+@pytest.mark.mpi_skip()
+@pytest.mark.parametrize("all_unavailable", [False, True])
+def test_nan_force_labels_are_skipped(all_unavailable):
+    model = create_interatomic_model(
+        {"variable": "energy", "weight": 1.0, "normalization": "per_structure"},
+        {
+            "variable": "forces",
+            "weight": 1.0,
+            "prediction": {
+                "operator": "negative_gradient",
+                "of": "energy",
+                "with_respect_to": "positions",
+            },
+        },
+    )
+    data = create_mock_molecular_data(num_atoms=3, num_graphs=1)
+    if all_unavailable:
+        data.forces.fill_(torch.nan)
+    else:
+        data.forces[0] = torch.nan
+
+    loss, tasks = model.energy_force_loss(model(data), data)
+
+    assert loss.requires_grad
+    assert torch.isfinite(loss)
+    assert torch.isfinite(tasks[1])
+    if all_unavailable:
+        assert tasks[1].item() == 0.0
+
+
+@pytest.mark.mpi_skip()
+def test_unavailable_hessian_is_skipped():
+    model = create_interatomic_model(
+        {"variable": "energy", "weight": 1.0, "normalization": "per_structure"},
+        {
+            "variable": "forces",
+            "weight": 1.0,
+            "prediction": {
+                "operator": "negative_gradient",
+                "of": "energy",
+                "with_respect_to": "positions",
+            },
+        },
+        {
+            "variable": "hessian",
+            "weight": 1.0,
+            "prediction": {
+                "operator": "hessian",
+                "of": "energy",
+                "with_respect_to": "positions",
+            },
+        },
+    )
+    data = create_mock_molecular_data(num_atoms=3, num_graphs=1)
+    data.hessian = torch.full((9, 9), torch.nan)
+    data = Batch.from_data_list([data])
+
+    loss, tasks = model.energy_force_loss(model(data), data)
+
+    assert loss.requires_grad
+    assert torch.isfinite(loss)
+    assert len(tasks) == 3
+    assert tasks[-1].item() == 0.0
+
+
+@pytest.mark.mpi_skip()
+@pytest.mark.parametrize(
+    "term,missing,message",
+    [
+        (
+            {"variable": "energy", "weight": 1.0, "normalization": "per_structure"},
+            "energy",
+            "energy target",
+        ),
+        (
+            {
+                "variable": "forces",
+                "weight": 1.0,
+                "prediction": {
+                    "operator": "negative_gradient",
+                    "of": "energy",
+                    "with_respect_to": "positions",
+                },
+            },
+            "forces",
+            "data.forces",
+        ),
+        (
+            {
+                "variable": "hessian",
+                "weight": 1.0,
+                "prediction": {
+                    "operator": "hessian",
+                    "of": "energy",
+                    "with_respect_to": "positions",
+                },
+            },
+            "hessian",
+            "data.hessian",
+        ),
+    ],
+)
+def test_enabled_interatomic_loss_requires_its_label(term, missing, message):
+    model = create_interatomic_model(term)
+    data = create_mock_molecular_data(num_atoms=3, num_graphs=1)
+    if missing in data:
+        del data[missing]
+    with pytest.raises(ValueError, match=message):
+        model.energy_force_loss(model(data), data)
+
+
+@pytest.mark.mpi_skip()
+def test_model_creation_with_enhancement():
     """Test creating a model with interatomic potential enhancement."""
     from hydragnn.models.create import create_model
-    from hydragnn.utils.model.model import update_multibranch_heads
+    from hydragnn.models.utils.model import update_multibranch_heads
 
     # Basic model configuration
     output_heads = {
@@ -121,7 +313,31 @@ def pytest_model_creation_with_enhancement():
         "task_weights": [1.0],
         "num_conv_layers": 2,
         "num_nodes": 10,
-        "enable_interatomic_potential": True,
+        "domain_loss_config": {
+            "enabled": True,
+            "provider": "interatomic_potential",
+            "supervised": {
+                "default_metric": "mse",
+                "terms": [
+                    {
+                        "variable": "energy",
+                        "weight": 1.0,
+                        "normalization": "per_structure",
+                    },
+                    {
+                        "variable": "forces",
+                        "weight": 1.0,
+                        "prediction": {
+                            "operator": "negative_gradient",
+                            "of": "energy",
+                            "with_respect_to": "positions",
+                        },
+                    },
+                ],
+            },
+            "constraints": [],
+            "constraint_optimizer": {"type": "fixed_penalty"},
+        },
         "use_gpu": False,
     }
 
@@ -137,10 +353,10 @@ def pytest_model_creation_with_enhancement():
 
 
 @pytest.mark.mpi_skip()
-def pytest_forward_pass():
+def test_forward_pass():
     """Test the enhanced forward pass with molecular data."""
     from hydragnn.models.create import create_model
-    from hydragnn.utils.model.model import update_multibranch_heads
+    from hydragnn.models.utils.model import update_multibranch_heads
 
     # Create model with interatomic potential enhancement
     output_heads = {
@@ -170,7 +386,31 @@ def pytest_forward_pass():
         "task_weights": [1.0],
         "num_conv_layers": 2,
         "num_nodes": 10,
-        "enable_interatomic_potential": True,
+        "domain_loss_config": {
+            "enabled": True,
+            "provider": "interatomic_potential",
+            "supervised": {
+                "default_metric": "mse",
+                "terms": [
+                    {
+                        "variable": "energy",
+                        "weight": 1.0,
+                        "normalization": "per_structure",
+                    },
+                    {
+                        "variable": "forces",
+                        "weight": 1.0,
+                        "prediction": {
+                            "operator": "negative_gradient",
+                            "of": "energy",
+                            "with_respect_to": "positions",
+                        },
+                    },
+                ],
+            },
+            "constraints": [],
+            "constraint_optimizer": {"type": "fixed_penalty"},
+        },
         "use_gpu": False,
     }
 
@@ -192,10 +432,10 @@ def pytest_forward_pass():
 
 
 @pytest.mark.mpi_skip()
-def pytest_energy_force_consistency():
+def test_energy_force_consistency():
     """Test that forces can be computed from energy gradients."""
     from hydragnn.models.create import create_model
-    from hydragnn.utils.model.model import update_multibranch_heads
+    from hydragnn.models.utils.model import update_multibranch_heads
 
     # Create model for energy prediction
     output_heads = {
@@ -225,7 +465,31 @@ def pytest_energy_force_consistency():
         "task_weights": [1.0],
         "num_conv_layers": 2,
         "num_nodes": 10,
-        "enable_interatomic_potential": True,
+        "domain_loss_config": {
+            "enabled": True,
+            "provider": "interatomic_potential",
+            "supervised": {
+                "default_metric": "mse",
+                "terms": [
+                    {
+                        "variable": "energy",
+                        "weight": 1.0,
+                        "normalization": "per_structure",
+                    },
+                    {
+                        "variable": "forces",
+                        "weight": 1.0,
+                        "prediction": {
+                            "operator": "negative_gradient",
+                            "of": "energy",
+                            "with_respect_to": "positions",
+                        },
+                    },
+                ],
+            },
+            "constraints": [],
+            "constraint_optimizer": {"type": "fixed_penalty"},
+        },
         "use_gpu": False,
     }
 

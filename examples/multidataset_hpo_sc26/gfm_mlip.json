@@ -5,7 +5,6 @@
     "NeuralNetwork": {
         "Architecture": {
             "mpnn_type": "MACE",
-            "enable_interatomic_potential": true,
             "equivariance": true,
             "radius": 5,
             "max_neighbours": 20,
@@ -47,8 +46,6 @@
             "task_weights": [
                 1.0
             ],
-            "energy_peratom_weight": 1.0,
-            "force_weight": 10.0,
             "input_dim": 1,
             "pna_deg": null,
             "avg_num_neighbors": 13.735293601560318,
@@ -57,24 +54,6 @@
             "initial_bias": null,
             "activation_function": "relu",
             "SyncBatchNorm": false
-        },
-        "Variables_of_interest": {
-            "input_node_features": [
-                0
-            ],
-            "output_index": [
-                0
-            ],
-            "type": [
-                "graph"
-            ],
-            "output_dim": [
-                1
-            ],
-            "output_names": [
-                "graph_energy"
-            ],
-            "denormalize_output": false
         },
         "Training": {
             "num_epoch": 1,
@@ -93,13 +72,62 @@
             "Checkpoint": true,
             "checkpoint_warmup": 1,
             "epoch_start": 0,
-            "precision": "fp64"
+            "precision": "fp64",
+            "loss": {
+                "enabled": true,
+                "provider": "interatomic_potential",
+                "supervised": {
+                    "default_metric": "mae",
+                    "terms": [
+                        {
+                            "variable": "energy_per_atom",
+                            "weight": 1.0,
+                            "normalization": "per_atom"
+                        },
+                        {
+                            "variable": "forces",
+                            "weight": 10.0,
+                            "prediction": {
+                                "operator": "negative_gradient",
+                                "of": "energy",
+                                "with_respect_to": "positions"
+                            }
+                        }
+                    ]
+                },
+                "constraints": [],
+                "constraint_optimizer": {
+                    "type": "fixed_penalty"
+                }
+            }
         }
     },
     "Visualization": {
         "plot_init_solution": false,
         "plot_hist_solution": false,
         "create_plots": false
+    },
+    "Variables": {
+        "graph_type": "homogeneous",
+        "inputs": [
+            {
+                "name": "atomic_numbers",
+                "level": "node",
+                "dim": 1
+            },
+            {
+                "name": "pos",
+                "role": "position",
+                "level": "node",
+                "dim": 3
+            }
+        ],
+        "outputs": [
+            {
+                "name": "graph_energy",
+                "level": "graph",
+                "dim": 1
+            }
+        ]
     }
 }
-

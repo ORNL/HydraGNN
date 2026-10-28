@@ -1,4 +1,13 @@
-import os
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 import tempfile
 from importlib import import_module
 
@@ -8,11 +17,12 @@ import torch.distributed as dist
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 
+from hydragnn.domain_losses import InteratomicPotentialDomainLoss
 from hydragnn.models.create import create_model
-from hydragnn.utils.distributed import get_distributed_model
-from hydragnn.utils.model.model import update_multibranch_heads
+from hydragnn.distributed import get_distributed_model
+from hydragnn.models.utils.model import update_multibranch_heads
 
-tvt = import_module("hydragnn.train.train_validate_test")
+loops = import_module("hydragnn.train.loops")
 
 
 pytestmark = pytest.mark.mpi_skip()
@@ -59,7 +69,7 @@ def _bf16_supported():
     "mpnn_type",
     ["EGNN", "DimeNet", "SchNet", "MACE", "PAINN", "PNAEq"],
 )
-def pytest_fsdp2_enhanced_wrapper_force_grad_regression(
+def test_fsdp2_enhanced_wrapper_force_grad_regression(
     monkeypatch, precision, mpnn_type
 ):
     has_cuda = torch.cuda.is_available()
@@ -114,37 +124,63 @@ def pytest_fsdp2_enhanced_wrapper_force_grad_regression(
                 task_weights=[1.0],
                 num_conv_layers=2,
                 num_nodes=16,
-                enable_interatomic_potential=True,
-                energy_weight=1.0,
-                energy_peratom_weight=1.0,
-                force_weight=1.0,
+                domain_loss_config={
+                    "enabled": True,
+                    "provider": "interatomic_potential",
+                    "supervised": {
+                        "default_metric": "mse",
+                        "terms": [
+                            {
+                                "variable": "energy",
+                                "weight": 1.0,
+                                "normalization": "per_structure",
+                            },
+                            {
+                                "variable": "energy_per_atom",
+                                "weight": 1.0,
+                                "normalization": "per_atom",
+                            },
+                            {
+                                "variable": "forces",
+                                "weight": 1.0,
+                                "prediction": {
+                                    "operator": "negative_gradient",
+                                    "of": "energy",
+                                    "with_respect_to": "positions",
+                                },
+                            },
+                        ],
+                    },
+                    "constraints": [],
+                    "constraint_optimizer": {"type": "fixed_penalty"},
+                },
                 use_gpu=True,
             )
 
-            assert (
-                model.__class__.__name__ == "EnhancedModelWrapper"
-            ), "Model must use HydraGNN EnhancedModelWrapper"
+            assert isinstance(model, InteratomicPotentialDomainLoss)
 
             model = get_distributed_model(model, verbosity=0)
 
-            _, param_dtype, _ = tvt.resolve_precision(precision)
+            _, param_dtype, _ = loops.resolve_precision(precision)
             model = model.to(dtype=param_dtype)
 
             reshard_calls = []
-            original_setter = tvt._set_reshard_after_backward
+            original_setter = loops.set_reshard_after_backward
 
             def _spy_setter(model_obj, enabled):
                 reshard_calls.append(enabled)
                 return original_setter(model_obj, enabled)
 
-            monkeypatch.setattr(tvt, "_set_reshard_after_backward", _spy_setter)
-            monkeypatch.setattr(tvt, "print_peak_memory", lambda *args, **kwargs: None)
+            monkeypatch.setattr(loops, "set_reshard_after_backward", _spy_setter)
+            monkeypatch.setattr(
+                loops, "print_peak_memory", lambda *args, **kwargs: None
+            )
 
             data = _build_tiny_interatomic_batch()
             loader = DataLoader([data], batch_size=1, shuffle=False)
             optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
 
-            train_error, task_errors = tvt.train(
+            train_error, task_errors = loops.train(
                 loader,
                 model,
                 optimizer,

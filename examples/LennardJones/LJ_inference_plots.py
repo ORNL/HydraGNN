@@ -10,35 +10,21 @@
 ##############################################################################
 
 import json, os
-import sys
-import logging
-import pickle
 from tqdm import tqdm
+import torch
 from mpi4py import MPI
 import argparse
 
-import torch
-import torch_scatter
 import numpy as np
 
-import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-from hydragnn.utils.distributed import get_device, setup_ddp
-from hydragnn.utils.model import load_existing_model
-from hydragnn.utils.datasets.pickledataset import SimplePickleDataset
-from hydragnn.utils.input_config_parsing.config_utils import (
-    update_config,
-)
+from hydragnn.distributed import get_device, setup_ddp
+from hydragnn.models.utils import load_existing_model
+from hydragnn.data.pickledataset import SimplePickleDataset
 from hydragnn.utils.print import setup_log
 from hydragnn.models.create import create_model_config
-from hydragnn.preprocess import create_dataloaders
 
 from scipy.interpolate import griddata
-
-try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
-except ImportError:
-    pass
 
 from LJ_data import info
 
@@ -64,12 +50,7 @@ def get_log_name_config(config):
         + "-bs-"
         + str(config["NeuralNetwork"]["Training"]["batch_size"])
         + "-node_ft-"
-        + "".join(
-            str(x)
-            for x in config["NeuralNetwork"]["Variables_of_interest"][
-                "input_node_features"
-            ]
-        )
+        + "".join(spec["name"] + "-" for spec in config["Variables"]["inputs"])
         + "-task_weights-"
         + "".join(
             str(weigh) + "-"
@@ -155,17 +136,17 @@ if __name__ == "__main__":
         trainset = SimplePickleDataset(
             basedir=basedir,
             label="trainset",
-            var_config=config["NeuralNetwork"]["Variables_of_interest"],
+            var_config=config["Variables"],
         )
         valset = SimplePickleDataset(
             basedir=basedir,
             label="valset",
-            var_config=config["NeuralNetwork"]["Variables_of_interest"],
+            var_config=config["Variables"],
         )
         testset = SimplePickleDataset(
             basedir=basedir,
             label="testset",
-            var_config=config["NeuralNetwork"]["Variables_of_interest"],
+            var_config=config["Variables"],
         )
         pna_deg = trainset.pna_deg
     else:

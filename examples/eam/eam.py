@@ -1,26 +1,32 @@
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 import os, json
 import logging
 import sys
+import torch
 from mpi4py import MPI
 import argparse
 
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-from hydragnn.utils.input_config_parsing.config_utils import get_log_name_config
-from hydragnn.utils.model import print_model
-from hydragnn.utils.datasets.cfgdataset import CFGDataset
-from hydragnn.utils.datasets.serializeddataset import (
-    SerializedWriter,
-    SerializedDataset,
-)
-from hydragnn.preprocess.load_data import split_dataset
+from hydragnn.config.config_utils import get_log_name_config
+from hydragnn.models.utils import print_model
+from hydragnn.data.serializeddataset import SerializedDataset
+from eam_preprocess import prepare_eam_dataset, split_and_write_eam_dataset
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.data.adiosdataset import AdiosDataset, AdiosWriter
 except ImportError:
     pass
 
-import torch
 import torch.distributed as dist
 
 
@@ -42,6 +48,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--inputfile", help="input file", type=str, default="NiNb_EAM_energy.json"
+    )
+    parser.add_argument(
+        "--raw-data",
+        type=str,
+        default=None,
+        help="directory containing raw CFG records; defaults to Dataset.path.total",
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -69,7 +81,7 @@ if __name__ == "__main__":
     hydragnn.utils.print.setup_log(get_log_name_config(config))
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
+    comm_size, rank = hydragnn.distributed.setup_ddp()
     ##################################################################################################################
     comm = MPI.COMM_WORLD
     ## Set up logging
@@ -82,52 +94,40 @@ if __name__ == "__main__":
     os.environ["SERIALIZED_DATA_PATH"] = dirpwd + "/dataset"
     datasetname = config["Dataset"]["name"]
     fname_adios = dirpwd + "/dataset/%s.bp" % (datasetname)
-    config["Dataset"]["name"] = "%s_%d" % (datasetname, rank)
     if not args.loadexistingsplit:
-        total = CFGDataset(config)
-
-        trainset, valset, testset = split_dataset(
-            dataset=total,
-            perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
-            stratify_splitting=config["Dataset"]["compositional_stratified_splitting"],
-        )
-        print(len(total), len(trainset), len(valset), len(testset))
-
-        if args.format == "adios":
-            fname = os.path.join(
-                os.path.dirname(__file__), "./dataset/%s.bp" % datasetname
-            )
-            adwriter = AdiosWriter(fname, MPI.COMM_SELF)
-            adwriter.add("trainset", trainset)
-            adwriter.add("valset", valset)
-            adwriter.add("testset", testset)
-            adwriter.add_global("minmax_node_feature", total.minmax_node_feature)
-            adwriter.add_global("minmax_graph_feature", total.minmax_graph_feature)
-            adwriter.save()
-        elif args.format == "pickle":
-            basedir = os.path.join(
-                os.path.dirname(__file__), "dataset", "serialized_dataset"
-            )
-            SerializedWriter(
-                trainset,
-                basedir,
-                datasetname,
-                "trainset",
-                minmax_node_feature=total.minmax_node_feature,
-                minmax_graph_feature=total.minmax_graph_feature,
-            )
-            SerializedWriter(
-                valset,
-                basedir,
-                datasetname,
-                "valset",
-            )
-            SerializedWriter(
-                testset,
-                basedir,
-                datasetname,
-                "testset",
-            )
+        preprocessing_error = None
+        if rank == 0:
+            try:
+                raw_data_path = args.raw_data or config["Dataset"]["path"].get("total")
+                if raw_data_path is None:
+                    raise ValueError(
+                        "EAM preprocessing requires --raw-data or Dataset.path.total"
+                    )
+                if not os.path.isabs(raw_data_path):
+                    raw_data_path = os.path.join(dirpwd, raw_data_path)
+                prepared = prepare_eam_dataset(raw_data_path, config)
+                if args.format == "pickle":
+                    basedir = os.path.join(dirpwd, "dataset", "serialized_dataset")
+                    split_and_write_eam_dataset(prepared, config, basedir)
+                elif args.format == "adios":
+                    splits = hydragnn.preprocess.split_dataset(
+                        prepared,
+                        config["NeuralNetwork"]["Training"]["perc_train"],
+                        config["Dataset"].get(
+                            "compositional_stratified_splitting", False
+                        ),
+                    )
+                    writer = AdiosWriter(fname_adios, MPI.COMM_SELF)
+                    for label, split in zip(("trainset", "valset", "testset"), splits):
+                        writer.add(label, split)
+                    writer.save()
+                else:
+                    raise ValueError(f"Unknown data format: {args.format}")
+            except Exception as error:
+                preprocessing_error = f"{type(error).__name__}: {error}"
+        preprocessing_error = comm.bcast(preprocessing_error, root=0)
+        if preprocessing_error is not None:
+            raise RuntimeError(f"EAM preprocessing failed: {preprocessing_error}")
     comm.Barrier()
     if args.preonly:
         sys.exit(0)
@@ -154,29 +154,25 @@ if __name__ == "__main__":
         testset = SerializedDataset(basedir, datasetname, "testset")
     else:
         raise ValueError("Unknown data format: %d" % args.format)
-    ## Set minmax
-    config["NeuralNetwork"]["Variables_of_interest"][
-        "minmax_node_feature"
-    ] = trainset.minmax_node_feature
-    config["NeuralNetwork"]["Variables_of_interest"][
-        "minmax_graph_feature"
-    ] = trainset.minmax_graph_feature
-
     info(
         "trainset,valset,testset size: %d %d %d"
         % (len(trainset), len(valset), len(testset))
     )
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
     timer.stop()
 
-    config = hydragnn.utils.input_config_parsing.update_config(
+    config = hydragnn.config.update_config(
         config, train_loader, val_loader, test_loader
     )
-    config["NeuralNetwork"]["Variables_of_interest"].pop("minmax_node_feature", None)
-    config["NeuralNetwork"]["Variables_of_interest"].pop("minmax_graph_feature", None)
+    config["Variables"].pop("minmax_node_feature", None)
+    config["Variables"].pop("minmax_graph_feature", None)
 
     verbosity = config["Verbosity"]["level"]
     model = hydragnn.models.create_model_config(
@@ -187,7 +183,7 @@ if __name__ == "__main__":
         print_model(model)
     comm.Barrier()
 
-    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
+    model = hydragnn.distributed.get_distributed_model(model, verbosity)
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
@@ -196,12 +192,12 @@ if __name__ == "__main__":
     )
 
     log_name = get_log_name_config(config)
-    writer = hydragnn.utils.model.get_summary_writer(log_name)
+    writer = hydragnn.models.utils.get_summary_writer(log_name)
 
     if dist.is_initialized():
         dist.barrier()
 
-    hydragnn.utils.input_config_parsing.save_config(config, log_name)
+    hydragnn.config.save_config(config, log_name)
 
     hydragnn.train.train_validate_test(
         model,
@@ -211,13 +207,13 @@ if __name__ == "__main__":
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         verbosity,
         create_plots=True,
     )
 
-    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.models.utils.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.time_utils.print_timers(verbosity)
     if writer is not None:
         writer.close()

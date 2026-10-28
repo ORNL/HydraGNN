@@ -1,3 +1,13 @@
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 import os
 from typing import Optional, Tuple
 
@@ -12,10 +22,30 @@ from mpi4py import MPI
 from hydragnn.preprocess import create_dataloaders
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosDataset, adios2_open
+    from hydragnn.data.adiosdataset import AdiosDataset, adios2_open
 except ImportError:
     AdiosDataset = None
     adios2_open = None
+
+## SC26
+dataset_name_dict = {
+    "alexandria": torch.tensor([[0]]),
+    "ani1x": torch.tensor([[1]]),
+    "mptrj": torch.tensor([[2]]),
+    "oc2020": torch.tensor([[3]]),
+    "oc2022": torch.tensor([[4]]),
+    "oc25": torch.tensor([[5]]),
+    "odac23": torch.tensor([[6]]),
+    "omat24": torch.tensor([[7]]),
+    "omol25": torch.tensor([[8]]),
+    "omol25-neutral": torch.tensor([[9]]),
+    "omol25-non-neutral": torch.tensor([[10]]),
+    "opoly2026": torch.tensor([[11]]),
+    "nabla2dft": torch.tensor([[12]]),
+    "qcml": torch.tensor([[13]]),
+    "qm7x": torch.tensor([[14]]),
+    "transition1x": torch.tensor([[15]]),
+}
 
 
 def cleanup_distributed():
@@ -131,12 +161,7 @@ def configure_variable_names(config):
     graph_feature_dims = [1]
     node_feature_names = ["atomic_number", "cartesian_coordinates", "forces"]
     node_feature_dims = [1, 3, 3]
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
-    var_config["graph_feature_names"] = graph_feature_names
-    var_config["graph_feature_dims"] = graph_feature_dims
-    var_config["node_feature_names"] = node_feature_names
-    var_config["node_feature_dims"] = node_feature_dims
-    var_config["input_node_features"] = [0]
+    var_config = config["Variables"]
 
 
 def resolve_selected_precision(
@@ -258,9 +283,7 @@ def load_multidataset_dataloaders(args, config, var_config):
                 var_config=var_config,
             )
 
-            dataset.dataset_name_dict = {
-                name.lower(): torch.tensor([[i]]) for i, name in enumerate(modellist)
-            }
+            dataset.dataset_name_dict = dataset_name_dict
 
             dataset_len = len(dataset)
             subset_len = dataset_len
@@ -359,9 +382,7 @@ def load_single_dataset_chunk(
             keys=common_variable_names,
             var_config=var_config,
         )
-        dataset.dataset_name_dict = {
-            name.lower(): torch.tensor([[i]]) for i, name in enumerate(modellist)
-        }
+        dataset.dataset_name_dict = dataset_name_dict
         dataset_len = len(dataset)
 
         # For val, chunk_size is scaled down proportionally
@@ -416,7 +437,7 @@ def load_single_dataset_dataloaders(
     """Load a full dataset (no chunking). Kept for backward compatibility and tiny loaders."""
     num_samples = getattr(args, "num_samples", None)
     chunk_start = 0
-    chunk_size = num_samples if num_samples is not None else 10 ** 9  # effectively all
+    chunk_size = num_samples if num_samples is not None else 10**9  # effectively all
 
     return load_single_dataset_chunk(
         args,

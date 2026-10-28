@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 """Inference on randomly generated atomistic structures – writes per-GPU JSON results.
 
 Extends ``inference_random_structures.py`` with two additional capabilities:
@@ -25,7 +35,8 @@ import os
 
 import numpy as np
 
-from hydragnn.utils.distributed import get_comm_size_and_rank, get_local_rank
+from hydragnn.distributed import get_comm_size_and_rank, get_local_rank
+from hydragnn.domain_losses import uses_interatomic_potential
 
 from inference_random_structures import (
     build_argument_parser,
@@ -33,7 +44,6 @@ from inference_random_structures import (
     generate_structures,
     run_inference,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -93,7 +103,7 @@ def main():
     arch = config["NeuralNetwork"]["Architecture"]
     radius = arch.get("radius", 5.0)
     max_neighbours = arch.get("max_neighbours", 20)
-    enable_ip = arch.get("enable_interatomic_potential", False)
+    enable_ip = uses_interatomic_potential(config)
 
     # Use (seed + world_rank) so each GPU gets different random structures
     structures = generate_structures(
@@ -165,7 +175,7 @@ def main():
         fx = np.array(entry["forces_x"])
         fy = np.array(entry["forces_y"])
         fz = np.array(entry["forces_z"])
-        f_norms = np.sqrt(fx ** 2 + fy ** 2 + fz ** 2)
+        f_norms = np.sqrt(fx**2 + fy**2 + fz**2)
         f_mean = f_norms.mean()
         print(
             f"[rank {world_rank}] {idx:6d} | {n:5d} | {e:16.6f} | "

@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2024, Oak Ridge National Laboratory                          #
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -33,8 +33,8 @@ import numpy as np
 from torch_geometric.data import Data
 
 from hydragnn.models.create import create_model
-from hydragnn.models.PNAEqStack import PainnMessage
-from hydragnn.models.PAINNStack import PainnMessage as PainnMessagePA
+from hydragnn.models.pna_eq_stack import PainnMessage
+from hydragnn.models.painn_stack import PainnMessage as PainnMessagePA
 
 # Hide noisy TorchScript annotation warnings to keep test output readable.
 warnings.filterwarnings(
@@ -114,7 +114,7 @@ def _retune_painn_dtype(model, dtype):
             module.register_forward_pre_hook(_pre_hook)
 
 
-from hydragnn.utils.model.model import update_multibranch_heads
+from hydragnn.models.utils.model import update_multibranch_heads
 
 
 def random_rotation_matrix():
@@ -231,7 +231,7 @@ def compute_forces(model, data):
     return forces
 
 
-def test_head_type_equivariance(
+def check_head_type_equivariance(
     mpnn_type,
     head_type,
     num_structures=5,
@@ -412,10 +412,10 @@ def compare_energy_only_precision(precisions=("bf16", "fp32", "fp64")):
             if dtype == torch.bfloat16
             else contextlib.nullcontext()
         )
-        for mpnn_type in ["EGNN", "SchNet", "DimeNet", "PAINN", "PNAEq", "MACE"]:
+        for mpnn_type in ["EGNN", "SchNet", "DimeNet", "PAINN", "PNAEq", "MACE", "UMA"]:
             try:
                 with autocast_ctx:
-                    max_error, rel_error = test_energy_only_equivariance(
+                    max_error, rel_error = check_energy_only_equivariance(
                         mpnn_type,
                         dtype_override=dtype,
                         allow_high_precision=False,
@@ -465,7 +465,7 @@ def compare_mlp_vs_conv_heads():
         print("-" * 50)
 
         for head_type in head_types:
-            max_error, relative_error = test_head_type_equivariance(
+            max_error, relative_error = check_head_type_equivariance(
                 mpnn_type, head_type
             )
             results[mpnn_type][head_type] = {
@@ -547,7 +547,7 @@ def compare_mlp_vs_conv_heads_precision(precisions=("bf16", "fp32", "fp64")):
                 results[mpnn_type] = {}
                 for head_type in head_types:
                     with autocast_ctx:
-                        max_error, rel_error = test_head_type_equivariance(
+                        max_error, rel_error = check_head_type_equivariance(
                             mpnn_type,
                             head_type,
                             dtype_override=dtype,
@@ -563,7 +563,7 @@ def compare_mlp_vs_conv_heads_precision(precisions=("bf16", "fp32", "fp64")):
     print("\n" + "=" * 70)
 
 
-def test_energy_only_equivariance(
+def check_energy_only_equivariance(
     mpnn_type,
     num_structures=4,
     num_rotations=3,
@@ -638,9 +638,18 @@ def test_energy_only_equivariance(
         config_args["radial_type"] = "bessel"
         config_args["avg_num_neighbors"] = 12
         config_args["envelope_exponent"] = 5
+    elif mpnn_type == "UMA":
+        # UMA is genuinely SO(3)-equivariant; energy = sum of L=0
+        # (invariant) node features, so its autograd gradient w.r.t.
+        # positions is rotation-equivariant by construction.
+        config_args["max_ell"] = 2
+        config_args["num_radial"] = 6
+        config_args["radius"] = 5.0
+        config_args["max_neighbours"] = 100
+        config_args["uma_edge_channels"] = 32
     elif mpnn_type not in ["EGNN", "SchNet", "DimeNet"]:
         raise ValueError(
-            "Energy-only test implemented for EGNN, SchNet, DimeNet, PAINN, PNAEq, and MACE"
+            "Energy-only test implemented for EGNN, SchNet, DimeNet, PAINN, PNAEq, MACE, and UMA"
         )
 
     prev_dtype = torch.get_default_dtype()
@@ -715,9 +724,9 @@ def compare_energy_only():
     print("Energy-Only Equivariance (graph heads)")
     print("=" * 70)
 
-    for mpnn_type in ["EGNN", "SchNet", "DimeNet", "PAINN", "PNAEq", "MACE"]:
+    for mpnn_type in ["EGNN", "SchNet", "DimeNet", "PAINN", "PNAEq", "MACE", "UMA"]:
         try:
-            max_error, rel_error = test_energy_only_equivariance(mpnn_type)
+            max_error, rel_error = check_energy_only_equivariance(mpnn_type)
             status = "PRESERVED" if max_error < 1e-4 else "BROKEN"
             print(f"{mpnn_type}: energy-only head")
             print(f"  Max error:      {max_error:.2e}")

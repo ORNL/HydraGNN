@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2024, Oak Ridge National Laboratory                          #
+# Copyright (c) 2025, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -10,35 +10,24 @@
 ##############################################################################
 
 import json, os
-import sys
 import logging
-import pickle
 from tqdm import tqdm
+import torch
 from mpi4py import MPI
 import argparse
 
 from itertools import chain
 
-import torch
-import torch_scatter
 import numpy as np
 
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-from hydragnn.utils.distributed import get_device, setup_ddp, nsplit
-from hydragnn.utils.model import load_existing_model
-from hydragnn.utils.datasets.pickledataset import SimplePickleDataset
-from hydragnn.utils.input_config_parsing.config_utils import (
-    update_config,
-)
-from hydragnn.utils.print import setup_log
+from hydragnn.distributed import get_device, nsplit
+from hydragnn.models.utils import load_existing_model
 from hydragnn.models.create import create_model_config
-from hydragnn.preprocess import create_dataloaders
-
-from scipy.interpolate import griddata
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.data.adiosdataset import AdiosDataset
 except ImportError:
     pass
 
@@ -68,12 +57,7 @@ def get_log_name_config(config):
         + "-bs-"
         + str(config["NeuralNetwork"]["Training"]["batch_size"])
         + "-node_ft-"
-        + "".join(
-            str(x)
-            for x in config["NeuralNetwork"]["Variables_of_interest"][
-                "input_node_features"
-            ]
-        )
+        + "".join(spec["name"] + "-" for spec in config["Variables"]["inputs"])
         + "-task_weights-"
         + "".join(
             str(weigh) + "-"
@@ -158,11 +142,7 @@ if __name__ == "__main__":
     with open(input_filename, "r") as f:
         config = json.load(f)
     verbosity = config["Verbosity"]["level"]
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
-    var_config["graph_feature_names"] = graph_feature_names
-    var_config["graph_feature_dims"] = graph_feature_dims
-    var_config["node_feature_names"] = node_feature_names
-    var_config["node_feature_dims"] = node_feature_dims
+    var_config = config["Variables"]
 
     # Transformation to create positional and structural laplacian encoders
     """
@@ -176,7 +156,7 @@ if __name__ == "__main__":
 
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
+    comm_size, rank = hydragnn.distributed.setup_ddp()
     ##################################################################################################################
 
     comm = MPI.COMM_WORLD
@@ -190,17 +170,13 @@ if __name__ == "__main__":
 
     log_name = "ANI1x"
     hydragnn.utils.print.setup_log(log_name)
-    writer = hydragnn.utils.model.get_summary_writer(log_name)
+    writer = hydragnn.models.utils.get_summary_writer(log_name)
 
     # Configurable run choices (JSON file that accompanies this example script).
     with open(input_filename, "r") as f:
         config = json.load(f)
     verbosity = config["Verbosity"]["level"]
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
-    var_config["graph_feature_names"] = graph_feature_names
-    var_config["graph_feature_dims"] = graph_feature_dims
-    var_config["node_feature_names"] = node_feature_names
-    var_config["node_feature_dims"] = node_feature_dims
+    var_config = config["Variables"]
 
     timer = Timer("load_data")
     timer.start()

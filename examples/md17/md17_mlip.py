@@ -1,6 +1,15 @@
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 import os
 import sys
-import pdb
 import json
 import torch
 import torch.distributed as dist
@@ -8,40 +17,46 @@ import torch_geometric
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
 import argparse
 
-# deprecated in torch_geometric 2.0
-try:
-    from torch_geometric.loader import DataLoader
-except ImportError:
-    from torch_geometric.data import DataLoader
-
 import hydragnn
+from hydragnn.domain_losses import uses_interatomic_potential
+
+MD17_MLIP_CACHE_VERSION = "named-schema-v3:canonical-atomic-numbers"
+MD17_LEGACY_CACHE_DIRECTORIES = (
+    "named-schema-v1",
+    "named-schema-v2:mlip-energy-forces:subset-25pct",
+)
 
 
 # Update each sample prior to loading.
 def md17_pre_transform(data, compute_edges, transform):
-    # Set descriptor as element type.
-    data.x = data.z.float().view(-1, 1)
-    # Only predict energy (index 0 of 2 properties) for this run.
-    data.y = data.energy / len(data.x)
-    # Store forces for MLIP training
-    data.forces = data.force
-    graph_features_dim = [1]
-    node_feature_dim = [1]
+    data.atomic_numbers = data.z.long().view(-1)
+    data.energy = data.energy.reshape(1, 1)
     data = compute_edges(data)
     data = transform(data)
     # gps requires relative edge features, introduced rel_lapPe as edge encodings
     source_pe = data.pe[data.edge_index[0]]
     target_pe = data.pe[data.edge_index[1]]
     data.rel_pe = torch.abs(source_pe - target_pe)  # Compute feature-wise difference
-    charge = 0.0
-    spin = 1.0
-    data.graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
     return data
 
 
 # Randomly select ~1000 samples
 def md17_pre_filter(data):
     return torch.rand(1) < 0.25
+
+
+def validate_named_cache(dataset, variables, cache_root):
+    """Reject a processed cache incompatible with the MLIP named schema."""
+    schema = hydragnn.config.parse_variable_schema(variables)
+    sample = dataset[0]
+    try:
+        for spec in (*schema.inputs, *schema.outputs):
+            hydragnn.config.validate_variable(sample, spec)
+    except (TypeError, ValueError) as error:
+        raise RuntimeError(
+            f"Incompatible MD17 MLIP processed cache at '{cache_root}'. "
+            "The processed cache must be rebuilt from the retained raw file."
+        ) from error
 
 
 def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
@@ -73,7 +88,7 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         config["NeuralNetwork"]["Architecture"]["mpnn_type"] = mpnn_type
 
     # Always initialize for multi-rank training.
-    world_size, world_rank = hydragnn.utils.distributed.setup_ddp()
+    world_size, world_rank = hydragnn.distributed.setup_ddp()
 
     log_name = f"md17_mlip_test_{mpnn_type}" if mpnn_type else "md17_mlip_test"
     # Enable print to log file.
@@ -92,20 +107,43 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
     # Fix for MD17 datasets
     torch_geometric.datasets.MD17.file_names["uracil"] = "md17_uracil.npz"
 
-    dataset = torch_geometric.datasets.MD17(
-        root="dataset/md17",
-        name="uracil",
-        pre_transform=lambda data: md17_pre_transform(data, compute_edges, transform),
-        pre_filter=md17_pre_filter,
-    )
+    cache_root = os.path.join("dataset", "md17")
+
+    def build_dataset():
+        hydragnn.data.prepare_pyg_cache(
+            cache_root,
+            MD17_MLIP_CACHE_VERSION,
+            MD17_LEGACY_CACHE_DIRECTORIES,
+        )
+        result = torch_geometric.datasets.MD17(
+            root=cache_root,
+            name="uracil",
+            pre_transform=lambda data: md17_pre_transform(
+                data, compute_edges, transform
+            ),
+            pre_filter=md17_pre_filter,
+        )
+        hydragnn.data.mark_pyg_cache_current(cache_root, MD17_MLIP_CACHE_VERSION)
+        return result
+
+    dataset = hydragnn.preprocess.build_dataset_on_rank_zero(build_dataset)
+    validate_named_cache(dataset, config["Variables"], cache_root)
     train, val, test = hydragnn.preprocess.split_dataset(
         dataset, config["NeuralNetwork"]["Training"]["perc_train"], False
     )
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
-        train, val, test, config["NeuralNetwork"]["Training"]["batch_size"]
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
+        train,
+        val,
+        test,
+        config["NeuralNetwork"]["Training"]["batch_size"],
+        variables=config["Variables"],
     )
 
-    config = hydragnn.utils.input_config_parsing.update_config(
+    config = hydragnn.config.update_config(
         config, train_loader, val_loader, test_loader
     )
 
@@ -120,13 +158,13 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
-        model, optimizer, verbosity
+    model, optimizer = hydragnn.distributed.distributed_model_wrapper(
+        model, optimizer, verbosity, config=config
     )
 
     # Run training with the given model and md17 dataset.
-    writer = hydragnn.utils.model.model.get_summary_writer(log_name)
-    hydragnn.utils.input_config_parsing.save_config(config, log_name)
+    writer = hydragnn.models.utils.model.get_summary_writer(log_name)
+    hydragnn.config.save_config(config, log_name)
 
     hydragnn.train.train_validate_test(
         model,
@@ -136,13 +174,11 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         verbosity,
         create_plots=False,
-        compute_grad_energy=config["NeuralNetwork"]["Architecture"].get(
-            "enable_interatomic_potential", False
-        ),
+        compute_grad_energy=uses_interatomic_potential(config),
     )
     if writer is not None:
         writer.close()

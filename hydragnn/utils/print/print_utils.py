@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -15,7 +15,6 @@ import torch.distributed as dist
 
 import logging
 import os
-
 
 """
 Verbosity options for printing
@@ -64,7 +63,7 @@ def setup_log(prefix, filename="run.log"):
     """
     Setup logging to print messages for both screen and file.
     """
-    from hydragnn.utils.distributed import init_comm_size_and_rank
+    from hydragnn.distributed import init_comm_size_and_rank
 
     world_size, world_rank = init_comm_size_and_rank()
 
@@ -100,7 +99,7 @@ def log(*args, sep=" ", rank=None):
     if rank is None:
         logger.info(sep.join(map(str, args)))
     else:
-        from hydragnn.utils.distributed import init_comm_size_and_rank
+        from hydragnn.distributed import init_comm_size_and_rank
 
         world_size, world_rank = init_comm_size_and_rank()
         if rank == world_rank:

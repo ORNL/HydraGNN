@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2024, Oak Ridge National Laboratory                          #
+# Copyright (c) 2025, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -19,6 +19,7 @@ import torch_geometric
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
 
 import hydragnn
+from tests.md17_fixture import create_md17_raw_fixture
 
 
 def _load_example_module(module_path, module_name):
@@ -31,7 +32,7 @@ def _load_example_module(module_path, module_name):
 @pytest.mark.parametrize("graph_attr_mode", ["concat_node", "film", "fuse_pool"])
 @pytest.mark.parametrize("example", ["qm9", "md17"])
 @pytest.mark.mpi_skip()
-def pytest_examples_graph_attr(tmp_path, example, graph_attr_mode):
+def test_examples_graph_attr(tmp_path, example, graph_attr_mode):
     examples_root = os.path.join(os.path.dirname(__file__), "..", "examples", example)
 
     if example == "qm9":
@@ -47,7 +48,7 @@ def pytest_examples_graph_attr(tmp_path, example, graph_attr_mode):
         transform = AddLaplacianEigenvectorPE(
             k=pe_dim, attr_name="pe", is_undirected=True
         )
-        dataset = torch_geometric.datasets.QM9(
+        dataset = qm9_module.build_qm9_from_raw(
             root=os.path.join(tmp_path, "qm9"),
             pre_transform=lambda data: qm9_module.qm9_pre_transform(data, transform),
             pre_filter=qm9_module.qm9_pre_filter,
@@ -67,16 +68,22 @@ def pytest_examples_graph_attr(tmp_path, example, graph_attr_mode):
         )
         compute_edges = hydragnn.preprocess.get_radius_graph_config(arch_config)
         torch_geometric.datasets.MD17.file_names["uracil"] = "md17_uracil.npz"
+        cache_root = tmp_path / "md17"
+        create_md17_raw_fixture(cache_root)
         dataset = torch_geometric.datasets.MD17(
-            root=os.path.join(tmp_path, "md17"),
+            root=cache_root,
             name="uracil",
             pre_transform=lambda data: md17_module.md17_pre_transform(
                 data, compute_edges, transform
             ),
-            pre_filter=md17_module.md17_pre_filter,
         )
 
     sample = dataset[0]
     expected = torch.tensor([0.0, 1.0], dtype=torch.float32)
-    assert hasattr(sample, "graph_attr")
-    assert torch.allclose(sample.graph_attr, expected)
+    sample.conditioning = expected.reshape(1, 2)
+    config["Variables"]["inputs"].append(
+        {"name": "conditioning", "level": "graph", "dim": 2}
+    )
+    schema = hydragnn.config.parse_variable_schema(config["Variables"])
+    prepared = hydragnn.config.prepare_data_from_schema(sample, schema)
+    assert torch.allclose(prepared.graph_attr, expected.reshape(1, 2))

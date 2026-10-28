@@ -1,0 +1,22 @@
+name: Dataset download endpoint checks
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 4 * * 1"
+
+jobs:
+  probe-dataset-endpoints:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HYDRAGNN_RUN_NETWORK_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install test dependency
+        run: python -m pip install pytest==8.4.2
+      - name: Probe bounded dataset samples
+        run: python -m pytest -q -m network tests/test_dataset_download_network.py

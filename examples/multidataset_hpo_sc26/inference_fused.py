@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 """Fused inference: HydraGNN (multi-branch) + BranchWeightMLP.
 
 Loads a pretrained multi-branch HydraGNN model and a trained BranchWeightMLP,
@@ -38,7 +48,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.data import Batch
 
-from hydragnn.train.train_validate_test import (
+from hydragnn.train.precision import (
     move_batch_to_device,
     resolve_precision,
 )
@@ -743,7 +753,7 @@ def _decode_branch(model, data, encoded_feats):
                     branchtype = f"branch-{ID.item()}"
                     x_graph_head = model.graph_shared[branchtype](x_graph[mask, :])
                     output_head = headloc[branchtype](x_graph_head)
-                    head[mask] = output_head[:, :head_dim]
+                    head[mask] = output_head[:, :head_dim].to(dtype=out_dtype)
                     headvar[mask] = (output_head[:, head_dim:] ** 2).to(dtype=out_dtype)
             outputs.append(head)
             outputs_var.append(headvar)
@@ -799,8 +809,10 @@ def _decode_branch(model, data, encoded_feats):
                         x_node = headloc[branchtype](
                             x=x[mask_nodes, :], batch=data.batch[mask_nodes]
                         )
-                    head[mask_nodes] = x_node[:, :head_dim]
-                    headvar[mask_nodes] = x_node[:, head_dim:] ** 2
+                    head[mask_nodes] = x_node[:, :head_dim].to(dtype=out_dtype)
+                    headvar[mask_nodes] = (x_node[:, head_dim:] ** 2).to(
+                        dtype=out_dtype
+                    )
             outputs.append(head)
             outputs_var.append(headvar)
 

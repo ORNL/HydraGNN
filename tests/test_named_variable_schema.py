@@ -1,0 +1,584 @@
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
+
+import json
+import os
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+import torch
+from torch_geometric.data import Batch, Data, HeteroData
+
+from hydragnn.preprocess.load_data import (
+    build_dataset_on_rank_zero,
+    create_dataloaders,
+)
+import hydragnn.preprocess.load_data as load_data_module
+from hydragnn.config import (
+    edge_type_dims,
+    validate_edge_type_contract,
+)
+from hydragnn.config.config_utils import (
+    update_config,
+    update_config_edge_dim,
+)
+from hydragnn.config.variable_schema import (
+    encoded_schema_dimensions,
+    get_variable_schema,
+    node_type_feature_dims,
+    parse_variable_schema,
+    prepare_data_from_schema,
+    schema_dimensions,
+    validate_node_type_contract,
+)
+
+VARIABLES = {
+    "graph_type": "homogeneous",
+    "inputs": [
+        {"name": "species", "level": "node", "dim": 2},
+        {"name": "pos", "level": "node", "dim": 3, "role": "position"},
+        {"name": "bonds", "level": "edge", "dim": 2},
+        {"name": "state", "level": "graph", "dim": 2},
+    ],
+    "outputs": [
+        {"name": "energy", "level": "graph", "dim": 1},
+        {"name": "state_target", "level": "graph", "dim": 2},
+        {"name": "forces", "level": "node", "dim": 3},
+        {"name": "node_target", "level": "node", "dim": 1},
+    ],
+}
+
+EDGE_TYPES = [
+    {"source_type": "bus", "relation": "line", "target_type": "bus", "dim": 9},
+    {"source_type": "load", "relation": "link", "target_type": "bus", "dim": 0},
+]
+
+OPF_EDGE_DIMS = {
+    ("bus", "ac_line", "bus"): 9,
+    ("bus", "transformer", "bus"): 11,
+    ("generator", "generator_link", "bus"): 0,
+    ("bus", "generator_link", "generator"): 0,
+    ("load", "load_link", "bus"): 0,
+    ("bus", "load_link", "load"): 0,
+    ("shunt", "shunt_link", "bus"): 0,
+    ("bus", "shunt_link", "shunt"): 0,
+}
+
+
+def test_explicit_edge_types_use_complete_edge_triples():
+    assert edge_type_dims(EDGE_TYPES) == {
+        ("bus", "line", "bus"): 9,
+        ("load", "link", "bus"): 0,
+    }
+
+
+def test_opf_configs_share_model_independent_edge_dimensions():
+    repository_root = Path(__file__).resolve().parents[1]
+    opf_root = repository_root / "examples" / "opf"
+    config_paths = [
+        *opf_root.glob("*.json"),
+        *opf_root.glob("finetune/**/config_*.json"),
+        *opf_root.glob("pretrained_models/*/config.json"),
+    ]
+
+    checked_paths = []
+    for config_path in config_paths:
+        config = json.loads(config_path.read_text())
+        if config.get("Variables", {}).get("graph_type") != "heterogeneous":
+            continue
+        edge_types = (
+            config.get("NeuralNetwork", {}).get("Architecture", {}).get("edge_types")
+        )
+        if edge_types is None:
+            continue
+        assert edge_type_dims(edge_types) == OPF_EDGE_DIMS, config_path
+        checked_paths.append(config_path)
+
+    assert checked_paths
+
+
+def test_explicit_edge_types_reject_duplicate_triples():
+    with pytest.raises(ValueError, match="Duplicate edge type"):
+        edge_type_dims([EDGE_TYPES[0], EDGE_TYPES[0]])
+
+
+def test_explicit_edge_types_require_all_fields():
+    with pytest.raises(ValueError, match="must contain exactly"):
+        edge_type_dims([{"relation": "line", "dim": 9}])
+
+
+def test_relation_only_edge_dim_dictionary_is_rejected():
+    with pytest.raises(ValueError, match="edge_dim dictionaries are unsupported"):
+        update_config_edge_dim({"edge_dim": {"line": 9}})
+
+
+def test_null_training_loss_is_accepted_with_named_edge_inputs():
+    config_path = (
+        Path(__file__).resolve().parents[1] / "examples" / "zinc" / "zinc.json"
+    )
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["NeuralNetwork"]["Training"]["loss"] = None
+    sample = Data(num_nodes=2)
+    loader = SimpleNamespace(dataset=[sample])
+    previous = os.environ.get("HYDRAGNN_USE_VARIABLE_GRAPH_SIZE")
+    os.environ["HYDRAGNN_USE_VARIABLE_GRAPH_SIZE"] = "0"
+    try:
+        updated = update_config(config, loader, loader, loader)
+    finally:
+        if previous is None:
+            os.environ.pop("HYDRAGNN_USE_VARIABLE_GRAPH_SIZE", None)
+        else:
+            os.environ["HYDRAGNN_USE_VARIABLE_GRAPH_SIZE"] = previous
+
+    assert updated["NeuralNetwork"]["Architecture"]["edge_dim"] == 1
+
+
+def _heterogeneous_edge_sample():
+    data = HeteroData()
+    data["bus"].x = torch.ones(2, 1)
+    data["load"].x = torch.ones(1, 1)
+    data["bus", "line", "bus"].edge_index = torch.tensor([[0], [1]])
+    data["bus", "line", "bus"].edge_attr = torch.ones(1, 9)
+    data["load", "link", "bus"].edge_index = torch.tensor([[0], [1]])
+    return data
+
+
+def test_edge_type_contract_matches_complete_runtime_edge_set():
+    assert validate_edge_type_contract(EDGE_TYPES, _heterogeneous_edge_sample()) == {
+        ("bus", "line", "bus"): 9,
+        ("load", "link", "bus"): 0,
+    }
+
+
+def test_edge_type_contract_rejects_incomplete_declaration():
+    with pytest.raises(ValueError, match="do not match dataset edge types"):
+        validate_edge_type_contract(EDGE_TYPES[:1], _heterogeneous_edge_sample())
+
+
+def test_edge_type_contract_rejects_attributes_on_featureless_relation():
+    data = _heterogeneous_edge_sample()
+    data["load", "link", "bus"].edge_attr = torch.ones(1, 1)
+    with pytest.raises(ValueError, match="must not have edge_attr"):
+        validate_edge_type_contract(EDGE_TYPES, data)
+
+
+def _sample(num_nodes=3):
+    edge_index = torch.tensor([[0, 1, 2, 0], [1, 2, 0, 2]])
+    return Data(
+        species=torch.randn(num_nodes, 2),
+        pos=torch.randn(num_nodes, 3),
+        edge_index=edge_index,
+        bonds=torch.randn(edge_index.shape[1], 2),
+        state=torch.randn(1, 2),
+        energy=torch.randn(1, 1),
+        state_target=torch.randn(1, 2),
+        forces=torch.randn(num_nodes, 3),
+        node_target=torch.randn(num_nodes, 1),
+        num_nodes=num_nodes,
+    )
+
+
+def test_named_variables_compile_all_input_levels_and_outputs():
+    data = _sample()
+    original_pos = data.pos
+    prepare_data_from_schema(data, parse_variable_schema(VARIABLES))
+
+    assert data.x.shape == (3, 2)
+    assert data.pos is original_pos
+    assert schema_dimensions(parse_variable_schema(VARIABLES), "node", "inputs") == 2
+    assert data.edge_attr.shape == (4, 2)
+    assert data.graph_attr.shape == (1, 2)
+    assert data.graph_output.shape == (1, 3)
+    assert data.node_output.shape == (3, 4)
+    assert data.y.shape == (15, 1)
+    assert data.y_loc.tolist() == [[0, 1, 3, 12, 15]]
+    assert hasattr(data, "species") and hasattr(data, "energy")
+
+
+def test_positions_do_not_change_invariant_node_features():
+    schema = parse_variable_schema(VARIABLES)
+    first = _sample()
+    second = first.clone()
+    second.pos = first.pos @ torch.linalg.qr(torch.randn(3, 3)).Q.T + 5.0
+
+    prepare_data_from_schema(first, schema)
+    prepare_data_from_schema(second, schema)
+
+    torch.testing.assert_close(first.x, second.x)
+    assert not torch.equal(first.pos, second.pos)
+
+
+def test_encoded_variable_compiles_raw_scalar_input():
+    variables = {
+        "graph_type": "homogeneous",
+        "inputs": [
+            {
+                "name": "atomic_numbers",
+                "level": "node",
+                "dim": 1,
+                "encoding": {
+                    "type": "embedding",
+                    "num_categories": 118,
+                    "embedding_dim": 8,
+                    "min_value": 1,
+                },
+            }
+        ],
+        "outputs": [],
+    }
+    schema = parse_variable_schema(variables)
+    data = Data(
+        atomic_numbers=torch.tensor([1, 6, 8]),
+        edge_index=torch.empty((2, 0), dtype=torch.long),
+        num_nodes=3,
+    )
+
+    prepare_data_from_schema(data, schema)
+
+    torch.testing.assert_close(data.x, torch.tensor([[1.0], [6.0], [8.0]]))
+    assert schema_dimensions(schema, "node", "inputs") == 1
+    assert encoded_schema_dimensions(schema, "node", "inputs") == 8
+
+
+def test_one_hot_encoding_contributes_category_count_to_model_width():
+    schema = parse_variable_schema(
+        {
+            "graph_type": "homogeneous",
+            "inputs": [
+                {"name": "continuous", "level": "node", "dim": 2},
+                {
+                    "name": "site_type",
+                    "level": "node",
+                    "dim": 1,
+                    "encoding": {"type": "one_hot", "num_categories": 4},
+                },
+            ],
+            "outputs": [],
+        }
+    )
+
+    assert schema_dimensions(schema, "node", "inputs") == 3
+    assert encoded_schema_dimensions(schema, "node", "inputs") == 6
+
+
+@pytest.mark.parametrize(
+    "variable",
+    [
+        {
+            "name": "kind",
+            "level": "graph",
+            "dim": 1,
+            "encoding": {"type": "one_hot", "num_categories": 3},
+        },
+        {
+            "name": "kind",
+            "level": "node",
+            "dim": 2,
+            "encoding": {"type": "one_hot", "num_categories": 3},
+        },
+    ],
+)
+def test_encoding_requires_scalar_node_input(variable):
+    with pytest.raises(
+        ValueError, match="supported only for scalar node input features"
+    ):
+        parse_variable_schema(
+            {
+                "graph_type": "homogeneous",
+                "inputs": [variable],
+                "outputs": [],
+            }
+        )
+
+
+def test_graph_inputs_batch_to_one_row_per_graph():
+    schema = parse_variable_schema(VARIABLES)
+    samples = [prepare_data_from_schema(_sample(), schema) for _ in range(2)]
+    batch = Batch.from_data_list(samples)
+
+    assert batch.graph_attr.shape == (2, 2)
+
+
+def test_dataloader_compiles_named_variables_before_pyg_collation():
+    samples = [_sample(), _sample(num_nodes=2)]
+
+    train_loader, _, _ = create_dataloaders(
+        samples,
+        samples,
+        samples,
+        batch_size=2,
+        train_sampler_shuffle=False,
+        variables=VARIABLES,
+    )
+    batch = next(iter(train_loader))
+
+    assert batch.x.shape == (5, 2)
+    assert batch.edge_attr.shape == (8, 2)
+    assert batch.graph_attr.shape == (2, 2)
+    assert batch.graph_output.shape == (2, 3)
+    assert batch.node_output.shape == (5, 4)
+    assert batch.y.shape == (26, 1)
+    assert batch.y_loc.shape == (2, 5)
+    assert samples[0].y is None
+    assert samples[0].x is None
+
+
+@pytest.mark.parametrize("rank", [0, 1])
+def test_dataset_cache_is_built_before_nonzero_ranks_open_it(monkeypatch, rank):
+    events = []
+    monkeypatch.setattr(load_data_module.dist, "is_initialized", lambda: True)
+    monkeypatch.setattr(load_data_module.dist, "get_world_size", lambda: 2)
+    monkeypatch.setattr(load_data_module.dist, "get_rank", lambda: rank)
+    monkeypatch.setattr(
+        load_data_module.dist,
+        "broadcast_object_list",
+        lambda status, src: events.append("broadcast"),
+    )
+    monkeypatch.setattr(
+        load_data_module.dist, "barrier", lambda: events.append("barrier")
+    )
+
+    def factory():
+        events.append("build" if rank == 0 else "open")
+        return "dataset"
+
+    assert build_dataset_on_rank_zero(factory) == "dataset"
+    if rank == 0:
+        assert events == ["build", "broadcast", "barrier"]
+    else:
+        assert events == ["broadcast", "barrier", "open"]
+
+
+def test_rank_zero_dataset_failure_is_broadcast_without_barrier(monkeypatch):
+    events = []
+    monkeypatch.setattr(load_data_module.dist, "is_initialized", lambda: True)
+    monkeypatch.setattr(load_data_module.dist, "get_world_size", lambda: 2)
+    monkeypatch.setattr(load_data_module.dist, "get_rank", lambda: 0)
+    monkeypatch.setattr(
+        load_data_module.dist,
+        "broadcast_object_list",
+        lambda status, src: events.append(status[0]),
+    )
+    monkeypatch.setattr(
+        load_data_module.dist, "barrier", lambda: events.append("barrier")
+    )
+
+    with pytest.raises(RuntimeError, match="rank-zero failure"):
+        build_dataset_on_rank_zero(
+            lambda: (_ for _ in ()).throw(ValueError("rank-zero failure"))
+        )
+
+    assert events == ["ValueError: rank-zero failure"]
+
+
+@pytest.mark.parametrize(
+    ("attribute", "value", "message"),
+    [
+        ("pos", torch.randn(3), "shape (3, 3)"),
+        ("bonds", torch.randn(3, 2), "shape (4, 2)"),
+        ("state", torch.randn(2), "shape (1, 2)"),
+        ("energy", torch.randn(1), "shape (1, 1)"),
+    ],
+)
+def test_named_variables_reject_wrong_shapes(attribute, value, message):
+    data = _sample()
+    setattr(data, attribute, value)
+
+    with pytest.raises(
+        ValueError, match=message.replace("(", r"\(").replace(")", r"\)")
+    ):
+        prepare_data_from_schema(data, parse_variable_schema(VARIABLES))
+
+
+def test_named_variables_require_exact_attribute_name():
+    data = _sample()
+    del data["forces"]
+
+    with pytest.raises(ValueError, match="missing configured node attribute 'forces'"):
+        prepare_data_from_schema(data, parse_variable_schema(VARIABLES))
+
+
+def test_named_variable_schema_rejects_duplicate_names():
+    variables = {**VARIABLES, "outputs": [VARIABLES["outputs"][0]] * 2}
+    with pytest.raises(
+        ValueError, match="Variable names within outputs must be unique: energy"
+    ):
+        parse_variable_schema(variables)
+
+
+@pytest.mark.parametrize(
+    "position",
+    [
+        {"name": "pos", "level": "node", "dim": 3},
+        {"name": "pos", "level": "node", "dim": 3, "role": "feature"},
+    ],
+)
+def test_pos_cannot_be_declared_as_an_ordinary_feature(position):
+    variables = {
+        "graph_type": "homogeneous",
+        "inputs": [
+            {"name": "species", "level": "node", "dim": 2},
+            position,
+        ],
+        "outputs": [],
+    }
+    with pytest.raises(ValueError, match="must declare role 'position'"):
+        parse_variable_schema(variables)
+
+
+@pytest.mark.parametrize(
+    "position",
+    [
+        {"name": "positions", "level": "node", "dim": 3, "role": "position"},
+        {"name": "pos", "level": "graph", "dim": 3, "role": "position"},
+        {"name": "pos", "level": "node", "dim": 2, "role": "position"},
+    ],
+)
+def test_position_role_requires_pyg_pos_shape_contract(position):
+    variables = {
+        "graph_type": "homogeneous",
+        "inputs": [
+            {"name": "species", "level": "node", "dim": 2},
+            position,
+        ],
+        "outputs": [],
+    }
+    with pytest.raises(
+        ValueError, match="must have name 'pos', level 'node', and dim 3"
+    ):
+        parse_variable_schema(variables)
+
+
+def test_named_variable_configuration_is_required():
+    with pytest.raises(ValueError, match="top-level Variables section is required"):
+        get_variable_schema({"NeuralNetwork": {}})
+
+
+def test_graph_type_is_required():
+    with pytest.raises(ValueError, match="Variables.graph_type"):
+        parse_variable_schema(
+            {
+                "inputs": [{"name": "features", "level": "node", "dim": 2}],
+                "outputs": [],
+            }
+        )
+
+
+def test_heterogeneous_schema_requires_node_type_registry():
+    with pytest.raises(ValueError, match="node_types must be a non-empty array"):
+        parse_variable_schema(
+            {
+                "graph_type": "heterogeneous",
+                "inputs": [],
+                "outputs": [],
+            }
+        )
+
+
+def test_homogeneous_schema_omits_node_types():
+    schema = parse_variable_schema(VARIABLES)
+    validate_node_type_contract(schema, None)
+
+    with pytest.raises(ValueError, match="dataset is heterogeneous"):
+        validate_node_type_contract(schema, ("bus",))
+
+
+def test_homogeneous_schema_rejects_node_types():
+    variables = {
+        "graph_type": "homogeneous",
+        "inputs": [{"name": "features", "level": "node", "dim": 2, "node_type": "bus"}],
+        "outputs": [],
+    }
+    with pytest.raises(ValueError, match="Homogeneous graph variables must omit"):
+        parse_variable_schema(variables)
+
+
+def test_heterogeneous_schema_requires_node_types():
+    with pytest.raises(ValueError, match="must declare node_type"):
+        parse_variable_schema(
+            {
+                **VARIABLES,
+                "graph_type": "heterogeneous",
+                "node_types": ["bus", "generator"],
+            }
+        )
+
+    schema = parse_variable_schema(VARIABLES)
+    with pytest.raises(ValueError, match="must declare node_type"):
+        node_type_feature_dims(schema)
+
+
+def test_heterogeneous_schema_rejects_unknown_node_types():
+    variables = {
+        "graph_type": "heterogeneous",
+        "node_types": ["bus", "generator"],
+        "inputs": [{"name": "features", "level": "node", "dim": 2, "node_type": "bus"}],
+        "outputs": [{"name": "target", "level": "node", "dim": 1, "node_type": "load"}],
+    }
+    with pytest.raises(ValueError, match="absent from Variables.node_types"):
+        parse_variable_schema(variables)
+
+
+def test_heterogeneous_registry_must_match_dataset_node_types():
+    schema = parse_variable_schema(
+        {
+            "graph_type": "heterogeneous",
+            "node_types": ["bus", "generator"],
+            "inputs": [
+                {"name": "voltage", "level": "node", "dim": 1, "node_type": "bus"}
+            ],
+            "outputs": [],
+        }
+    )
+
+    with pytest.raises(ValueError, match="do not match dataset node types"):
+        validate_node_type_contract(schema, ("bus", "load"))
+
+
+@pytest.mark.parametrize("group", ["inputs", "outputs"])
+def test_internal_derived_names_are_rejected(group):
+    variables = {
+        "graph_type": "homogeneous",
+        "inputs": [{"name": "features", "level": "node", "dim": 2}],
+        "outputs": [{"name": "target", "level": "node", "dim": 1}],
+    }
+    variables[group][0]["name"] = "x"
+    with pytest.raises(ValueError, match="derived/internal tensors: x"):
+        parse_variable_schema(variables)
+
+
+def test_schema_recompilation_removes_stale_derived_attributes():
+    data = _sample()
+    prepare_data_from_schema(data, parse_variable_schema(VARIABLES))
+
+    node_only = {
+        "graph_type": "homogeneous",
+        "inputs": [{"name": "species", "level": "node", "dim": 2}],
+        "outputs": [{"name": "energy", "level": "graph", "dim": 1}],
+    }
+    prepare_data_from_schema(data, parse_variable_schema(node_only))
+
+    assert "edge_attr" not in data
+    assert "graph_attr" not in data
+    assert "node_output" not in data
+    assert "edge_output" not in data
+    assert data.graph_output.shape == (1, 1)
+
+    no_outputs = {
+        "graph_type": "homogeneous",
+        "inputs": [{"name": "species", "level": "node", "dim": 2}],
+        "outputs": [],
+    }
+    prepare_data_from_schema(data, parse_variable_schema(no_outputs))
+
+    for name in ("node_output", "edge_output", "graph_output", "y", "y_loc"):
+        assert name not in data

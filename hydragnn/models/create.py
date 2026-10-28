@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2024, Oak Ridge National Laboratory                          #
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -9,39 +9,31 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
-import os
 import torch
-from torch_geometric.data import Data
-from typing import List, Union
+from dataclasses import replace
+from types import SimpleNamespace
+from typing import Dict, List, Union
 
-import torch_scatter
+from hydragnn.model_settings import (
+    AllScAIPSettings,
+    EquivariantAttentionSettings,
+    UMASettings,
+)
+from hydragnn.domain_losses import create_domain_loss
+from hydragnn.config.variable_schema import edge_type_dims
+from hydragnn.models.registry import get_model_builder
 
-from hydragnn.models.Base import Base
-from hydragnn.models.GINStack import GINStack
-from hydragnn.models.PNAStack import PNAStack
-from hydragnn.models.PNAPlusStack import PNAPlusStack
-from hydragnn.models.GATStack import GATStack
-from hydragnn.models.MFCStack import MFCStack
-from hydragnn.models.CGCNNStack import CGCNNStack
-from hydragnn.models.SAGEStack import SAGEStack
-from hydragnn.models.SCFStack import SCFStack
-from hydragnn.models.DIMEStack import DIMEStack
-from hydragnn.models.EGCLStack import EGCLStack
-from hydragnn.models.PNAEqStack import PNAEqStack
-from hydragnn.models.PAINNStack import PAINNStack
-from hydragnn.models.MACEStack import MACEStack
-
-# InteratomicPotential functionality is now implemented via wrapper composition
-
-from hydragnn.utils.distributed import get_device
+from hydragnn.distributed import get_device
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-from hydragnn.train.train_validate_test import resolve_precision
+from hydragnn.train.precision import resolve_precision
 
 
 def create_model_config(
     config: dict,
     verbosity: int = 0,
     use_gpu: bool = True,
+    metadata=None,
+    node_input_dims=None,
 ):
     model = create_model(
         mpnn_type=config["Architecture"]["mpnn_type"],
@@ -52,6 +44,9 @@ def create_model_config(
         global_attn_engine=config["Architecture"]["global_attn_engine"],
         global_attn_type=config["Architecture"]["global_attn_type"],
         global_attn_heads=config["Architecture"]["global_attn_heads"],
+        attn_only=config["Architecture"].get("attn_only", False),
+        attn_node_types=config["Architecture"].get("attn_node_types", None),
+        structural_encoding=config["Architecture"].get("structural_encoding", None),
         output_type=config["Architecture"]["output_type"],
         output_heads=config["Architecture"]["output_heads"],
         activation_function=config["Architecture"]["activation_function"],
@@ -62,7 +57,11 @@ def create_model_config(
         initial_bias=config["Architecture"]["initial_bias"],
         num_nodes=config["Architecture"]["num_nodes"],
         max_neighbours=config["Architecture"]["max_neighbours"],
-        edge_dim=config["Architecture"]["edge_dim"],
+        edge_dim=(
+            edge_type_dims(config["Architecture"]["edge_types"])
+            if config["Architecture"].get("edge_types") is not None
+            else config["Architecture"]["edge_dim"]
+        ),
         pna_deg=config["Architecture"]["pna_deg"],
         num_before_skip=config["Architecture"]["num_before_skip"],
         num_after_skip=config["Architecture"]["num_after_skip"],
@@ -77,25 +76,47 @@ def create_model_config(
         num_gaussians=config["Architecture"]["num_gaussians"],
         num_filters=config["Architecture"]["num_filters"],
         radius=config["Architecture"]["radius"],
+        periodic_boundary_conditions=config["Architecture"].get(
+            "periodic_boundary_conditions", False
+        ),
         equivariance=config["Architecture"]["equivariance"],
         correlation=config["Architecture"]["correlation"],
         max_ell=config["Architecture"]["max_ell"],
         node_max_ell=config["Architecture"]["node_max_ell"],
         avg_num_neighbors=config["Architecture"]["avg_num_neighbors"],
         conv_checkpointing=config["Training"]["conv_checkpointing"],
-        enable_interatomic_potential=config["Architecture"].get(
-            "enable_interatomic_potential", False
-        ),
-        energy_weight=config["Architecture"].get("energy_weight", 0.0),
-        energy_peratom_weight=config["Architecture"].get("energy_peratom_weight", 0.0),
-        force_weight=config["Architecture"].get("force_weight", 0.0),
+        domain_loss_config=config["Training"].get("loss"),
+        input_node_encodings=config["Architecture"].get("input_node_encodings"),
         use_graph_attr_conditioning=config["Architecture"].get(
             "use_graph_attr_conditioning", False
         ),
+        graph_attr_dim=config["Architecture"].get("graph_attr_dim", 0),
         graph_attr_conditioning_mode=config["Architecture"].get(
             "graph_attr_conditioning_mode", "concat_node"
         ),
         graph_pooling=config["Architecture"].get("graph_pooling", "mean"),
+        equivariant_attn=EquivariantAttentionSettings.from_mapping(
+            config["Architecture"]
+        ),
+        allscaip=AllScAIPSettings.from_mapping(config["Architecture"]),
+        uma=UMASettings.from_mapping(config["Architecture"]),
+        hetero_pooling_mode=config["Architecture"].get("hetero_pooling_mode", "sum"),
+        node_target_type=config["Architecture"].get("node_target_type", None),
+        share_relation_weights=config["Architecture"].get(
+            "share_relation_weights", False
+        ),
+        metadata=metadata,
+        node_input_dims=node_input_dims,
+        hetero_attention_heads=config["Architecture"].get("hetero_attention_heads", 4),
+        hetero_attention_negative_slope=config["Architecture"].get(
+            "hetero_attention_negative_slope", 0.2
+        ),
+        hetero_edge_type_emb_dim=config["Architecture"].get(
+            "hetero_edge_type_emb_dim", 16
+        ),
+        hetero_edge_attr_emb_dim=config["Architecture"].get(
+            "hetero_edge_attr_emb_dim", 16
+        ),
         verbosity=verbosity,
         use_gpu=use_gpu,
     )
@@ -108,7 +129,21 @@ def create_model_config(
     return model.to(dtype=param_dtype)
 
 
-# FIXME: interface does not include ilossweights_hyperp, ilossweights_nll, dropout
+_SETTINGS_CLASSES = {
+    "equivariant_attn": EquivariantAttentionSettings,
+    "allscaip": AllScAIPSettings,
+    "uma": UMASettings,
+}
+
+
+def _resolve_settings(settings_cls, settings, flat_settings):
+    """Merge legacy flat ``<prefix>_*`` keyword arguments into a settings object."""
+    overrides = settings_cls.pop_from(flat_settings)
+    settings = settings if settings is not None else settings_cls()
+    return replace(settings, **overrides) if overrides else settings
+
+
+# FIXME: interface does not include dropout
 def create_model(
     mpnn_type: str,
     input_dim: int,
@@ -128,7 +163,7 @@ def create_model(
     initial_bias: float = None,
     num_nodes: int = None,
     max_neighbours: int = None,
-    edge_dim: int = None,
+    edge_dim: Union[int, Dict[str, int], None] = None,
     pna_deg: torch.tensor = None,
     num_before_skip: int = None,
     num_after_skip: int = None,
@@ -149,614 +184,71 @@ def create_model(
     node_max_ell: int = None,
     avg_num_neighbors: int = None,
     conv_checkpointing: bool = False,
-    enable_interatomic_potential: bool = False,
-    energy_weight: float = 0.0,
-    energy_peratom_weight: float = 0.0,
-    force_weight: float = 0.0,
+    domain_loss_config: dict | None = None,
+    input_node_encodings: list[dict] | None = None,
     use_graph_attr_conditioning: bool = False,
+    graph_attr_dim: int = 0,
     graph_attr_conditioning_mode: str = "fuse_pool",
     graph_pooling: str = "mean",
+    # Keyword-only: the removed flat family params used to follow graph_pooling.
+    *,
+    hetero_pooling_mode: str = "sum",
+    node_target_type: str = None,
+    share_relation_weights: bool = False,
+    metadata=None,
+    node_input_dims=None,
+    hetero_attention_heads: int = 4,
+    hetero_attention_negative_slope: float = 0.2,
+    hetero_edge_type_emb_dim: int = 16,
+    hetero_edge_attr_emb_dim: int = 16,
     verbosity: int = 0,
     use_gpu: bool = True,
+    periodic_boundary_conditions: bool = False,
+    attn_only: bool = False,
+    attn_node_types: List[str] = None,
+    structural_encoding: dict = None,
+    equivariant_attn: EquivariantAttentionSettings | None = None,
+    allscaip: AllScAIPSettings | None = None,
+    uma: UMASettings | None = None,
+    **flat_settings,
 ):
+    params = dict(locals())
+    flat_settings = params.pop("flat_settings")
+    for name, settings_cls in _SETTINGS_CLASSES.items():
+        params[name] = _resolve_settings(settings_cls, params[name], flat_settings)
+    if flat_settings:
+        raise TypeError(
+            f"create_model() got unexpected keyword arguments: {sorted(flat_settings)}"
+        )
+    params = SimpleNamespace(**params)
+
     timer = Timer("create_model")
     timer.start()
     torch.manual_seed(0)
 
     device = get_device(use_gpu, verbosity_level=verbosity)
 
-    # Note: model-specific inputs must come first.
-    if mpnn_type == "GIN":
-        model = GINStack(
-            "inv_node_feat, equiv_node_feat, edge_index",
-            "inv_node_feat, edge_index",
-            input_dim,
-            hidden_dim,
-            output_dim,
-            pe_dim,
-            global_attn_engine,
-            global_attn_type,
-            global_attn_heads,
-            output_type,
-            output_heads,
-            activation_function,
-            loss_function_type,
-            equivariance,
-            loss_weights=task_weights,
-            freeze_conv=freeze_conv,
-            initial_bias=initial_bias,
-            num_conv_layers=num_conv_layers,
-            num_nodes=num_nodes,
-            graph_pooling=graph_pooling,
-            use_graph_attr_conditioning=use_graph_attr_conditioning,
-            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-        )
+    model = get_model_builder(mpnn_type)(params)
 
-    elif mpnn_type == "PNA":
-        assert pna_deg is not None, "PNA requires degree input."
-        model = PNAStack(
-            "inv_node_feat, equiv_node_feat, edge_index",
-            "inv_node_feat, edge_index",
-            pna_deg,
-            edge_dim,
-            input_dim,
-            hidden_dim,
-            output_dim,
-            pe_dim,
-            global_attn_engine,
-            global_attn_type,
-            global_attn_heads,
-            output_type,
-            output_heads,
-            activation_function,
-            loss_function_type,
-            equivariance,
-            loss_weights=task_weights,
-            freeze_conv=freeze_conv,
-            initial_bias=initial_bias,
-            num_conv_layers=num_conv_layers,
-            num_nodes=num_nodes,
-            graph_pooling=graph_pooling,
-            use_graph_attr_conditioning=use_graph_attr_conditioning,
-            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-        )
-
-    elif mpnn_type == "PNAPlus":
-        assert pna_deg is not None, "PNAPlus requires degree input."
-        assert (
-            envelope_exponent is not None
-        ), "PNAPlus requires envelope_exponent input."
-        assert num_radial is not None, "PNAPlus requires num_radial input."
-        assert radius is not None, "PNAPlus requires radius input."
-        model = PNAPlusStack(
-            "inv_node_feat, equiv_node_feat, edge_index, rbf",
-            "inv_node_feat, edge_index, rbf",
-            pna_deg,
-            edge_dim,
-            envelope_exponent,
-            num_radial,
-            radius,
-            input_dim,
-            hidden_dim,
-            output_dim,
-            pe_dim,
-            global_attn_engine,
-            global_attn_type,
-            global_attn_heads,
-            output_type,
-            output_heads,
-            activation_function,
-            loss_function_type,
-            equivariance,
-            loss_weights=task_weights,
-            freeze_conv=freeze_conv,
-            initial_bias=initial_bias,
-            num_conv_layers=num_conv_layers,
-            num_nodes=num_nodes,
-            graph_pooling=graph_pooling,
-            use_graph_attr_conditioning=use_graph_attr_conditioning,
-            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-        )
-
-    elif mpnn_type == "GAT":
-        # FIXME: expose options to users
-        heads = 6
-        negative_slope = 0.05
-        model = GATStack(
-            "inv_node_feat, equiv_node_feat, edge_index",
-            "inv_node_feat, edge_index",
-            heads,
-            negative_slope,
-            edge_dim,
-            input_dim,
-            hidden_dim,
-            output_dim,
-            pe_dim,
-            global_attn_engine,
-            global_attn_type,
-            global_attn_heads,
-            output_type,
-            output_heads,
-            activation_function,
-            loss_function_type,
-            equivariance,
-            loss_weights=task_weights,
-            freeze_conv=freeze_conv,
-            initial_bias=initial_bias,
-            num_conv_layers=num_conv_layers,
-            num_nodes=num_nodes,
-            graph_pooling=graph_pooling,
-            use_graph_attr_conditioning=use_graph_attr_conditioning,
-            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-        )
-
-    elif mpnn_type == "MFC":
-        assert max_neighbours is not None, "MFC requires max_neighbours input."
-        model = MFCStack(
-            "inv_node_feat, equiv_node_feat, edge_index",
-            "inv_node_feat, edge_index",
-            max_neighbours,
-            input_dim,
-            hidden_dim,
-            output_dim,
-            pe_dim,
-            global_attn_engine,
-            global_attn_type,
-            global_attn_heads,
-            output_type,
-            output_heads,
-            activation_function,
-            loss_function_type,
-            equivariance,
-            loss_weights=task_weights,
-            freeze_conv=freeze_conv,
-            initial_bias=initial_bias,
-            num_conv_layers=num_conv_layers,
-            num_nodes=num_nodes,
-            graph_pooling=graph_pooling,
-            use_graph_attr_conditioning=use_graph_attr_conditioning,
-            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-        )
-
-    elif mpnn_type == "CGCNN":
-        model = CGCNNStack(
-            "inv_node_feat, equiv_node_feat, edge_index",  # input_args
-            "inv_node_feat, edge_index",  # conv_args
-            edge_dim,
-            input_dim,
-            hidden_dim,
-            output_dim,
-            pe_dim,
-            global_attn_engine,
-            global_attn_type,
-            global_attn_heads,
-            output_type,
-            output_heads,
-            activation_function,
-            loss_function_type,
-            equivariance,
-            loss_weights=task_weights,
-            freeze_conv=freeze_conv,
-            initial_bias=initial_bias,
-            num_conv_layers=num_conv_layers,
-            num_nodes=num_nodes,
-            graph_pooling=graph_pooling,
-            use_graph_attr_conditioning=use_graph_attr_conditioning,
-            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-        )
-
-    elif mpnn_type == "SAGE":
-        model = SAGEStack(
-            "inv_node_feat, equiv_node_feat, edge_index",  # input_args
-            "inv_node_feat, edge_index",  # conv_args
-            input_dim,
-            hidden_dim,
-            output_dim,
-            pe_dim,
-            global_attn_engine,
-            global_attn_type,
-            global_attn_heads,
-            output_type,
-            output_heads,
-            activation_function,
-            loss_function_type,
-            equivariance,
-            loss_weights=task_weights,
-            freeze_conv=freeze_conv,
-            num_conv_layers=num_conv_layers,
-            num_nodes=num_nodes,
-            graph_pooling=graph_pooling,
-            use_graph_attr_conditioning=use_graph_attr_conditioning,
-            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-        )
-
-    elif mpnn_type == "SchNet":
-        assert num_gaussians is not None, "SchNet requires num_guassians input."
-        assert num_filters is not None, "SchNet requires num_filters input."
-        assert radius is not None, "SchNet requires radius input."
-        model = SCFStack(
-            "",  # Depends on SchNet usage of edge_features
-            "inv_node_feat, equiv_node_feat, edge_index, edge_weight, edge_rbf",
-            num_filters,
-            edge_dim,
-            num_gaussians,
-            radius,
-            input_dim,
-            hidden_dim,
-            output_dim,
-            pe_dim,
-            global_attn_engine,
-            global_attn_type,
-            global_attn_heads,
-            output_type,
-            output_heads,
-            activation_function,
-            loss_function_type,
-            equivariance,
-            max_neighbours=max_neighbours,
-            loss_weights=task_weights,
-            freeze_conv=freeze_conv,
-            initial_bias=initial_bias,
-            num_conv_layers=num_conv_layers,
-            num_nodes=num_nodes,
-            graph_pooling=graph_pooling,
-            use_graph_attr_conditioning=use_graph_attr_conditioning,
-            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-        )
-
-    elif mpnn_type == "DimeNet":
-        assert basis_emb_size is not None, "DimeNet requires basis_emb_size input."
-        assert (
-            envelope_exponent is not None
-        ), "DimeNet requires envelope_exponent input."
-        assert int_emb_size is not None, "DimeNet requires int_emb_size input."
-        assert out_emb_size is not None, "DimeNet requires out_emb_size input."
-        assert num_after_skip is not None, "DimeNet requires num_after_skip input."
-        assert num_before_skip is not None, "DimeNet requires num_before_skip input."
-        assert num_radial is not None, "DimeNet requires num_radial input."
-        assert num_spherical is not None, "DimeNet requires num_spherical input."
-        assert radius is not None, "DimeNet requires radius input."
-        model = DIMEStack(
-            "inv_node_feat, equiv_node_feat, rbf, sbf, i, j, idx_kj, idx_ji, num_nodes",  # input_args
-            "",  # conv_args
-            basis_emb_size,
-            envelope_exponent,
-            int_emb_size,
-            out_emb_size,
-            num_after_skip,
-            num_before_skip,
-            num_radial,
-            num_spherical,
-            edge_dim,
-            radius,
-            input_dim,
-            hidden_dim,
-            output_dim,
-            pe_dim,
-            global_attn_engine,
-            global_attn_type,
-            global_attn_heads,
-            output_type,
-            output_heads,
-            activation_function,
-            loss_function_type,
-            equivariance,
-            max_neighbours=max_neighbours,
-            loss_weights=task_weights,
-            freeze_conv=freeze_conv,
-            initial_bias=initial_bias,
-            num_conv_layers=num_conv_layers,
-            num_nodes=num_nodes,
-            graph_pooling=graph_pooling,
-            use_graph_attr_conditioning=use_graph_attr_conditioning,
-            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-        )
-
-    elif mpnn_type == "EGNN":
-        model = EGCLStack(
-            "inv_node_feat, equiv_node_feat, edge_index, edge_attr, edge_shifts",  # input_args
-            "",  # conv_args
-            edge_dim,
-            input_dim,
-            hidden_dim,
-            output_dim,
-            pe_dim,
-            global_attn_engine,
-            global_attn_type,
-            global_attn_heads,
-            output_type,
-            output_heads,
-            activation_function,
-            loss_function_type,
-            equivariance,
-            max_neighbours=max_neighbours,
-            loss_weights=task_weights,
-            freeze_conv=freeze_conv,
-            initial_bias=initial_bias,
-            num_conv_layers=num_conv_layers,
-            num_nodes=num_nodes,
-            graph_pooling=graph_pooling,
-            use_graph_attr_conditioning=use_graph_attr_conditioning,
-            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-        )
-
-    elif mpnn_type == "PAINN":
-        model = PAINNStack(
-            # edge_dim,   # To-do add edge_features
-            "inv_node_feat, equiv_node_feat, edge_index, diff, dist",
-            "inv_node_feat, equiv_node_feat, edge_index, diff, dist",
-            edge_dim,
-            num_radial,
-            radius,
-            input_dim,
-            hidden_dim,
-            output_dim,
-            pe_dim,
-            global_attn_engine,
-            global_attn_type,
-            global_attn_heads,
-            output_type,
-            output_heads,
-            activation_function,
-            loss_function_type,
-            equivariance,
-            loss_weights=task_weights,
-            freeze_conv=freeze_conv,
-            num_conv_layers=num_conv_layers,
-            num_nodes=num_nodes,
-            graph_pooling=graph_pooling,
-            use_graph_attr_conditioning=use_graph_attr_conditioning,
-            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-        )
-
-    elif mpnn_type == "PNAEq":
-        assert pna_deg is not None, "PNAEq requires degree input."
-        model = PNAEqStack(
-            "inv_node_feat, equiv_node_feat, edge_index, edge_rbf, edge_vec",
-            "inv_node_feat, equiv_node_feat, edge_index, edge_rbf, edge_vec",
-            pna_deg,
-            edge_dim,
-            num_radial,
-            radius,
-            input_dim,
-            hidden_dim,
-            output_dim,
-            pe_dim,
-            global_attn_engine,
-            global_attn_type,
-            global_attn_heads,
-            output_type,
-            output_heads,
-            activation_function,
-            loss_function_type,
-            equivariance,
-            loss_weights=task_weights,
-            freeze_conv=freeze_conv,
-            num_conv_layers=num_conv_layers,
-            num_nodes=num_nodes,
-            graph_pooling=graph_pooling,
-            use_graph_attr_conditioning=use_graph_attr_conditioning,
-            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-        )
-
-    elif mpnn_type == "MACE":
-        assert radius is not None, "MACE requires radius input."
-        assert num_radial is not None, "MACE requires num_radial input."
-        assert max_ell is not None, "MACE requires max_ell input."
-        assert node_max_ell is not None, "MACE requires node_max_ell input."
-        assert max_ell >= 1, "MACE requires max_ell >= 1."
-        assert node_max_ell >= 1, "MACE requires node_max_ell >= 1."
-        model = MACEStack(
-            "node_attributes, equiv_node_feat, inv_node_feat, edge_attributes, edge_features, edge_index",
-            "node_attributes, edge_attributes, edge_features, edge_index",
-            radius,
-            radial_type,
-            distance_transform,
-            num_radial,
-            edge_dim,
-            max_ell,
-            node_max_ell,
-            avg_num_neighbors,
-            envelope_exponent,
-            correlation,
-            input_dim,
-            hidden_dim,
-            output_dim,
-            pe_dim,
-            global_attn_engine,
-            global_attn_type,
-            global_attn_heads,
-            output_type,
-            output_heads,
-            activation_function,
-            loss_function_type,
-            equivariance,
-            loss_weights=task_weights,
-            freeze_conv=freeze_conv,
-            initial_bias=initial_bias,
-            num_conv_layers=num_conv_layers,
-            num_nodes=num_nodes,
-            graph_pooling=graph_pooling,
-            use_graph_attr_conditioning=use_graph_attr_conditioning,
-            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-        )
-    else:
-        raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
-
-    # Apply interatomic potential enhancement if requested
-    if enable_interatomic_potential:
-        # Instead of complex inheritance, use composition with delegation
-        # This avoids MRO issues and __init__ complications
-        class EnhancedModelWrapper(torch.nn.Module):
-            def __init__(self, original_model):
-                super().__init__()
-                self.model = original_model
-                self.energy_weight = energy_weight
-                self.energy_peratom_weight = energy_peratom_weight
-                self.force_weight = force_weight
-
-            def __getattr__(self, name):
-                # First try to get from the wrapper itself
-                try:
-                    return super().__getattr__(name)
-                except AttributeError:
-                    pass
-
-                # Then try to get from the wrapped model
-                try:
-                    return getattr(self.model, name)
-                except AttributeError:
-                    # Handle specific method names that may be expected for interatomic potentials
-                    if name in [
-                        "_compute_enhanced_geometric_features",
-                        "_compute_three_body_interactions",
-                        "_apply_atomic_environment_descriptors",
-                    ]:
-                        # Return placeholder methods that don't interfere with existing architectures
-                        return lambda *args, **kwargs: None
-                    raise AttributeError(
-                        f"'{self.__class__.__name__}' object has no attribute '{name}'"
-                    )
-
-            # ---------- forward ----------
-            def forward(self, data):
-
-                return self.model(data)
-
-            def energy_force_loss(self, pred, data, create_graph=True):
-                """
-                Compute energy and force loss for MLIP training.
-
-                This method is specific to interatomic potentials and computes:
-                1. Energy loss between predicted and true total energies
-                2. Force loss between predicted and true forces (via autograd on positions)
-
-                Forces are computed as negative gradients of total energy with respect to positions.
-                """
-                # Asserts
-                assert (
-                    data.pos is not None
-                    and data.energy is not None
-                    and data.forces is not None
-                ), "data.pos, data.energy, data.forces must be provided for energy-force loss. Check your dataset creation and naming."
-                assert (
-                    data.pos.requires_grad
-                ), "data.pos does not have grad, so force predictions cannot be computed. Check that data.pos has grad set to true before prediction."
-
-                assert (
-                    self.num_heads == 1
-                ), "Force predictions require exactly one head."
-
-                # Support both node and graph heads; enforce sum pooling for graph heads
-                if self.head_type[0] == "node":
-                    node_energy_pred = pred[0]
-                    graph_energy_pred = (
-                        torch_scatter.scatter_add(node_energy_pred, data.batch, dim=0)
-                        .squeeze()
-                        .float()
-                    )
-                elif self.head_type[0] == "graph":
-                    if getattr(self.model, "graph_pooling", "mean") not in ["add"]:
-                        raise ValueError(
-                            "Graph head force loss requires sum pooling (graph_pooling='add')."
-                        )
-                    if isinstance(pred, dict) and "graph" in pred:
-                        graph_energy_pred = pred["graph"][0].squeeze().float()
-                    elif isinstance(pred, (list, tuple)):
-                        graph_energy_pred = pred[0].squeeze().float()
-                    else:
-                        graph_energy_pred = pred.squeeze().float()
-                else:
-                    raise ValueError(
-                        "Force predictions are only supported for node or graph energy heads."
-                    )
-
-                graph_energy_true = data.energy.squeeze().float()
-                tasks_loss = [self.loss_function(graph_energy_pred, graph_energy_true)]
-
-                energy_loss_weight = self.energy_weight
-                energy_peratom_loss_weight = self.energy_peratom_weight
-                force_loss_weight = self.force_weight
-
-                # Interatomic potential training requires at least one active loss term
-                if (
-                    energy_loss_weight <= 0
-                    and energy_peratom_loss_weight <= 0
-                    and force_loss_weight <= 0
-                ):
-                    raise ValueError(
-                        "All interatomic potential loss weights are zero; set at least one of energy_weight, energy_peratom_weight, or force_weight to a positive value."
-                    )
-
-                tot_loss = 0
-                if energy_loss_weight > 0:
-                    tot_loss += (
-                        self.loss_function(graph_energy_pred, graph_energy_true)
-                        * energy_loss_weight
-                    )
-
-                # Energy per atom
-                natoms = torch.bincount(data.batch)
-                graph_energy_peratom_pred = graph_energy_pred / natoms
-                graph_energy_peratom_true = graph_energy_true / natoms
-                tasks_loss.append(
-                    self.loss_function(
-                        graph_energy_peratom_pred, graph_energy_peratom_true
-                    )
+    model.configure_input_feature_encoders(input_node_encodings)
+    if use_graph_attr_conditioning and graph_attr_dim is not None:
+        if model.graph_attr_conditioning_mode == "film":
+            model._ensure_graph_conditioner(graph_attr_dim, device)
+        elif model.graph_attr_conditioning_mode == "concat_node":
+            model._ensure_graph_concat_projector(graph_attr_dim, hidden_dim, device)
+        elif model.graph_attr_conditioning_mode == "fuse_pool":
+            if "graph" not in output_type:
+                raise ValueError(
+                    "fuse_pool graph conditioning requires at least one graph output"
                 )
+            if not getattr(model, "supports_graph_pool_conditioning", True):
+                raise ValueError(
+                    f"{model.__class__.__name__} does not support fuse_pool graph conditioning"
+                )
+            model._ensure_graph_pool_projector(graph_attr_dim, hidden_dim, device)
 
-                if energy_peratom_loss_weight > 0:
-                    tot_loss += (
-                        self.loss_function(
-                            graph_energy_peratom_pred, graph_energy_peratom_true
-                        )
-                        * energy_peratom_loss_weight
-                    )
-
-                # Forces
-                forces_true = data.forces.float()
-                forces_pred = torch.autograd.grad(
-                    graph_energy_pred,
-                    data.pos,
-                    grad_outputs=torch.ones_like(graph_energy_pred),
-                    retain_graph=graph_energy_pred.requires_grad,
-                    create_graph=create_graph,
-                )[0].float()
-                assert (
-                    forces_pred is not None
-                ), "No gradients were found for data.pos. Does your model use positions for prediction?"
-                forces_pred = -forces_pred
-                tasks_loss.append(self.loss_function(forces_pred, forces_true))
-
-                if force_loss_weight > 0:
-                    tot_loss += (
-                        self.loss_function(forces_pred, forces_true) * force_loss_weight
-                    )  # Have force-weight be the complement to energy-weight
-                    ## FixMe: current loss functions require the number of heads to be the number of things being predicted
-                    ##        so, we need to do loss calculation manually without calling the other functions.
-
-                return tot_loss, tasks_loss
-
-            def _compute_enhanced_geometric_features(self, data):
-                """
-                Placeholder for enhanced geometric feature computation (disabled by default).
-                """
-                return data
-
-            def _compute_three_body_interactions(self, data):
-                """
-                Placeholder for three-body interaction computation (disabled by default).
-                """
-                return data
-
-            def _apply_atomic_environment_descriptors(self, data):
-                """
-                Placeholder for atomic environment descriptor application (disabled by default).
-                """
-                return data
-
-        enhanced_model = EnhancedModelWrapper(model)
-        model = enhanced_model
+    model.atomistic_mode_enabled = False
+    model = create_domain_loss(model, domain_loss_config)
 
     if conv_checkpointing:
         model.enable_conv_checkpointing()

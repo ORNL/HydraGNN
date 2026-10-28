@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# Copyright (c) 2024, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -11,7 +11,7 @@
 
 import time
 import torch
-from hydragnn.utils.distributed import get_comm_size_and_rank, get_device
+from hydragnn.distributed import get_comm_size_and_rank, get_device
 from hydragnn.utils.print.print_utils import print_distributed
 
 

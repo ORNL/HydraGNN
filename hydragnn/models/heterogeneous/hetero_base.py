@@ -1,0 +1,1179 @@
+##############################################################################
+# Copyright (c) 2024, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
+
+import functools
+
+import torch
+from torch.nn import Module, ModuleList, ModuleDict, Linear, Parameter, Sequential
+from torch.utils.checkpoint import checkpoint
+from torch_geometric.nn import BatchNorm, HeteroConv
+
+from hydragnn.models.utils import activation_function_selection
+from hydragnn.distributed import get_device
+from hydragnn.models.attention.hetero_gps import HeteroGPSConv
+from hydragnn.models.attention.structural import StructuralAttentionContext
+from hydragnn.models.common.graph_conditioning import (
+    GraphConditioningMixin,
+    validate_graph_attr_conditioning_mode,
+)
+from hydragnn.models.common.losses import MultiHeadLossMixin
+from hydragnn.models.common.mlp_node import MLPNode
+from hydragnn.models.common.model_controls import ModelControlsMixin
+from hydragnn.models.common.pooling import GraphPoolingMixin
+
+
+class HeteroBase(
+    GraphPoolingMixin,
+    GraphConditioningMixin,
+    MultiHeadLossMixin,
+    ModelControlsMixin,
+    Module,
+):
+    """Base class for heterogeneous message passing models.
+
+    This reuses HydraGNN's multi-head decoding logic while allowing hetero
+    message passing via PyG HeteroConv.
+    """
+
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dim: int,
+        output_dim: list,
+        pe_dim: int,
+        global_attn_engine: str,
+        global_attn_type: str,
+        global_attn_heads: int,
+        output_type: list,
+        config_heads: dict,
+        activation_function_type: str,
+        loss_function_type: str,
+        equivariance: bool,
+        loss_weights: list | None = None,
+        freeze_conv: bool = False,
+        initial_bias=None,
+        dropout: float = 0.25,
+        num_conv_layers: int = 16,
+        num_nodes: int = None,
+        graph_pooling: str = "mean",
+        use_graph_attr_conditioning: bool = False,
+        graph_attr_dim: int = 0,
+        graph_attr_conditioning_mode: str = "concat_node",
+        hetero_pooling_mode: str = "sum",
+        node_target_type: str = None,
+        share_relation_weights: bool = False,
+        node_input_dims: dict | None = None,
+        metadata=None,
+        attn_only: bool = False,
+        attn_node_types: list[str] | None = None,
+        structural_encoding: dict | None = None,
+    ):
+        super().__init__()
+
+        self.device = get_device()
+        self.input_dim = input_dim
+        self.pe_dim = pe_dim
+        self.hidden_dim = hidden_dim
+        self.dropout = dropout
+        self.num_conv_layers = num_conv_layers
+        self.num_nodes = num_nodes
+        self.graph_convs = ModuleList()
+        self.feature_layers = ModuleList()
+        self.node_embedders = ModuleDict()
+        self._node_input_dims = node_input_dims
+        self.node_target_type = node_target_type
+        self.attn_node_types = attn_node_types
+        self.structural_encoding = structural_encoding or {}
+        self.structural_node_type = self.structural_encoding.get(
+            "target_node_type",
+            (
+                attn_node_types[0]
+                if attn_node_types is not None and len(attn_node_types) == 1
+                else node_target_type
+            ),
+        )
+        if self.structural_encoding and self.structural_node_type is None:
+            raise ValueError(
+                "structural_encoding requires target_node_type when it cannot "
+                "be inferred from a single attention node type."
+            )
+        self.share_relation_weights = share_relation_weights
+        self._metadata = metadata
+        self._initialized = False
+        self._pending_node_conv_init = False
+        self._node_conv_head_specs = []
+
+        self.global_attn_engine = global_attn_engine
+        self.global_attn_type = global_attn_type
+        self.global_attn_heads = global_attn_heads
+        self.attn_only = bool(attn_only)
+        if self.global_attn_engine == "GPS-attn-only":
+            self.global_attn_engine = "GPS"
+            self.attn_only = True
+        self.use_global_attn = bool(self.global_attn_engine)
+
+        self.heads_NN = ModuleList()
+        self.config_heads = config_heads
+        self.head_type = output_type
+        self.head_dims = output_dim
+        self.num_heads = len(self.head_dims)
+        self.convs_node_hidden = ModuleDict({})
+        self.batch_norms_node_hidden = ModuleDict({})
+        self.convs_node_output = ModuleDict({})
+        self.batch_norms_node_output = ModuleDict({})
+
+        self.equivariance = equivariance
+        self.activation_function = activation_function_selection(
+            activation_function_type
+        )
+
+        self.structural_node_inputs = list(
+            self.structural_encoding.get("node_inputs", [])
+        )
+        for spec in self.structural_node_inputs:
+            if not spec.get("attribute") or int(spec.get("dim", 0)) <= 0:
+                raise ValueError(
+                    "Each structural node input requires an attribute and positive dim."
+                )
+
+        factorized_config = self.structural_encoding.get("factorized_pairwise")
+        pairwise_config = self.structural_encoding.get("pairwise")
+        qk_config = self.structural_encoding.get("qk_coordinates") or {}
+        active_attention_inputs = sum(
+            item is not None for item in (factorized_config, pairwise_config)
+        ) + int(bool(qk_config) and qk_config.get("placement", "qk") in {"qk", "both"})
+        if active_attention_inputs > 1:
+            raise ValueError("Only one structural attention input may be active.")
+
+        self.factorized_pairwise_config = factorized_config
+        self.factorized_pairwise_dim = (
+            int(factorized_config["dim"]) if factorized_config else 0
+        )
+        self.pairwise_config = pairwise_config
+        self.pairwise_feature_dim = (
+            int(pairwise_config["dim"]) if pairwise_config else 0
+        )
+        self.pairwise_hidden_dim = (
+            int(pairwise_config.get("hidden_dim", 8)) if pairwise_config else 0
+        )
+        self.pairwise_zero_diagonal = (
+            bool(pairwise_config.get("zero_diagonal", True))
+            if pairwise_config
+            else True
+        )
+        self._pairwise_device_cache = {}
+
+        self.qk_coordinate_dim = int(qk_config.get("dim", 0))
+        self.qk_attribute = qk_config.get("attribute")
+        self.qk_placement = str(qk_config.get("placement", "qk")).lower()
+        if self.qk_placement not in {"input", "qk", "both"}:
+            raise ValueError(
+                "qk_coordinates.placement must be 'input', 'qk', or 'both'."
+            )
+        self.qk_input_dim = (
+            self.qk_coordinate_dim if self.qk_placement in {"input", "both"} else 0
+        )
+        self.qk_attention_dim = (
+            self.qk_coordinate_dim if self.qk_placement in {"qk", "both"} else 0
+        )
+
+        if self.pairwise_config is not None:
+            if not self.use_global_attn or self.global_attn_type != "multihead":
+                raise ValueError(
+                    "Pairwise structural features require global multihead attention."
+                )
+            if self.attn_node_types != [self.structural_node_type]:
+                raise ValueError(
+                    "Direct pairwise features require the configured "
+                    "structural node type to be the sole attention node type."
+                )
+
+        self.qk_coefficient = None
+        if self.qk_attention_dim > 0:
+            if not self.use_global_attn or self.global_attn_type != "performer":
+                raise ValueError(
+                    "Structural Q/K augmentation requires global Performer attention."
+                )
+            if self.attn_node_types != [self.structural_node_type]:
+                raise ValueError(
+                    "Structural Q/K augmentation requires the configured "
+                    "structural node type to be the sole attention node type."
+                )
+            self.qk_coefficient = Parameter(
+                torch.tensor(
+                    float(qk_config.get("coefficient_init", 0.0)),
+                    dtype=torch.float32,
+                )
+            )
+
+        self.structural_input_dim = (
+            sum(int(spec["dim"]) for spec in self.structural_node_inputs)
+            + self.qk_input_dim
+        )
+        self.structural_input_fuser = None
+        if self.structural_input_dim > 0:
+            self.structural_input_fuser = Sequential(
+                Linear(self.hidden_dim + self.structural_input_dim, self.hidden_dim),
+                activation_function_selection(activation_function_type),
+                Linear(self.hidden_dim, self.hidden_dim),
+            )
+
+        self.use_graph_attr_conditioning = use_graph_attr_conditioning
+        self.graph_attr_dim = int(graph_attr_dim)
+        self.graph_attr_conditioning_mode = validate_graph_attr_conditioning_mode(
+            graph_attr_conditioning_mode
+        )
+        self._configure_loss(loss_function_type, loss_weights)
+        self._configure_graph_pooling(graph_pooling)
+
+        if hetero_pooling_mode not in ("sum", "mean"):
+            raise ValueError("hetero_pooling_mode must be 'sum' or 'mean'.")
+        self.hetero_pooling_mode = hetero_pooling_mode
+
+        self.freeze_conv = freeze_conv
+        self.initial_bias = initial_bias
+
+        # Graph conditioning modules must exist before optimizer construction.
+        self._init_graph_conditioning_modules()
+        if self.use_graph_attr_conditioning:
+            if self.graph_attr_dim <= 0:
+                raise ValueError(
+                    "graph_attr_dim must be positive when graph conditioning is enabled."
+                )
+            if self.graph_attr_conditioning_mode == "film":
+                self._build_graph_conditioner(self.graph_attr_dim)
+            elif self.graph_attr_conditioning_mode == "concat_node":
+                self._build_graph_concat_projector(self.graph_attr_dim, self.hidden_dim)
+            elif "graph" in self.head_type:
+                self._build_graph_pool_projector(self.graph_attr_dim, self.hidden_dim)
+
+        self._multihead()
+        if self.initial_bias is not None:
+            self._set_bias()
+
+        self.conv_checkpointing = False
+
+        if self._metadata is not None:
+            self._init_conv()
+
+        if self._node_input_dims:
+            self._init_node_embedders_from_dims(self._node_input_dims)
+
+    def _init_node_embedders_from_dims(self, node_input_dims):
+        for node_type, in_dim in node_input_dims.items():
+            if node_type not in self.node_embedders:
+                self.node_embedders[node_type] = Linear(int(in_dim), self.hidden_dim)
+            if self.node_embedders[node_type].weight.device != self.device:
+                self.node_embedders[node_type] = self.node_embedders[node_type].to(
+                    self.device
+                )
+
+    def configure_input_feature_encoders(self, encodings: list[dict] | None) -> None:
+        """Schema-configured scalar input encoders are not supported for hetero
+        models: per-node-type inputs are already keyed by name via
+        ``node_input_dims`` rather than packed into one positional ``x`` tensor.
+        """
+        if encodings:
+            raise NotImplementedError(
+                "Variables.inputs 'encoding' is not supported for heterogeneous "
+                "models; remove per-input encodings from the config."
+            )
+
+    def _ensure_node_embedders(self, x_dict):
+        for node_type, x in x_dict.items():
+            if node_type not in self.node_embedders:
+                self.node_embedders[node_type] = Linear(x.size(-1), self.hidden_dim)
+            if self.node_embedders[node_type].weight.device != x.device:
+                self.node_embedders[node_type] = self.node_embedders[node_type].to(
+                    x.device
+                )
+
+    def _maybe_init_metadata(self, data):
+        if self._metadata is None:
+            self._metadata = data.metadata()
+        if not self._initialized:
+            self._init_conv()
+            # Move lazily-created conv modules to the same device as the model.
+            device = next(self.parameters()).device
+            self.graph_convs.to(device)
+            self.feature_layers.to(device)
+        if self._pending_node_conv_init:
+            self._init_node_conv()
+            self._finalize_node_conv_heads()
+            self._pending_node_conv_init = False
+
+    def _build_hetero_conv(self, input_dim: int, output_dim: int):
+        self._validate_shared_edge_dims()
+        conv_dict = {}
+        shared_conv = None
+        for edge_type in self._metadata[1]:
+            edge_dim = self._resolve_edge_dim_for_type(edge_type)
+            if self.share_relation_weights:
+                if shared_conv is None:
+                    shared_conv = self.get_conv(
+                        input_dim, output_dim, edge_dim=edge_dim
+                    )
+                conv_dict[edge_type] = shared_conv
+            else:
+                conv_dict[edge_type] = self.get_conv(
+                    input_dim, output_dim, edge_dim=edge_dim
+                )
+        return HeteroConv(conv_dict, aggr="sum")
+
+    def _build_hetero_conv_node_head(self, input_dim: int, output_dim: int):
+        self._validate_shared_edge_dims()
+        conv_dict = {}
+        shared_conv = None
+        for edge_type in self._metadata[1]:
+            edge_dim = self._resolve_edge_dim_for_type(edge_type)
+            if self.share_relation_weights:
+                if shared_conv is None:
+                    shared_conv = self.get_conv(
+                        input_dim, output_dim, edge_dim=edge_dim
+                    )
+                conv_dict[edge_type] = shared_conv
+            else:
+                conv_dict[edge_type] = self.get_conv(
+                    input_dim, output_dim, edge_dim=edge_dim
+                )
+        return HeteroConv(conv_dict, aggr="sum")
+
+    def _resolve_edge_dim_for_type(self, edge_type):
+        """Return the edge_dim for a specific edge type.
+
+        When ``self.edge_dim`` is a dict, look up the complete edge-type triple.
+        A declared width of zero denotes a featureless edge and returns ``None``.
+        When ``self.edge_dim`` is an int (or absent), return it unchanged for
+        all edge types.
+        """
+        edge_dim = getattr(self, "edge_dim", None)
+        if isinstance(edge_dim, dict):
+            edge_type = tuple(edge_type)
+            if edge_type not in edge_dim:
+                raise ValueError(
+                    f"Undeclared edge type in model metadata: {edge_type}."
+                )
+            resolved = edge_dim[edge_type]
+            return None if resolved == 0 else resolved
+        return edge_dim
+
+    def _validate_shared_edge_dims(self):
+        if not self.share_relation_weights or not getattr(self, "is_edge_model", False):
+            return
+        edge_dims = {
+            self._resolve_edge_dim_for_type(edge_type)
+            for edge_type in self._metadata[1]
+        }
+        if len(edge_dims) > 1:
+            raise ValueError(
+                "share_relation_weights requires identical edge feature widths; "
+                f"found {sorted(str(dim) for dim in edge_dims)}."
+            )
+
+    def _apply_global_attn(self, mpnn):
+        if not self.use_global_attn:
+            return mpnn
+        if self.global_attn_engine == "GPS":
+            return HeteroGPSConv(
+                channels=self.hidden_dim,
+                metadata=self._metadata,
+                conv=None if self.attn_only else mpnn,
+                heads=self.global_attn_heads,
+                dropout=self.dropout,
+                attn_type=self.global_attn_type,
+                attn_node_types=self.attn_node_types,
+                factorized_feature_dim=self.factorized_pairwise_dim,
+                pairwise_feature_dim=self.pairwise_feature_dim,
+                rpe_hidden_dim=self.pairwise_hidden_dim,
+                rpe_zero_diagonal=self.pairwise_zero_diagonal,
+                qk_coordinate_dim=self.qk_attention_dim,
+            )
+        raise ValueError(f"Unsupported global_attn_engine: {self.global_attn_engine}")
+
+    def _init_conv(self):
+        self.graph_convs = ModuleList()
+        self.feature_layers = ModuleList()
+        for layer_idx in range(self.num_conv_layers):
+            in_dim = self.hidden_dim if layer_idx > 0 else self.hidden_dim
+            out_dim = self.hidden_dim
+            self.graph_convs.append(
+                self._apply_global_attn(self._build_hetero_conv(in_dim, out_dim))
+            )
+            node_norms = ModuleDict({})
+            for node_type in self._metadata[0]:
+                node_norms[node_type] = BatchNorm(out_dim)
+            self.feature_layers.append(node_norms)
+        self._initialized = True
+
+    def _init_node_conv(self):
+        nodeconfiglist = self.config_heads["node"]
+        assert (
+            self.num_branches == len(nodeconfiglist) or self.num_branches == 1
+        ), "assuming node head has the same branches as graph head, if any"
+        for branchdict in nodeconfiglist:
+            if branchdict["architecture"]["type"] != "conv":
+                return
+
+        node_feature_ind = [
+            i for i, head_type in enumerate(self.head_type) if head_type == "node"
+        ]
+        if len(node_feature_ind) == 0:
+            return
+
+        for branchdict in nodeconfiglist:
+            branchtype = branchdict["type"]
+            brancharct = branchdict["architecture"]
+            num_conv_layers_node = brancharct["num_headlayers"]
+            hidden_dim_node = brancharct["dim_headlayers"]
+
+            convs_node_hidden = ModuleList()
+            batch_norms_node_hidden = ModuleList()
+            convs_node_output = ModuleList()
+            batch_norms_node_output = ModuleList()
+
+            convs_node_hidden.append(
+                self._build_hetero_conv_node_head(self.hidden_dim, hidden_dim_node[0])
+            )
+            bn_dict = ModuleDict({})
+            for node_type in self._metadata[0]:
+                bn_dict[node_type] = BatchNorm(hidden_dim_node[0])
+            batch_norms_node_hidden.append(bn_dict)
+
+            for ilayer in range(num_conv_layers_node - 1):
+                convs_node_hidden.append(
+                    self._build_hetero_conv_node_head(
+                        hidden_dim_node[ilayer], hidden_dim_node[ilayer + 1]
+                    )
+                )
+                bn_dict = ModuleDict({})
+                for node_type in self._metadata[0]:
+                    bn_dict[node_type] = BatchNorm(hidden_dim_node[ilayer + 1])
+                batch_norms_node_hidden.append(bn_dict)
+
+            for ihead in node_feature_ind:
+                convs_node_output.append(
+                    self._build_hetero_conv_node_head(
+                        hidden_dim_node[-1],
+                        self.head_dims[ihead] * (1 + self.var_output),
+                    )
+                )
+                bn_dict = ModuleDict({})
+                for node_type in self._metadata[0]:
+                    bn_dict[node_type] = BatchNorm(
+                        self.head_dims[ihead] * (1 + self.var_output)
+                    )
+                batch_norms_node_output.append(bn_dict)
+
+            self.convs_node_hidden[branchtype] = convs_node_hidden
+            self.batch_norms_node_hidden[branchtype] = batch_norms_node_hidden
+            self.convs_node_output[branchtype] = convs_node_output
+            self.batch_norms_node_output[branchtype] = batch_norms_node_output
+
+    def _maybe_checkpoint(self, conv):
+        if self.conv_checkpointing:
+            return functools.partial(checkpoint, conv, use_reentrant=False)
+        return conv
+
+    def _multihead(self):
+        self.graph_shared = ModuleDict({})
+        dim_sharedlayers = 0
+        self.num_branches = 1
+        if "graph" in self.config_heads:
+            self.num_branches = len(self.config_heads["graph"])
+            for branchdict in self.config_heads["graph"]:
+                denselayers = []
+                dim_sharedlayers = branchdict["architecture"]["dim_sharedlayers"]
+                denselayers.append(Linear(self.hidden_dim, dim_sharedlayers))
+                denselayers.append(self.activation_function)
+                for _ in range(branchdict["architecture"]["num_sharedlayers"] - 1):
+                    denselayers.append(Linear(dim_sharedlayers, dim_sharedlayers))
+                    denselayers.append(self.activation_function)
+                self.graph_shared[branchdict["type"]] = Sequential(*denselayers)
+
+        if "node" in self.config_heads:
+            if self._metadata is None:
+                self._pending_node_conv_init = True
+            else:
+                self._init_node_conv()
+
+        inode_feature = 0
+        for ihead in range(self.num_heads):
+            head_NN = ModuleDict({})
+            if self.head_type[ihead] == "graph":
+                for branchdict in self.config_heads["graph"]:
+                    branchtype = branchdict["type"]
+                    brancharct = branchdict["architecture"]
+                    dim_sharedlayers = brancharct["dim_sharedlayers"]
+                    num_head_hidden = brancharct["num_headlayers"]
+                    dim_head_hidden = brancharct["dim_headlayers"]
+                    denselayers = []
+                    denselayers.append(Linear(dim_sharedlayers, dim_head_hidden[0]))
+                    denselayers.append(self.activation_function)
+                    for ilayer in range(num_head_hidden - 1):
+                        denselayers.append(
+                            Linear(dim_head_hidden[ilayer], dim_head_hidden[ilayer + 1])
+                        )
+                        denselayers.append(self.activation_function)
+                    denselayers.append(
+                        Linear(
+                            dim_head_hidden[-1],
+                            self.head_dims[ihead] * (1 + self.var_output),
+                        )
+                    )
+                    head_NN[branchtype] = Sequential(*denselayers)
+            elif self.head_type[ihead] == "node":
+                for branchdict in self.config_heads["node"]:
+                    branchtype = branchdict["type"]
+                    brancharct = branchdict["architecture"]
+                    hidden_dim_node = brancharct["dim_headlayers"]
+                    node_NN_type = brancharct["type"]
+                    if node_NN_type == "mlp" or node_NN_type == "mlp_per_node":
+                        self.num_mlp = 1 if node_NN_type == "mlp" else self.num_nodes
+                        if node_NN_type == "mlp_per_node":
+                            assert (
+                                self.num_nodes is not None
+                            ), "num_nodes must be provided for mlp_per_node; use 'mlp' for variable-size graphs"
+                        head_NN[branchtype] = MLPNode(
+                            self.hidden_dim,
+                            self.head_dims[ihead] * (1 + self.var_output),
+                            self.num_mlp,
+                            hidden_dim_node,
+                            node_NN_type,
+                            self.activation_function,
+                            num_nodes=(
+                                self.num_nodes
+                                if node_NN_type == "mlp_per_node"
+                                else None
+                            ),
+                        )
+                    elif node_NN_type == "conv":
+                        head_NN[branchtype] = ModuleList()
+                        if self._metadata is None:
+                            self._node_conv_head_specs.append(
+                                (ihead, branchtype, inode_feature)
+                            )
+                            inode_feature += 1
+                        else:
+                            for conv, batch_norm in zip(
+                                self.convs_node_hidden[branchtype],
+                                self.batch_norms_node_hidden[branchtype],
+                            ):
+                                head_NN[branchtype].append(conv)
+                                head_NN[branchtype].append(batch_norm)
+                            head_NN[branchtype].append(
+                                self.convs_node_output[branchtype][inode_feature]
+                            )
+                            head_NN[branchtype].append(
+                                self.batch_norms_node_output[branchtype][inode_feature]
+                            )
+                            inode_feature += 1
+                    else:
+                        raise ValueError(
+                            "HeteroBase only supports node heads with 'mlp', 'mlp_per_node', or 'conv'."
+                        )
+            else:
+                raise ValueError(
+                    "Unknown head type"
+                    + self.head_type[ihead]
+                    + "; currently only support 'graph' or 'node'"
+                )
+            self.heads_NN.append(head_NN)
+
+    def _get_batch_dict(self, data, x_dict):
+        batch_dict = None
+        try:
+            batch_dict = data.batch_dict
+        except (AttributeError, KeyError):
+            batch_dict = None
+        if batch_dict is not None:
+            return batch_dict
+        batch_dict = {}
+        for node_type, x in x_dict.items():
+            batch_dict[node_type] = torch.zeros(
+                x.size(0), device=x.device, dtype=torch.long
+            )
+        return batch_dict
+
+    def _get_edge_attr_dict(self, data):
+        if not getattr(self, "is_edge_model", False):
+            return None
+        edge_attr_dict = None
+        try:
+            edge_attr_dict = data.edge_attr_dict
+        except (AttributeError, KeyError):
+            edge_attr_dict = None
+        return edge_attr_dict
+
+    def _apply_random_sign_flip(self, values, batch):
+        """Flip each graph/feature once, never independently per node."""
+
+        if not self.training:
+            return values
+        num_graphs = int(batch.max().item()) + 1 if batch.numel() else 0
+        if num_graphs == 0:
+            return values
+        signs = torch.randint(
+            0,
+            2,
+            (num_graphs, values.size(1)),
+            device=values.device,
+        )
+        signs = signs.to(values.dtype).mul_(2.0).sub_(1.0)
+        return values * signs[batch]
+
+    @staticmethod
+    def _expand_graph_features(value, batch, num_nodes, width):
+        if value.dim() == 1:
+            value = value.view(-1, width)
+        if value.dim() != 2 or value.size(1) != width:
+            raise ValueError(
+                f"Expected graph-level structural feature with width {width}, got "
+                f"shape {tuple(value.shape)}."
+            )
+        if value.size(0) == num_nodes:
+            return value
+        num_graphs = int(batch.max().item()) + 1 if batch.numel() else 0
+        if value.size(0) == num_graphs:
+            return value[batch]
+        if value.size(0) == 1:
+            return value.expand(num_nodes, -1)
+        raise ValueError(
+            "Graph-level structural feature rows must be one per node or graph; "
+            f"got {value.size(0)} rows for {num_nodes} nodes and "
+            f"{num_graphs} graphs."
+        )
+
+    def _collect_structural_input(self, data, batch, device, dtype):
+        pieces = []
+        store = data[self.structural_node_type]
+        num_nodes = int(batch.numel())
+
+        for spec in self.structural_node_inputs:
+            attribute = spec["attribute"]
+            width = int(spec["dim"])
+            value = store[attribute] if attribute in store else None
+            if value is None:
+                raise ValueError(
+                    f"Structural input requires missing attribute "
+                    f"{self.structural_node_type}.{attribute}."
+                )
+            value = value.to(device=device, dtype=dtype)
+            if spec.get("broadcast") == "graph":
+                value = self._expand_graph_features(value, batch, num_nodes, width)
+            elif tuple(value.shape) != (num_nodes, width):
+                raise ValueError(
+                    f"Expected {self.structural_node_type}.{attribute} shape "
+                    f"({num_nodes}, {width}), got {tuple(value.shape)}."
+                )
+            if spec.get("random_sign_flip", False):
+                value = self._apply_random_sign_flip(value, batch)
+            pieces.append(value)
+
+        if self.qk_input_dim > 0:
+            coordinates = (
+                store[self.qk_attribute] if self.qk_attribute in store else None
+            )
+            if coordinates is None:
+                raise ValueError(
+                    "Structural coordinate input is enabled, but the batch is "
+                    f"missing {self.structural_node_type}.{self.qk_attribute}."
+                )
+            coordinates = coordinates.to(device=device, dtype=dtype)
+            expected = (num_nodes, self.qk_input_dim)
+            if tuple(coordinates.shape) != expected:
+                raise ValueError(
+                    f"Expected structural input coordinates {expected}, "
+                    f"got {tuple(coordinates.shape)}."
+                )
+            pieces.append(coordinates)
+
+        if not pieces:
+            return None
+        return torch.cat(pieces, dim=-1)
+
+    def _prepare_node_features(self, data):
+        """Prepare invariant node features and batch vectors for hetero forward.
+
+        This keeps compatibility with both legacy heterogeneous data (x_dict)
+        and the new equivariant-capable path where invariant node features may
+        already be materialized under inv_node_feat_dict.
+        """
+        inv_node_feat_dict = None
+        for attr_name in ("inv_node_feat_dict", "x_dict"):
+            try:
+                candidate = getattr(data, attr_name)
+            except (AttributeError, KeyError):
+                candidate = None
+            if candidate is not None:
+                inv_node_feat_dict = candidate
+                break
+
+        if inv_node_feat_dict is None:
+            raise ValueError(
+                "Heterogeneous input is missing invariant node features. "
+                "Expected one of: inv_node_feat_dict, x_dict."
+            )
+
+        batch_dict = self._get_batch_dict(data, inv_node_feat_dict)
+
+        # Ensure each node type uses the shared hidden width before message passing.
+        self._ensure_node_embedders(inv_node_feat_dict)
+        embedded_dict = {}
+        for node_type, x in inv_node_feat_dict.items():
+            embedder = self.node_embedders[node_type]
+            if embedder.weight.device != x.device:
+                embedder = embedder.to(x.device)
+                self.node_embedders[node_type] = embedder
+            x = x.to(dtype=embedder.weight.dtype)
+            embedded = embedder(x)
+            if (
+                node_type == self.structural_node_type
+                and self.structural_input_fuser is not None
+            ):
+                structural_input = self._collect_structural_input(
+                    data,
+                    batch_dict[node_type],
+                    device=embedded.device,
+                    dtype=embedded.dtype,
+                )
+                embedded = self.structural_input_fuser(
+                    torch.cat((embedded, structural_input), dim=-1)
+                )
+            embedded_dict[node_type] = embedded
+
+        return embedded_dict, batch_dict
+
+    def _get_equiv_node_feat_dict(self, data):
+        """Best-effort retrieval of hetero equivariant node features."""
+        for attr_name in ("equiv_node_feat_dict", "v_dict", "equiv_dict"):
+            try:
+                equiv_dict = getattr(data, attr_name)
+            except (AttributeError, KeyError):
+                equiv_dict = None
+            if equiv_dict is not None:
+                return equiv_dict
+        return None
+
+    def _get_factorized_pairwise_features(self, data):
+        """Collect configured low-rank pairwise factors from node stores."""
+        if self.factorized_pairwise_config is None:
+            return None
+        result = {}
+        attributes = self.factorized_pairwise_config["attributes"]
+        for node_type in self.attn_node_types or data.node_types:
+            store = data[node_type]
+            values = {}
+            for factor_name, attr_name in attributes.items():
+                value = store[attr_name] if attr_name in store else None
+                if value is None:
+                    raise ValueError(
+                        f"Factorized pairwise input for node type '{node_type}' "
+                        f"is missing attribute '{attr_name}'."
+                    )
+                values[factor_name] = value
+            result[node_type] = values
+        return result
+
+    def _get_qk_coordinates(self, data, device, dtype):
+        """Return packed structural coordinates for Performer attention."""
+
+        if self.qk_coordinate_dim <= 0:
+            return None
+        store = data[self.structural_node_type]
+        coordinates = store[self.qk_attribute] if self.qk_attribute in store else None
+        if coordinates is None:
+            raise ValueError(
+                "Structural Q/K augmentation is enabled, but the batch is missing "
+                f"{self.structural_node_type}.{self.qk_attribute}."
+            )
+        expected = (int(store.x.size(0)), self.qk_coordinate_dim)
+        if tuple(coordinates.shape) != expected:
+            raise ValueError(
+                f"Expected structural coordinates shape {expected}, got "
+                f"{tuple(coordinates.shape)}."
+            )
+        return coordinates.to(device=device, dtype=dtype)
+
+    @staticmethod
+    def _load_pairwise_artifact(path, artifact_key):
+        try:
+            artifact = torch.load(path, map_location="cpu", weights_only=True)
+        except TypeError:
+            artifact = torch.load(path, map_location="cpu")
+        if not isinstance(artifact, dict) or artifact_key not in artifact:
+            raise ValueError(
+                f"Pairwise cache '{path}' does not contain '{artifact_key}'."
+            )
+        return artifact[artifact_key]
+
+    def _get_pairwise_features(self, data, batch, device, dtype):
+        """Load one topology-level pair tensor per graph in the batch."""
+
+        if self.pairwise_config is None:
+            return None
+        store = data[self.structural_node_type]
+        tensor_attr = self.pairwise_config["attribute"]
+        path_attr = self.pairwise_config.get("path_attribute", f"{tensor_attr}_path")
+        artifact_key = self.pairwise_config.get("artifact_key", tensor_attr)
+        embedded = store[tensor_attr] if tensor_attr in store else None
+        paths = store[path_attr] if path_attr in store else None
+
+        num_graphs = int(batch.max().item()) + 1 if batch.numel() else 0
+        counts = torch.bincount(batch, minlength=num_graphs).detach().cpu().tolist()
+        matrices = []
+        if paths is not None:
+            if isinstance(paths, str):
+                paths = [paths]
+            else:
+                paths = list(paths)
+            if len(paths) != num_graphs:
+                raise ValueError(
+                    f"Expected {num_graphs} pairwise cache paths, got " f"{len(paths)}."
+                )
+            for path in paths:
+                cache_key = (str(path), str(device), str(dtype))
+                matrix = self._pairwise_device_cache.get(cache_key)
+                if matrix is None:
+                    matrix = self._load_pairwise_artifact(path, artifact_key).to(
+                        device=device, dtype=dtype
+                    )
+                    self._pairwise_device_cache[cache_key] = matrix
+                matrices.append(matrix)
+        elif embedded is not None:
+            if num_graphs != 1 or embedded.dim() != 3:
+                raise ValueError(
+                    "In-memory pairwise features currently support one graph; use "
+                    "topology-level cache paths for batched graphs."
+                )
+            matrices = [embedded.to(device=device, dtype=dtype)]
+        else:
+            raise ValueError(
+                f"Pairwise structural input is enabled, but the batch has neither "
+                f"{self.structural_node_type}.{tensor_attr} nor "
+                f"{self.structural_node_type}.{path_attr}."
+            )
+
+        for graph_index, (matrix, count) in enumerate(zip(matrices, counts)):
+            expected = (count, count, self.pairwise_feature_dim)
+            if tuple(matrix.shape) != expected:
+                raise ValueError(
+                    f"Expected pairwise feature graph {graph_index} shape {expected}, "
+                    f"got {tuple(matrix.shape)}."
+                )
+        return matrices
+
+    def _pool_hetero_graph_features(self, x_dict, batch_dict):
+        num_graphs = max(
+            int(batch.max().item()) + 1
+            for batch in batch_dict.values()
+            if batch.numel() > 0
+        )
+        pooled = []
+        for node_type, x in x_dict.items():
+            pooled.append(
+                self._pool_graph_features(x, batch_dict[node_type], size=num_graphs)
+            )
+        if len(pooled) == 1:
+            return pooled[0]
+        if self.hetero_pooling_mode == "sum":
+            return torch.stack(pooled, dim=0).sum(dim=0)
+        return torch.stack(pooled, dim=0).mean(dim=0)
+
+    def _finalize_node_conv_heads(self):
+        if not self._node_conv_head_specs:
+            return
+        for head_index, branchtype, output_index in self._node_conv_head_specs:
+            headloc = self.heads_NN[head_index]
+            if branchtype not in headloc:
+                headloc[branchtype] = ModuleList()
+            for conv, batch_norm in zip(
+                self.convs_node_hidden[branchtype],
+                self.batch_norms_node_hidden[branchtype],
+            ):
+                headloc[branchtype].append(conv)
+                headloc[branchtype].append(batch_norm)
+            headloc[branchtype].append(self.convs_node_output[branchtype][output_index])
+            headloc[branchtype].append(
+                self.batch_norms_node_output[branchtype][output_index]
+            )
+
+    def _ensure_graph_conditioner(self, graph_attr_dim: int, device):
+        if self.graph_conditioner is None or graph_attr_dim != self.graph_attr_dim:
+            raise ValueError(
+                f"graph_attr width {graph_attr_dim} does not match configured graph_attr_dim={self.graph_attr_dim}."
+            )
+        super()._ensure_graph_conditioner(graph_attr_dim, device)
+
+    def _ensure_graph_concat_projector(
+        self, graph_attr_dim: int, channel_dim: int, device, dtype=None
+    ):
+        in_dim = channel_dim + graph_attr_dim
+        if self.graph_concat_projector is None or (
+            self.graph_concat_projector_in_dim != in_dim
+        ):
+            raise ValueError(
+                f"Graph concat projector expects input width {self.graph_concat_projector_in_dim}, got {in_dim}."
+            )
+        # Projectors are built eagerly; keep the parameter dtype and let autocast cast.
+        super()._ensure_graph_concat_projector(graph_attr_dim, channel_dim, device)
+
+    def _ensure_graph_pool_projector(
+        self, graph_attr_dim: int, channel_dim: int, device, dtype=None
+    ):
+        in_dim = channel_dim + graph_attr_dim
+        if self.graph_pool_projector is None or (
+            self.graph_pool_projector_in_dim != in_dim
+        ):
+            raise ValueError(
+                f"Graph pool projector expects input width {self.graph_pool_projector_in_dim}, got {in_dim}."
+            )
+        super()._ensure_graph_pool_projector(graph_attr_dim, channel_dim, device)
+
+    def _graph_attr_per_graph(self, graph_attr, batch):
+        """Infer the graph count from ``graph_attr_dim`` for flattened inputs."""
+        if graph_attr.dim() == 1:
+            if graph_attr.numel() % self.graph_attr_dim != 0:
+                raise ValueError(
+                    f"One-dimensional graph_attr with numel={graph_attr.numel()} is not divisible by graph_attr_dim={self.graph_attr_dim}."
+                )
+            graph_attr = graph_attr.view(-1, self.graph_attr_dim)
+        elif graph_attr.dim() != 2:
+            raise ValueError(
+                f"Unsupported graph_attr ndim={graph_attr.dim()}; expected 1/2."
+            )
+        batch_num_graphs = int(batch.max().item() + 1)
+        if batch_num_graphs > graph_attr.size(0):
+            raise ValueError(
+                f"Node batch references {batch_num_graphs} graphs, but graph_attr contains {graph_attr.size(0)}."
+            )
+        return graph_attr
+
+    def _move_data_to_model_device(self, data):
+        device = next(self.parameters()).device
+        if hasattr(data, "to"):
+            data = data.to(device)
+
+        if hasattr(data, "node_types"):
+            for node_type in data.node_types:
+                store = data[node_type]
+                if hasattr(store, "x") and store.x is not None:
+                    store.x = store.x.to(device)
+        if hasattr(data, "edge_types"):
+            for edge_type in data.edge_types:
+                store = data[edge_type]
+                if hasattr(store, "edge_index") and store.edge_index is not None:
+                    store.edge_index = store.edge_index.to(device)
+                if hasattr(store, "edge_attr") and store.edge_attr is not None:
+                    store.edge_attr = store.edge_attr.to(device)
+
+        return data
+
+    def forward(self, data):
+        self._maybe_init_metadata(data)
+        data = self._move_data_to_model_device(data)
+
+        x_dict, batch_dict = self._prepare_node_features(data)
+        equiv_node_feat_dict = self._get_equiv_node_feat_dict(data)
+        factorized_pairwise = (
+            self._get_factorized_pairwise_features(data)
+            if self.use_global_attn
+            else None
+        )
+        pairwise_features = (
+            self._get_pairwise_features(
+                data,
+                batch_dict[self.structural_node_type],
+                device=x_dict[self.structural_node_type].device,
+                dtype=x_dict[self.structural_node_type].dtype,
+            )
+            if self.use_global_attn and self.pairwise_config is not None
+            else None
+        )
+        qk_coordinates = (
+            self._get_qk_coordinates(
+                data,
+                device=x_dict[self.structural_node_type].device,
+                dtype=x_dict[self.structural_node_type].dtype,
+            )
+            if self.use_global_attn and self.qk_attention_dim > 0
+            else None
+        )
+        structural_context = StructuralAttentionContext(
+            factorized_pairwise_features=factorized_pairwise,
+            pairwise_features=pairwise_features,
+            qk_coordinates=qk_coordinates,
+            qk_coefficient=self.qk_coefficient,
+        )
+
+        edge_attr_dict = self._get_edge_attr_dict(data)
+
+        for conv, node_norms in zip(self.graph_convs, self.feature_layers):
+            conv = self._maybe_checkpoint(conv)
+            if self.use_global_attn:
+                x_dict, equiv_node_feat_dict = conv(
+                    inv_node_feat_dict=x_dict,
+                    equiv_node_feat_dict=equiv_node_feat_dict,
+                    edge_index_dict=data.edge_index_dict,
+                    batch_dict=batch_dict,
+                    edge_attr_dict=edge_attr_dict,
+                    structural_context=structural_context,
+                )
+            elif edge_attr_dict is None:
+                x_dict = conv(x_dict, data.edge_index_dict)
+            else:
+                x_dict = conv(x_dict, data.edge_index_dict, edge_attr_dict)
+            for node_type, x in x_dict.items():
+                # Like GATStack: concat_node only applies at hidden_dim width, not multi-head widths.
+                if not (
+                    self.graph_attr_conditioning_mode == "concat_node"
+                    and x.size(-1) != self.hidden_dim
+                ):
+                    x = self._apply_graph_conditioning(x, batch_dict[node_type], data)
+                x = node_norms[node_type](x)
+                x = self.activation_function(x)
+                x_dict[node_type] = x
+        return self._decode_from_x_dict(x_dict, batch_dict, data, edge_attr_dict)
+
+    def _decode_from_x_dict(self, x_dict, batch_dict, data, edge_attr_dict):
+        x_graph = self._pool_hetero_graph_features(x_dict, batch_dict)
+        if "graph" in self.head_type:
+            x_graph = self._apply_graph_pool_conditioning(x_graph, data)
+
+        # Prepare dataset_name for multi-branch heads
+        if not hasattr(data, "dataset_name"):
+            num_graphs = x_graph.size(0)
+            data.dataset_name = torch.zeros(
+                (num_graphs, 1), device=x_graph.device, dtype=torch.long
+            )
+        else:
+            data.dataset_name = data.dataset_name.to(x_graph.device)
+
+        outputs = []
+        outputs_var = []
+
+        datasetIDs = data.dataset_name.unique()
+
+        for head_dim, headloc, type_head in zip(
+            self.head_dims, self.heads_NN, self.head_type
+        ):
+            if type_head == "graph":
+                head = torch.zeros(
+                    (len(data.dataset_name), head_dim), device=x_graph.device
+                )
+                headvar = torch.zeros(
+                    (len(data.dataset_name), head_dim * self.var_output),
+                    device=x_graph.device,
+                )
+                if self.num_branches == 1:
+                    head_device = next(
+                        self.graph_shared["branch-0"].parameters()
+                    ).device
+                    x_graph = x_graph.to(head_device)
+                    x_graph_head = self.graph_shared["branch-0"](x_graph)
+                    output_head = headloc["branch-0"](x_graph_head)
+                    head = output_head[:, :head_dim]
+                    headvar = output_head[:, head_dim:] ** 2
+                else:
+                    for ID in datasetIDs:
+                        mask = data.dataset_name == ID
+                        mask = mask[:, 0]
+                        branchtype = f"branch-{ID.item()}"
+                        head_device = next(
+                            self.graph_shared[branchtype].parameters()
+                        ).device
+                        x_graph = x_graph.to(head_device)
+                        x_graph_head = self.graph_shared[branchtype](x_graph[mask, :])
+                        output_head = headloc[branchtype](x_graph_head)
+                        head[mask] = output_head[:, :head_dim]
+                        headvar[mask] = output_head[:, head_dim:] ** 2
+                outputs.append(head)
+                outputs_var.append(headvar)
+            else:
+                if self.node_target_type is None:
+                    self.node_target_type = self._metadata[0][0]
+                x_node = x_dict[self.node_target_type]
+                batch_node = batch_dict[self.node_target_type]
+
+                try:
+                    head_device = next(headloc.parameters()).device
+                except StopIteration:
+                    head_device = x_node.device
+                if x_node.device != head_device:
+                    x_node = x_node.to(head_device)
+                if batch_node.device != head_device:
+                    batch_node = batch_node.to(head_device)
+
+                node_NN_type = self.config_heads["node"][0]["architecture"]["type"]
+                if node_NN_type not in ("mlp", "mlp_per_node", "conv"):
+                    raise ValueError(
+                        "HeteroBase only supports node heads with 'mlp', 'mlp_per_node', or 'conv'."
+                    )
+
+                head = torch.zeros((x_node.shape[0], head_dim), device=x_node.device)
+                headvar = torch.zeros(
+                    (x_node.shape[0], head_dim * self.var_output), device=x_node.device
+                )
+
+                if node_NN_type == "conv":
+                    if self.num_branches != 1:
+                        raise NotImplementedError(
+                            "conv-based node heads with multiple branches are not supported yet for hetero models."
+                        )
+                    branchtype = "branch-0"
+                    x_dict_node = x_dict
+                    for conv, batch_norm in zip(
+                        headloc[branchtype][0::2], headloc[branchtype][1::2]
+                    ):
+                        if edge_attr_dict is None:
+                            x_dict_node = conv(x_dict_node, data.edge_index_dict)
+                        else:
+                            x_dict_node = conv(
+                                x_dict_node, data.edge_index_dict, edge_attr_dict
+                            )
+                        for node_type, x in x_dict_node.items():
+                            x = batch_norm[node_type](x)
+                            x = self.activation_function(x)
+                            x_dict_node[node_type] = x
+                    x_node_out = x_dict_node[self.node_target_type]
+                    head = x_node_out[:, :head_dim]
+                    headvar = x_node_out[:, head_dim:] ** 2
+                else:
+                    if self.num_branches == 1:
+                        branchtype = "branch-0"
+                        x_node_out = headloc[branchtype](x=x_node, batch=batch_node)
+                        head = x_node_out[:, :head_dim]
+                        headvar = x_node_out[:, head_dim:] ** 2
+                    else:
+                        unique, node_counts = torch.unique_consecutive(
+                            batch_node, return_counts=True
+                        )
+                        for ID in datasetIDs:
+                            mask = data.dataset_name == ID
+                            mask = mask[:, 0]
+                            branchtype = f"branch-{ID.item()}"
+                            node_count = node_counts[unique == ID]
+                            if node_count.numel() == 0:
+                                continue
+                            idx_start = torch.sum(node_counts[unique < ID])
+                            idx_end = idx_start + node_count[0]
+                            x_node_out = headloc[branchtype](
+                                x=x_node[idx_start:idx_end],
+                                batch=batch_node[idx_start:idx_end],
+                            )
+                            head[idx_start:idx_end] = x_node_out[:, :head_dim]
+                            headvar[idx_start:idx_end] = x_node_out[:, head_dim:] ** 2
+
+                outputs.append(head)
+                outputs_var.append(headvar)
+
+        if self.var_output:
+            return outputs, outputs_var
+        return outputs

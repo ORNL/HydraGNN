@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# Copyright (c) 2025, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -9,15 +9,17 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 import os, json
+import pytest
 import torch
-import random
 import hydragnn
 from tests.test_graphs import unittest_train_model
-from hydragnn.utils.input_config_parsing.config_utils import update_config
+from hydragnn.config.config_utils import update_config
+
+pytestmark = pytest.mark.mpi
 
 
 def unittest_model_prediction(config):
-    _, _ = hydragnn.utils.distributed.setup_ddp()
+    _, _ = hydragnn.distributed.setup_ddp()
 
     (
         train_loader,
@@ -34,12 +36,12 @@ def unittest_model_prediction(config):
         verbosity=config["Verbosity"]["level"],
     )
 
-    model = hydragnn.utils.distributed.get_distributed_model(
+    model = hydragnn.distributed.get_distributed_model(
         model, config["Verbosity"]["level"]
     )
 
-    log_name = hydragnn.utils.input_config_parsing.get_log_name_config(config)
-    hydragnn.utils.model.load_existing_model(model, log_name)
+    log_name = hydragnn.config.get_log_name_config(config)
+    hydragnn.models.utils.load_existing_model(model, log_name)
 
     # The checkpoint may include graph conditioning weights; disable conditioning for this
     # dataset to avoid requiring graph_attr at inference time.
@@ -47,19 +49,11 @@ def unittest_model_prediction(config):
     target_model.use_graph_attr_conditioning = False
 
     model.eval()
-    # two checkings
-    # 1. entire test set
     # Allow a small tolerance on MAE since inference here runs without graph conditioning
     thresholds = [0.25]
     _, _, true_values, predicted_values = hydragnn.train.test(
         test_loader, model, config["Verbosity"]["level"]
     )
-    # 2.check a random selected sample
-    isample = random.randrange(len(test_loader.dataset))
-    graph_sample = test_loader.dataset[isample].to(model.device)
-    true_sample = graph_sample.y.squeeze()
-    predicted_sample = model(graph_sample)
-    yloc = graph_sample.y_loc.squeeze()
 
     mae = torch.nn.L1Loss()
     for ihead in range(model.module.num_heads):
@@ -71,37 +65,32 @@ def unittest_model_prediction(config):
 
 
 # test loading and predictiong of a saved model from previous training
-def pytest_model_loadpred():
+def test_model_loadpred():
     model_type = "PNA"
     ci_input = "ci_multihead.json"
     config_file = os.path.join(os.getcwd(), "tests/inputs", ci_input)
     with open(config_file, "r") as f:
         config = json.load(f)
-    config["NeuralNetwork"]["Architecture"]["model_type"] = model_type
-    # get the directory of trained model
-    log_name = hydragnn.utils.input_config_parsing.config_utils.get_log_name_config(
-        config
+    config["NeuralNetwork"]["Architecture"]["mpnn_type"] = model_type
+    # Always create the checkpoint immediately before exercising the reload.
+    # Other parametrized model tests can share this log name while using
+    # architecture settings that the name does not encode, so reusing an
+    # existing artifact can silently load an unrelated model.
+    unittest_train_model(
+        config["NeuralNetwork"]["Architecture"]["mpnn_type"],
+        None,
+        None,
+        "ci_multihead.json",
+        False,
+        overwrite_data=True,
     )
-    modelfile = os.path.join("./logs/", log_name, log_name + ".pk")
-    # check if pretrained model and pkl datasets files exists
-    case_exist = True
+
+    # Read the exact configuration saved with the fresh checkpoint.
+    log_name = hydragnn.config.config_utils.get_log_name_config(config)
     config_file = os.path.join("./logs/", log_name, "config.json")
-    if not (os.path.isfile(modelfile) and os.path.isfile(config_file)):
-        print("Model or configure file not found: ", modelfile, config_file)
-        case_exist = False
-    else:
-        with open(config_file, "r") as f:
-            config = json.load(f)
-        for dataset_name, raw_data_path in config["Dataset"]["path"].items():
-            if not os.path.isfile(raw_data_path):
-                print(dataset_name, "datasets not found: ", raw_data_path)
-                case_exist = False
-                break
-    if not case_exist:
-        unittest_train_model(
-            config["NeuralNetwork"]["Architecture"]["model_type"],
-            "ci_multihead.json",
-            False,
-            False,
-        )
+    with open(config_file, "r") as f:
+        config = json.load(f)
+    assert (
+        hydragnn.config.config_utils.get_log_name_config(config) == log_name
+    ), "Newly trained checkpoint configuration does not match its log name"
     unittest_model_prediction(config)

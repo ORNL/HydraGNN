@@ -1,10 +1,19 @@
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 import os, json
 import logging
 import sys
+import torch
 from mpi4py import MPI
 import argparse
-
-import torch
 
 # FIX random seed
 random_state = 0
@@ -14,29 +23,26 @@ import numpy as np
 
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-from hydragnn.utils.model import print_model
-from hydragnn.utils.datasets.distdataset import DistDataset
-from hydragnn.utils.datasets.pickledataset import SimplePickleDataset
+from hydragnn.models.utils import print_model
+from hydragnn.data.distdataset import DistDataset
 
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 
-from hydragnn.utils.print.print_utils import log, log0
-from hydragnn.utils.distributed import nsplit
-from hydragnn.utils.distributed import get_device
-from hydragnn.train.train_validate_test import test
+from hydragnn.utils.print.print_utils import log0
+from hydragnn.distributed import nsplit
+from hydragnn.distributed import get_device
+from hydragnn.train.loops import test
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosDataset, adios2_open
+    from hydragnn.data.adiosdataset import AdiosDataset, adios2_open
 except ImportError:
     pass
 
-from scipy.interpolate import BSpline, make_interp_spline
-import adios2 as ad2
+from scipy.interpolate import make_interp_spline
 
 import torch.distributed as dist
 from torch.distributed.device_mesh import init_device_mesh
 from hydragnn.models import MultiTaskModelMP
-from contextlib import nullcontext
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.interpolate import griddata
@@ -154,12 +160,12 @@ if __name__ == "__main__":
         raise ValueError(f"Cannot find config file {input_filename}")
     with open(input_filename, "r") as f:
         config = json.load(f)
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
+    var_config = config["Variables"]
     verbosity = config["Verbosity"]["level"]
     config["NeuralNetwork"]["Training"]["num_epoch"] = 1
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
+    comm_size, rank = hydragnn.distributed.setup_ddp()
     comm = MPI.COMM_WORLD
     ##################################################################################################################
     hydragnn.utils.print.setup_log(log_name)
@@ -423,7 +429,11 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         testset,
         testset,
         testset,
@@ -444,10 +454,10 @@ if __name__ == "__main__":
     if args.task_parallel:
         model = MultiTaskModelMP(model, branch_id, branch_group)
     else:
-        model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
+        model = hydragnn.distributed.get_distributed_model(model, verbosity)
     # Print details of neural network architecture
     print_model(model)
-    hydragnn.utils.model.load_existing_model_config(
+    hydragnn.models.utils.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], path=os.path.dirname(modeldir)
     )
 
@@ -455,7 +465,7 @@ if __name__ == "__main__":
     model.eval()
     datasetname = os.path.basename(mymodel)[:-3]
     ##################################################################################################################
-    nheads = len(config["NeuralNetwork"]["Variables_of_interest"]["output_names"])
+    nheads = len(config["Variables"]["outputs"])
     fig, axs = plt.subplots(1, nheads, figsize=(14, 6))
     for icol, (loader, setname) in enumerate(zip([test_loader], ["test"])):
         total_error, tasks_error, true_values, predicted_values = test(
@@ -464,25 +474,24 @@ if __name__ == "__main__":
         print(rank, "number of heads %d" % len(true_values))
         print(rank, "number of samples %d" % len(true_values[0]))
         if rank == 0:
-            print(log_name, datasetname, setname, "loss=", total_error, tasks_error)
+            print(log_name, datasetname, setname, "loss=", total_error)
+            for output, task_error in zip(config["Variables"]["outputs"], tasks_error):
+                print(f'{output["name"]} Test Loss: {task_error.item():.8f}')
             assert len(true_values) == len(
                 predicted_values
             ), "inconsistent number of heads, %d!=%d" % (
                 len(true_values),
-                len(len(predicted_values)),
+                len(predicted_values),
             )
-            for ihead, (output_name, output_type, output_dim) in enumerate(
-                zip(
-                    config["NeuralNetwork"]["Variables_of_interest"]["output_names"],
-                    config["NeuralNetwork"]["Variables_of_interest"]["type"],
-                    config["NeuralNetwork"]["Variables_of_interest"]["output_dim"],
-                )
-            ):
+            for ihead, output in enumerate(config["Variables"]["outputs"]):
+                output_name = output["name"]
+                output_type = output["level"]
+                output_dim = output["dim"]
                 head_true = true_values[ihead].cpu().squeeze().numpy()
                 head_pred = predicted_values[ihead].cpu().squeeze().numpy()
-                ifeat = var_config["output_index"][ihead]
-                outtype = var_config["type"][ihead]
-                varname = var_config["output_names"][ihead]
+                ifeat = ihead
+                outtype = var_config["outputs"][ihead]["level"]
+                varname = var_config["outputs"][ihead]["name"]
 
                 ax = axs[ihead]
                 error_mae = np.mean(np.abs(head_pred - head_true))

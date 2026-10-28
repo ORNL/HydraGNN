@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2024, Oak Ridge National Laboratory                          #
+# Copyright (c) 2025, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -33,10 +33,10 @@ mpi4py.rc.thread_level = "serialized"
 mpi4py.rc.threads = False
 
 # HydraGNN
-from hydragnn.utils.datasets.abstractrawdataset import AbstractBaseDataset
-from hydragnn.utils.distributed import nsplit
+from hydragnn.data.abstractbasedataset import AbstractBaseDataset
+from hydragnn.distributed import nsplit
 from hydragnn.preprocess.graph_samples_checks_and_updates import get_radius_graph_pbc
-from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
+from hydragnn.models.utils.operations import get_edge_vectors_and_lengths
 
 # Angstrom unit
 primitive_bravais_lattice_constant_x = 3.8
@@ -159,6 +159,8 @@ class LJDataset(AbstractBaseDataset):
             1.0 / energy_pre_scaling_factor * torch.ones(num_nodes, 1)
         )
         forces = torch_data[:, [5, 6, 7]]
+        atomic_numbers = torch_data[:, 0].long()
+        potential = torch_data[:, [4]].to(torch.float32)
         forces_pre_scaling_factor = 1.0
         forces_pre_scaled = forces * forces_pre_scaling_factor
 
@@ -172,12 +174,12 @@ class LJDataset(AbstractBaseDataset):
             forces=forces,
             forces_pre_scaled=forces_pre_scaled,
             pos=torch_data[:, [1, 2, 3]].to(torch.float32),
-            x=torch.cat([torch_data[:, [0, 4]]], axis=1).to(torch.float32),
-            y=torch.tensor(total_energy).unsqueeze(0).to(torch.float32),
+            atomic_numbers=atomic_numbers,
+            potential=potential,
             energy_per_atom=torch.tensor(energy_per_atom_pretransformed)
-            .unsqueeze(0)
+            .reshape(1, 1)
             .to(torch.float32),
-            energy=torch.tensor(total_energy).unsqueeze(0).to(torch.float32),
+            energy=torch.tensor(total_energy).reshape(1, 1).to(torch.float32),
             pbc=torch.tensor(
                 [
                     True,
@@ -342,6 +344,7 @@ def create_configuration(
         torch.tensor([supercell_size_x, supercell_size_y, supercell_size_z])
     )
     data.pbc = torch.tensor([True, True, True], dtype=torch.bool)
+    data.atomic_numbers = atom_types.long().view(-1)
     data.x = torch.cat([atom_types, positions], dim=1)
 
     create_graph_connectivity_pbc = get_radius_graph_pbc(

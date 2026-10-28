@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 """ASE structure optimization with fused HydraGNN + BranchWeightMLP inference.
 
 This replaces the obsolete single-model loading path with the same fused stack
@@ -390,7 +400,7 @@ def main():
 
             energy = atoms.get_potential_energy()
             forces = atoms.get_forces()
-            max_force = float(np.sqrt((forces ** 2).sum(axis=1).max()))
+            max_force = float(np.sqrt((forces**2).sum(axis=1).max()))
             weights = calculator.last_branch_weights
             top_branch = int(np.argmax(weights)) if weights is not None else -1
             top_weight = (

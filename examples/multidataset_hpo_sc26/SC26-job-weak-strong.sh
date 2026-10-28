@@ -197,9 +197,9 @@ export datadir15=transition1x
 ml use /sw/frontier/amdsw/modulefiles/
 ml omnistat-wrapper
 if [ $PRECISION == "fp64" ]; then
-    export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/omnistat.hydragnn-external-fp64.config
+    export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/scripts/hpc/olcf/frontier/omnistat/external-fp64.config
 else
-    export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/omnistat.hydragnn-external-fp32bf16.config
+    export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/scripts/hpc/olcf/frontier/omnistat/external-fp32bf16.config
 fi
 
 exclude_nodes

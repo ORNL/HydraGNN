@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# Copyright (c) 2024, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -12,17 +12,14 @@
 import os
 import pytest
 
-import subprocess
+from tests._script_runner import REPO_ROOT, run_script
 
 
 @pytest.mark.mpi_skip()
-def pytest_atomicdescriptors():
-    file_path = os.path.join(
-        os.path.dirname(__file__),
-        "..",
-        "hydragnn/utils/descriptors_and_embeddings/atomicdescriptors.py",
+def test_atomicdescriptors(tmp_path):
+    run_script(
+        os.path.join(
+            REPO_ROOT, "hydragnn/data/descriptors_and_embeddings/atomicdescriptors.py"
+        ),
+        cwd=tmp_path,
     )
-    return_code = subprocess.call(["python", file_path])
-
-    # Check the file ran without error.
-    assert return_code == 0

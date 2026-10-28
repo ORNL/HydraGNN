@@ -1,0 +1,167 @@
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
+import torch
+
+#########################################################
+from rdkit import Chem
+from rdkit.Chem.rdchem import BondType as BT
+from rdkit.Chem.rdchem import HybridizationType
+import torch.nn.functional as F
+from torch_scatter import scatter
+from torch_geometric.data import Data
+from hydragnn.config.variable_schema import (
+    VariableSchema,
+    parse_variable_schema,
+    prepare_data_from_schema,
+)
+
+##################################################################################################################
+##################################################################################################################
+
+
+def get_node_attribute_name(types):
+    atom_attr_name = ["atom" + k for k in types]
+    extra_attr_name = [
+        "atomicnumber",
+        "IsAromatic",
+        "HSP",
+        "HSP2",
+        "HSP3",
+        "Hprop",
+    ]
+    name_list = atom_attr_name + extra_attr_name
+    dims_list = [
+        1,
+    ] * len(name_list)
+    return name_list, dims_list
+
+
+def generate_graphdata_from_smilestr(simlestr, ytarget, types, var_config=None):
+
+    ps = Chem.SmilesParserParams()
+    ps.removeHs = False
+
+    mol = Chem.MolFromSmiles(simlestr, ps)  # , sanitize=False , removeHs=False)
+
+    data = generate_graphdata_from_rdkit_molecule(
+        mol, ytarget, types, var_config=var_config
+    )
+
+    return data
+
+
+def generate_graphdata_from_rdkit_molecule(
+    mol, ytarget, types, atomicdescriptors_torch_tensor=None, var_config=None
+):
+    bonds = {BT.SINGLE: 0, BT.DOUBLE: 1, BT.TRIPLE: 2, BT.AROMATIC: 3}
+
+    mol = Chem.AddHs(mol)
+    N = mol.GetNumAtoms()
+
+    type_idx = []
+    atomic_number = []
+    aromatic = []
+    sp = []
+    sp2 = []
+    sp3 = []
+    for atom in mol.GetAtoms():
+        type_idx.append(types[atom.GetSymbol()])
+        atomic_number.append(atom.GetAtomicNum())
+        aromatic.append(1 if atom.GetIsAromatic() else 0)
+        hybridization = atom.GetHybridization()
+        sp.append(1 if hybridization == HybridizationType.SP else 0)
+        sp2.append(1 if hybridization == HybridizationType.SP2 else 0)
+        sp3.append(1 if hybridization == HybridizationType.SP3 else 0)
+
+    z = torch.tensor(atomic_number, dtype=torch.long)
+
+    row, col, edge_type = [], [], []
+    for bond in mol.GetBonds():
+        start, end = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+        row += [start, end]
+        col += [end, start]
+        edge_type += 2 * [bonds[bond.GetBondType()]]
+
+    edge_index = torch.tensor([row, col], dtype=torch.long)
+    edge_type = torch.tensor(edge_type, dtype=torch.long)
+    edge_attr = F.one_hot(edge_type, num_classes=len(bonds)).to(torch.float)
+
+    perm = (edge_index[0] * N + edge_index[1]).argsort()
+    edge_index = edge_index[:, perm]
+    edge_attr = edge_attr[perm]
+
+    row, col = edge_index
+    hs = (z == 1).to(torch.float)
+    num_hs = scatter(hs[row], col, dim_size=N).tolist()
+
+    x1 = F.one_hot(torch.tensor(type_idx), num_classes=len(types))
+
+    x2 = (
+        torch.tensor([atomic_number, aromatic, sp, sp2, sp3, num_hs], dtype=torch.float)
+        .t()
+        .contiguous()
+    )
+
+    atom_type = x1.to(torch.float)
+    atom_descriptors = x2
+
+    if atomicdescriptors_torch_tensor is not None:
+        assert (
+            atomicdescriptors_torch_tensor.shape[0] == atom_type.shape[0]
+        ), "tensor of atomic descriptors MUST have the number of rows equal to the number of atoms in the molecule"
+        atom_descriptors = torch.cat(
+            [atom_descriptors, atomicdescriptors_torch_tensor], dim=-1
+        ).to(torch.float)
+
+    data = Data(
+        atomic_numbers=z.long().view(-1),
+        atom_type=atom_type,
+        atom_descriptors=atom_descriptors,
+        edge_index=edge_index,
+        bond_attributes=edge_attr,
+        **{"dataset_name": None, "smiles": None},
+    )
+    if var_config is None:
+        data.x = torch.cat([atom_type, atom_descriptors], dim=-1)
+        data.edge_attr = edge_attr
+        data.y = ytarget
+    else:
+        schema = (
+            var_config
+            if isinstance(var_config, VariableSchema)
+            else parse_variable_schema(var_config)
+        )
+        offset = 0
+        flat_targets = ytarget.reshape(-1)
+        for spec in schema.outputs:
+            if spec.level == "node":
+                rows = data.num_nodes
+            elif spec.level == "edge":
+                rows = data.num_edges
+            elif spec.level == "graph":
+                rows = 1
+            else:  # Defensive guard if VariableLevel is extended in the future.
+                raise ValueError(f"Unsupported output level: {spec.level}")
+            size = rows * spec.dim
+            setattr(
+                data,
+                spec.name,
+                flat_targets[offset : offset + size].reshape(rows, spec.dim),
+            )
+            offset += size
+        if offset != flat_targets.numel():
+            raise ValueError(
+                f"Configured outputs consume {offset} target values, but the "
+                f"sample provides {flat_targets.numel()}"
+            )
+        prepare_data_from_schema(data, schema)
+
+    return data

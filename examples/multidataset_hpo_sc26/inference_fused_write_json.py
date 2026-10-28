@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 """Fused HydraGNN + BranchWeightMLP inference – per-GPU JSON to node-local NVMe.
 
 Each GPU writes a JSON file with atom types, coordinates, weighted formation
@@ -22,7 +32,7 @@ import json
 import os
 import time
 
-from hydragnn.utils.distributed import get_comm_size_and_rank, get_local_rank
+from hydragnn.distributed import get_comm_size_and_rank, get_local_rank
 
 from inference_random_structures import build_argument_parser
 
@@ -35,7 +45,6 @@ from inference_fused import (
 )
 
 from inference_random_structures_write_json import structure_to_dict
-
 
 # ---------------------------------------------------------------------------
 # Main

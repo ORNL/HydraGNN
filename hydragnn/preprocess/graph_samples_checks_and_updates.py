@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -13,7 +13,7 @@ import torch
 from torch_scatter import scatter
 from torch_geometric.transforms import RadiusGraph
 from torch_geometric.data import Data
-from torch_geometric.utils import remove_self_loops, degree
+from torch_geometric.utils import degree
 from torch_geometric.data.datapipes import functional_transform
 from torch_geometric.transforms import LocalCartesian, Distance
 from torch_geometric.nn.models.schnet import RadiusInteractionGraph
@@ -22,10 +22,8 @@ import ase
 import ase.neighborlist
 import numpy as np
 import os
-from typing import Tuple
 
-from .dataset_descriptors import AtomFeatures
-from hydragnn.utils.distributed import get_device
+from hydragnn.distributed import get_device
 
 import vesin
 
@@ -51,7 +49,7 @@ def check_if_graph_size_variable(train_loader, val_loader, test_loader):
 
 
 def check_if_graph_size_variable_dist(train_loader, val_loader, test_loader):
-    from hydragnn.utils.distributed import get_device
+    from hydragnn.distributed import get_device
 
     assert torch.distributed.is_initialized()
     graph_size_variable = False
@@ -553,7 +551,7 @@ def gather_deg(dataset):
 def gather_deg_dist(dataset):
     import torch.distributed as dist
     from hydragnn.utils.print.print_utils import iterate_tqdm
-    from hydragnn.utils.distributed import get_device
+    from hydragnn.distributed import get_device
 
     max_deg = 0
     for data in iterate_tqdm(dataset, 2, desc="Degree max"):
@@ -569,6 +567,60 @@ def gather_deg_dist(dataset):
     deg = deg.clone().detach().to(get_device())
     dist.all_reduce(deg, op=dist.ReduceOp.SUM)
     return deg.cpu().detach().numpy()
+
+
+def gather_hetero_deg(dataset, verbosity=2, comm=None):
+    """Return the PNA in-degree histogram of ``HeteroData`` samples as a list.
+
+    Each sample is flattened with ``to_homogeneous`` so that degrees are counted
+    across all edge types. Without ``comm``, a replicated ``dataset`` is split
+    into contiguous slices and reduced over the default process group. With an
+    MPI ``comm``, each rank counts every sample it holds and reduces over ``comm``.
+    """
+    import torch.distributed as dist
+    from hydragnn.utils.print.print_utils import iterate_tqdm
+
+    num_samples = len(dataset)
+    if comm is None and dist.is_initialized():
+        rank = dist.get_rank()
+        world_size = dist.get_world_size()
+        local_indices = range(
+            (num_samples * rank) // world_size,
+            (num_samples * (rank + 1)) // world_size,
+        )
+    else:
+        local_indices = range(num_samples)
+
+    def _degrees(idx):
+        data_h = dataset[idx].to_homogeneous(add_node_type=True, add_edge_type=True)
+        return degree(
+            data_h.edge_index[1], num_nodes=data_h.num_nodes, dtype=torch.long
+        )
+
+    def _all_reduce(tensor, op):
+        if comm is not None:
+            from mpi4py import MPI
+
+            mpi_op = MPI.MAX if op == "max" else MPI.SUM
+            return torch.from_numpy(comm.allreduce(tensor.numpy(), op=mpi_op))
+        if not dist.is_initialized():
+            return tensor
+        tensor = tensor.to(get_device())
+        torch_op = dist.ReduceOp.MAX if op == "max" else dist.ReduceOp.SUM
+        dist.all_reduce(tensor, op=torch_op)
+        return tensor.cpu()
+
+    max_deg = 0
+    for idx in iterate_tqdm(local_indices, verbosity, desc="HeteroPNA degree max"):
+        d = _degrees(idx)
+        if d.numel() > 0:
+            max_deg = max(max_deg, int(d.max()))
+    max_deg = int(_all_reduce(torch.tensor([max_deg]), "max"))
+
+    deg = torch.zeros(max_deg + 1, dtype=torch.long)
+    for idx in iterate_tqdm(local_indices, verbosity, desc="HeteroPNA degree bincount"):
+        deg += torch.bincount(_degrees(idx), minlength=deg.numel())
+    return _all_reduce(deg, "sum").tolist()
 
 
 def should_skip_self_loops(data_object, context=""):
@@ -605,61 +657,3 @@ def gather_deg_mpi(dataset):
         deg += torch.bincount(d, minlength=deg.numel())
     deg = MPI.COMM_WORLD.allreduce(deg.numpy(), op=MPI.SUM)
     return deg
-
-
-def update_predicted_values(
-    type: list, index: list, graph_feature_dim: list, node_feature_dim: list, data: Data
-):
-    """Updates values of the structure we want to predict. Predicted value is represented by integer value.
-    Parameters
-    ----------
-    type: "graph" level or "node" level
-    index: index/location in data.y for graph level and in data.x for node level
-    graph_feature_dim: list of integers to trak the dimension of each graph level feature
-    data: Data
-        A Data object representing a structure that has atoms.
-    """
-    output_feature = []
-    data.y_loc = torch.zeros(1, len(type) + 1, dtype=torch.int64, device=data.x.device)
-    for item in range(len(type)):
-        if type[item] == "graph":
-            index_counter_global_y = sum(graph_feature_dim[: index[item]])
-            feat_ = torch.reshape(
-                data.y[
-                    index_counter_global_y : index_counter_global_y
-                    + graph_feature_dim[index[item]]
-                ],
-                (graph_feature_dim[index[item]], 1),
-            )
-            # after the global features are spanned, we need to iterate over the nodal features
-            # to do so, the counter of the nodal features need to start from the last value of counter for the graph nodel feature
-        elif type[item] == "node":
-            index_counter_nodal_y = sum(node_feature_dim[: index[item]])
-            feat_ = torch.reshape(
-                data.x[
-                    :,
-                    index_counter_nodal_y : (
-                        index_counter_nodal_y + node_feature_dim[index[item]]
-                    ),
-                ],
-                (-1, 1),
-            )
-        else:
-            raise ValueError("Unknown output type", type[item])
-        output_feature.append(feat_)
-        data.y_loc[0, item + 1] = data.y_loc[0, item] + feat_.shape[0] * feat_.shape[1]
-    data.y = torch.cat(output_feature, 0)
-
-
-def update_atom_features(atom_features: [AtomFeatures], data: Data):
-    """Updates atom features of a structure. An atom is represented with x,y,z coordinates and associated features.
-
-    Parameters
-    ----------
-    atom_features: [AtomFeatures]
-        List of features to update. Each feature is instance of Enum AtomFeatures.
-    data: Data
-        A Data object representing a structure that has atoms.
-    """
-    feature_indices = [i for i in atom_features]
-    data.x = data.x[:, feature_indices]

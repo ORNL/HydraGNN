@@ -9,79 +9,113 @@ Scalable PyTorch Implementation of Multi-Headed Graph Neural Networks
 
 ## Capabilities
 
-<img src="images/HydraGNN-Overview.png" alt="HydraGNN Overview" width="1100" />
+<img src="images/HydraGNN-Overview-v2.png" alt="HydraGNN Overview" width="1100" />
 
 - **Multi-headed Prediction** for graph and node-level properties  
 - **Distributed Training** via DDP, FSDP (v1/v2), and DeepSpeed at supercomputing scale
 - **Convolutional Layers** as a hyperparameter  
 - **Geometric Equivariance** in convolution and prediction (EGNN, PaiNN, PNAEq, MACE, DimeNet)
-- **Global Attention** (GPS)
+- **Heterogeneous Graph Learning** with typed nodes, relations, and heterogeneous GPS
+- **Global Attention** via GPS and the equivariant all-to-all Transformer
 - **Multiple Precision Training** (FP32, BF16, FP64)
-- **Machine-Learned Interatomic Potentials** with energy-conserving force prediction
+- **Machine-Learned Interatomic Potentials** with energy-conserving forces and energy-derived Hessian supervision
+- **Constraint-Aware Training** for optimal power flow with fixed penalties or augmented Lagrangian optimization
 - **Gradient Checkpointing** for memory-efficient training
 
 ### Optional graph-level conditioning
-- Enable with `NeuralNetwork.Architecture.use_graph_attr_conditioning` (off by default) and choose mode via `graph_attr_conditioning_mode` (`"concat_node"` default, `"film"`, or `"fuse_pool"`).
+
+Declare named graph-level attributes in `Variables.inputs`; schema preparation
+builds `data.graph_attr`. `update_config` derives `graph_attr_dim` and enables
+conditioning when graph inputs are present. See the
+[conditioning example](USER_MANUAL.md#graph-level-conditioning-concat_node-default).
+
+- Enable with `NeuralNetwork.Architecture.use_graph_attr_conditioning` (off by default without graph inputs) and choose mode via `graph_attr_conditioning_mode` (`"concat_node"` default, `"film"`, or `"fuse_pool"`).
 - `concat_node` (default) appends `graph_attr` to node embeddings and projects back to hidden dimension; FiLM scales/shifts invariant channels per graph; `fuse_pool` fuses `graph_attr` with the pooled graph embedding before the heads.
+- `fuse_pool` requires at least one graph output and is not supported by MACE, whose staged readout does not use the generic pooled representation. AllScAIP and UMA apply `concat_node` and `film` after their monolithic backbone output.
 - Conditioning consumes `data.graph_attr` and requires those global attributes to be rotation/translation invariant; providing orientation-dependent values will break equivariance by design.
 
 
 ## Dependencies
 
-To install required packages with only basic capability (`torch`,
-`torch_geometric`, and related packages)
-and to serialize+store the processed data for later sessions (`pickle5`):
+To install the packages required for the core HydraGNN capability, including
+PyTorch and PyTorch Geometric:
 
-> **Python version:** Installation via `install_dependencies.sh` is currently tested and supported for **Python 3.10, 3.11, and 3.12** only.
+> **Python versions:** HydraGNN is tested and supported on **Python 3.11
+> through 3.14**. Facility installation scripts default to Python 3.11 unless
+> documented otherwise for that system.
+
+The generic `install_dependencies.sh` baseline currently uses NumPy 2.4.6, PyTorch 2.13.0,
+torchvision 0.28.0, and PyTorch Geometric 2.8.0. HydraGNN accepts PyTorch 2.13
+or 2.14 so facility installers can retain their tested accelerator wheels.
+`pyproject.toml` is the authoritative source for the complete version set.
 
 **Recommended approach - standard installation:**
 ```bash
-# Install all core dependencies (base + PyTorch + PyTorch Geometric)
-pip install -r requirements.txt
-
-# Or use the installation script
-./install_dependencies.sh all
-```
-
-**Alternative approach for reproducible installation:**
-```bash
-# Use the provided installation script
+# Install core, PyTorch, PyTorch Geometric, and model-specific dependencies
 ./install_dependencies.sh
-
-# Or install manually with consistent settings:
-pip install --no-build-isolation -v -r requirements.txt
 ```
 
-**Modular installation (choose what you need):**
+**Alternative manual approach:**
 ```bash
-# Base only (scientific computing, materials science, visualization)
-pip install -r requirements-base.txt
-
-# Add PyTorch
-pip install -r requirements-torch.txt
-
-# Add PyTorch Geometric  
-pip install -r requirements-pyg.txt
-
-# Add optional features (HPO, FAIRChem, etc.)
-pip install -r requirements-optional.txt
+# Install PyTorch first so the compiled PyG extensions can build against it
+pip install torch==2.13.0 torchvision==0.28.0
+pip install --no-build-isolation -e ".[torch]" \
+  -f https://data.pyg.org/whl/torch-2.13.0+cpu.html
+pip install -e ".[uma]"
 ```
+
+**Extras (choose what you need):**
+```bash
+# Core only; keeps an existing PyTorch 2.13/2.14 install
+pip install --no-build-isolation -e . \
+  -f https://data.pyg.org/whl/torch-<torch-version>+<device>.html
+
+# Optional features (HPO, ADIOS, etc.)
+pip install -e ".[optional]"
+```
+
+Available extras: `torch`, `uma`, `dev`, `optional`, `deepspeed`.
+
+`pyg-lib` is built from source in CI because its binary wheels are hosted
+separately from PyPI. The official
+[`pyg-lib` installation documentation](https://github.com/pyg-team/pyg-lib#installation)
+explicitly supports this method. Install PyTorch first, then run:
+
+```bash
+pip install ninja wheel
+pip install --no-build-isolation \
+  "pyg_lib @ git+https://github.com/pyg-team/pyg-lib.git@26a2d1a06a4714da9bb804c19049afb4796971d7"
+```
+
+HydraGNN pins the source revision corresponding to `pyg-lib` 0.8.0 for
+reproducibility. The build requires a working C++ compiler.
 
 If you plan to modify the code, include packages for formatting (`black`) and
 testing (`pytest`) the code:
 ```bash
-pip install -r requirements-dev.txt
+pip install -e ".[dev]"
 # Or with the script:
-./install_dependencies.sh all dev
+./install_dependencies.sh dev
+
+# Install development and optional dependencies together:
+./install_dependencies.sh all
 ```
+
+The script accepts `dev` and `optional` separately or together; `all` enables
+both groups. Unknown group names are rejected.
 
 Detailed dependency installation instructions are available on the
 [Wiki](https://github.com/ORNL/HydraGNN/wiki/Install)
 
+The synthetic datasets used by model-quality CI tests have an explicit,
+versioned generation and normalization contract. Contributors changing test
+data or numerical quality thresholds should first read
+[Unit-test data fixtures](docs/unit_test_data.md).
+
 
 ## Installation
 
-After checking out HydgraGNN, we recommend to install HydraGNN in a
+After checking out HydraGNN, we recommend installing HydraGNN in
 developer mode so that you can use the files in your current location
 and update them if needed:
 ```bash
@@ -107,26 +141,44 @@ Below are the four main functionalities for running the code.
 1. Training a model, including continuing from a previously trained model using configuration options:
 ```python
 import hydragnn
-hydragnn.run_training("examples/configuration.json")
+from hydragnn.train import train_validate_test
+from hydragnn.models.utils import load_existing_model, save_model
+
+train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
+    trainset, valset, testset, batch_size=32
+)
+train_validate_test(
+    model, optimizer, train_loader, val_loader, test_loader,
+    writer, scheduler, config["NeuralNetwork"], log_name, verbosity
+)
 ```
 2. Saving a model state:
 ```python
-import hydragnn
-model_name = model_checkpoint.pk
-hydragnn.save_model(model, optimizer, model_name, path="./logs/")
+model_name = "model_checkpoint"
+save_model(model, optimizer, model_name, path="./logs/")
 ```
 3. Loading a model state:
 ```python
-import hydragnn
-model_name = model_checkpoint.pk
-hydragnn.load_existing_model(model, model_name, path="./logs/")
+model_name = "model_checkpoint"
+load_existing_model(model, model_name, path="./logs/")
 ```
 4. Making predictions from a previously trained model:
 ```python
 import hydragnn
-hydragnn.run_prediction("examples/configuration.json", model)
+errors, task_errors, targets, predictions = hydragnn.train.test(
+    test_loader, model, verbosity
+)
 ```
-The `run_training` and `run_predictions` functions are convenient routines that encapsulate all the steps of the training process (data generation, data pre-processing, training of HydraGNN models, and use of trained HydraGNN models for inference) on toy problems, which are included in the CI test workflows. Both `run_training` and `run_predictions` require a JSON input file for configurable options. The `save_model` and `load_model` functions store and retrieve model checkpoints for continued training and subsequent inference. Ad-hoc example scripts where data pre-processing, training, and inference are done for specific datasets are provided in the `examples` folder.
+Dataset creation and preprocessing are explicit caller responsibilities. Pass prepared
+datasets to `create_dataloaders`, construct the model and optimizer explicitly, and
+call `train_validate_test` or `test`. This keeps application-specific data handling
+and orchestration visible to the caller. The `save_model` and `load_model` functions
+store and retrieve model checkpoints for continued training and inference.
+
+The former `run_training` and `run_prediction` convenience functions have been
+removed. Applications must now make dataset preparation, model construction, and
+training or inference orchestration explicit, as demonstrated by the scripts under
+`examples/`.
 
 ### Datasets
 
@@ -151,33 +203,258 @@ Additionally, many important arguments fall within the `["NeuralNetwork"]` secti
 - `["NeuralNetwork"]`
   - `["Architecture"]`
     - `["mpnn_type"]`  
-      Accepted types: `CGCNN`, `DimeNet`, `EGNN`, `GAT`, `GIN`, `MACE`, `MFC`, `PAINN`, `PNAEq`, `PNAPlus`, `PNA`, `SAGE`, `SchNet` (str)
+      Homogeneous types: `AllScAIP`, `CGCNN`, `DimeNet`, `EGNN`, `GAT`, `GIN`, `MACE`, `MFC`, `PAINN`, `PNAEq`, `PNAPlus`, `PNA`, `SAGE`, `SchNet`, `UMA` (str)
+      Heterogeneous types: `HeteroGIN`, `HeteroSAGE`, `HeteroGAT`, `HeteroPNA`, `HeteroRGAT`, `HeteroHGT`, `HeteroHEAT`. See the [heterogeneous model guide](docs/heterogeneous_models.md) for configuration and compatibility.
     - `["num_conv_layers"]`  
       Examples: `1`, `2`, `3`, `4` ... (int)
     - `["output_heads"]`  
       Task types: `node`, `graph` (int)
     - `["global_attn_engine"]`
-      Accepted types: `GPS`, `None`
+      Accepted types: `EquivariantTransformer`, `GPS`, `None`
     - `["global_attn_type"]`
-      Accepted types: `multihead`
+      Accepted types: `multihead`, `performer`
     - `["pe_dim"]`
       Dimension of positional encodings (int)
     - `["global_attn_heads"]`
       Examples: `1`, `2`, `3`, `4` ... (int)
     - `["hidden_dim"]`  
       Dimension of node embeddings during convolution (int) - must be a multiple of "global_attn_heads" if "global_attn_engine" is not "None"
-    - `["enable_interatomic_potential"]`  
-      Enable MLIP mode with dynamic graph construction and energy-conserving force prediction (bool, default `false`)
+    - Node input encoding is configured per variable in the top-level
+      `Variables.inputs` schema. Scalar node inputs support learned
+      `embedding` and `one_hot` encodings; inputs without an `encoding` remain
+      continuous.
+  - `["Training"]`
+    - `["loss"]`
+      Declarative supervised and constraint objective. Energy-conserving MLIPs
+      use `provider: "interatomic_potential"`; OPF constraint training uses
+      `provider: "optimal_power_flow"`. See the training-loss guides below.
+    - `["global_attn_redraw_interval"]`
+      Number of training batches between Performer random-feature projection
+      redraws (positive int, default `1000`); set to `null` to keep the initial
+      projection fixed. This setting has no effect when `global_attn_type` is
+      `multihead` or while the model is in evaluation mode.
 
-  - `["Variables of Interest"]`
-    - `["input_node_features"]`  
-      Indices from nodal data used as inputs (int)
-    - `["output_index"]`  
-      Indices from data used as targets (int)
-    - `["type"]`  
-      Either `node` or `graph` (string)
-    - `["output_dim"]`  
-      Dimensions of prediction tasks (list)
+Performer approximates softmax attention with features produced from a random
+projection matrix. Periodically replacing that matrix during training prevents
+the learned model from depending on a single random approximation. HydraGNN
+counts training batches and redraws the projection immediately before the next
+model forward when the configured interval is reached. Redraw bookkeeping is
+kept outside `HydraGPSConv.forward` so that execution strategies that repeat a
+forward pass, such as activation checkpointing, do not accidentally count one
+training batch more than once. For example:
+
+```json
+{
+  "NeuralNetwork": {
+    "Architecture": {
+      "global_attn_engine": "GPS",
+      "global_attn_type": "performer"
+    },
+    "Training": {
+      "global_attn_redraw_interval": 1000
+    }
+  }
+}
+```
+
+When GPS wraps an equivariant HydraGNN model, global attention operates only
+on invariant node channels. Equivariant channels are updated by the local MPNN
+and propagated alongside the globally attended invariant representation.
+
+### Feature guides
+
+- [GraphGPS and Performer configuration](#configurable-settings)
+- [Heterogeneous models and GPS](docs/heterogeneous_models.md)
+- [Structural encodings for heterogeneous models](docs/structural_encodings.md)
+- [PubChem energy, force, and Hessian training](examples/pubchem_gaussian/README.md)
+- [Equivariant all-to-all graph Transformer](docs/equivariant_graph_transformer.md)
+- [UMA and AllScAIP integration](docs/uma_allscaip.md)
+- [Cost-aware graph batching](docs/cost_aware_batching.md)
+- [Reusable dataset downloads](docs/dataset_downloads.md)
+- [Materials preprocessing](docs/materials_preprocessing.md)
+- [Interatomic training-loss configuration](docs/interatomic_training_loss.md)
+- [Named train/validation/test loss reporting](docs/training_loss_reporting.md)
+- [OPF constraint optimization](examples/opf/README_augmented_lagrangian.md)
+- [HPC facility assets](scripts/hpc/README.md)
+
+  - top-level `["Variables"]`
+    - Required `["graph_type"]` is `"homogeneous"` or `"heterogeneous"`.
+      Heterogeneous schemas also require `["node_types"]`, listing every node
+      type in the dataset. `["inputs"]` and `["outputs"]` contain named tensor specifications.
+      Every specification has an attribute `name`, a `level` (`node`, `edge`,
+      or `graph`), and a positive feature dimension `dim`. Inputs may also
+      declare a semantic `role`; ordinary inputs use the default `feature`
+      role, while Cartesian coordinates use `position`. Scalar node features
+      may also declare an `encoding` of type `embedding` or `one_hot`.
+      Every node-level specification in a heterogeneous schema must declare
+      `node_type`; homogeneous schemas reject `node_type`.
+  - heterogeneous `NeuralNetwork.Architecture["edge_types"]`
+    - Must list every dataset edge type by `source_type`, `relation`, and
+      `target_type`. `dim` declares that relation's edge-feature width; use
+      `dim: 0` for featureless relations. The list must contain each runtime
+      edge triple exactly once, and both endpoints must appear in
+      `Variables.node_types`. Relation-name-only `edge_dim` dictionaries are
+      rejected. These dimensions describe the dataset and therefore do not
+      change with `mpnn_type`. Edge-aware models consume the declared
+      attributes; edge-unaware models use the same graph topology and leave
+      the attributes unused.
+  - homogeneous `NeuralNetwork.Architecture["edge_dim"]`
+    - Must be one nonnegative integer shared by every edge. Homogeneous
+      configurations must not define `edge_types`. When heterogeneous source
+      data is converted to a homogeneous graph, preprocessing must pad every
+      relation to this common width and zero-fill featureless relations first.
+
+```json
+"edge_types": [
+  {"source_type": "bus", "relation": "ac_line", "target_type": "bus", "dim": 9},
+  {"source_type": "load", "relation": "load_link", "target_type": "bus", "dim": 0}
+]
+```
+
+At runtime, a positive `dim` requires an `edge_attr` tensor shaped
+`(num_relation_edges, dim)`. A zero dimension requires that relation to have no
+`edge_attr`. Edge-aware heterogeneous message-passing layers are constructed
+separately for each complete edge triple, so different relations may use
+different input widths without padding. Edge-unaware layers still use every
+declared relation's `edge_index`, but do not consume its `edge_attr`.
+
+```json
+"Variables": {
+  "graph_type": "homogeneous",
+  "inputs": [
+    {
+      "name": "atomic_numbers",
+      "level": "node",
+      "dim": 1,
+      "encoding": {
+        "type": "embedding",
+        "num_categories": 118,
+        "embedding_dim": 64,
+        "min_value": 1
+      }
+    },
+    {"name": "pos", "level": "node", "dim": 3, "role": "position"},
+    {"name": "bond_attributes", "level": "edge", "dim": 4},
+    {"name": "charge_and_spin", "level": "graph", "dim": 2}
+  ],
+  "outputs": [
+    {"name": "energy", "level": "graph", "dim": 1},
+    {"name": "forces", "level": "node", "dim": 3}
+  ]
+}
+```
+
+Each PyG sample must expose tensors with exactly those names. Node variables
+must have shape `(N, dim)`; an encoded scalar (`dim: 1`) may also use shape
+`(N,)`. Edge variables use `(E, dim)`, and graph variables use `(1, dim)`. PyG
+therefore batches graph variables into `(B, dim)` without any special
+collation rule. When multiple attributes of the same level are listed,
+HydraGNN concatenates their raw values into `data.x` in JSON order. Immediately
+before message passing, each encoded scalar is replaced by its learned
+embedding or one-hot representation. Unencoded inputs remain continuous. Thus,
+the model-facing width is the sum of continuous dimensions, embedding
+dimensions, and one-hot category counts. Edge and graph inputs are currently
+continuous and are concatenated without an encoding step.
+
+Attribute names are not aliases: the example uses PyG's conventional `pos`
+attribute, so the corresponding sample must provide `data.pos`. A different
+name is valid only when the JSON specification and PyG attribute match exactly.
+The `position` role is restricted to `pos` with node level and dimension 3.
+HydraGNN validates this geometric input but keeps it separate from `data.x`, so
+Cartesian coordinates do not become invariant scalar feature channels.
+
+#### Why positions are not concatenated into `data.x`
+
+`pos` is an input to a geometry-aware model, but it is not an ordinary scalar
+node feature. Translating a structure changes every Cartesian coordinate, and
+rotating it mixes the three coordinate components. If the coordinates were
+concatenated directly into `data.x`, an otherwise invariant or equivariant
+architecture could treat those frame-dependent values as scalar channels and
+lose its intended translation or rotation behavior.
+
+Declare Cartesian coordinates explicitly as:
+
+```json
+{"name": "pos", "level": "node", "dim": 3, "role": "position"}
+```
+
+For every sample, the matching `data.pos` must be a tensor of shape `(N, 3)`.
+HydraGNN validates it and leaves it in `data.pos`; geometry-aware local MPNNs,
+equivariant transformers, neighbor construction, and force calculations can
+then consume the coordinates through their dedicated geometric paths. The
+coordinates are excluded from both the constructed `data.x` and
+`Architecture.input_dim`. Autograd information on `data.pos` is preserved, so
+energy-gradient force models can still differentiate with respect to positions.
+
+For example, with `atomic_numbers` and `pos` declared above, preparation gives
+the model the following logically separate inputs:
+
+```text
+data.atomic_numbers ──> data.x ──> configured categorical encoder
+data.pos            ────────────> dedicated geometric path
+```
+
+When several node inputs have the default `feature` role, they are compiled in
+JSON order and their configured encodings are applied independently. Never
+manually append `data.pos` to `data.x`. This rule applies to any geometry-aware
+application, not only machine-learning interatomic potentials.
+
+The contract is deliberately strict: `role: "position"` is accepted only for
+an input named `pos` with `level: "node"` and `dim: 3`; outputs cannot have this
+role. Conversely, declaring `pos` without `role: "position"` is rejected. A
+schema must still declare at least one ordinary node input from which HydraGNN
+can construct `data.x`.
+
+Users must not construct HydraGNN's internal `data.x`, `data.edge_attr`,
+`data.graph_attr`, `data.y`, or `data.y_loc` tensors in dataset importers.
+HydraGNN validates the named source attributes and builds those tensors when a
+sample is prepared from the schema:
+
+- node inputs with role `feature` become raw columns in `data.x`, and any
+  configured categorical encoders transform their columns at model entry;
+- edge inputs become `data.edge_attr`;
+- graph inputs become `data.graph_attr`;
+- outputs become the level-specific `data.node_output`, `data.edge_output`, and
+  `data.graph_output` tensors; and
+- all outputs are flattened in JSON order into `data.y`. `data.y_loc` stores
+  the boundaries needed to recover each configured output from `data.y`.
+
+The named source attributes remain on the PyG object after preparation. See the
+Variables section of the [Comprehensive User Manual](USER_MANUAL.md#variables)
+for the complete construction rules and a worked example.
+
+Schema preparation happens before a training-ready dataset is serialized. When
+that prepared dataset is later loaded from a HydraGNN pickle container, an
+ADIOS dataset, or a directory of PyG `.pt` samples, the stored graph is
+authoritative: HydraGNN uses its existing `x`, `edge_index`, `edge_attr`,
+`graph_attr`, `y`, `y_loc`, descriptors, and positional encodings without
+modifying them. Loading does not rebuild neighborhoods, renormalize edge
+lengths, rerun descriptor transforms, or compile named variables again. A
+change to any preprocessing choice therefore requires creation of a new
+prepared dataset.
+
+Source-variable names must not collide with HydraGNN's derived tensors. Names
+such as `x`, `edge_attr`, `graph_attr`, `y`, `y_loc`, `node_output`,
+`edge_output`, and `graph_output` are therefore rejected in both `inputs` and
+`outputs`. Use a semantic source name such as `node_features`, `edge_lengths`,
+or `energy`; HydraGNN then constructs the corresponding internal tensor.
+
+This schema is an intentional breaking replacement for
+`Variables_of_interest`. The index-based normalization helper
+`update_config_minmax` was removed with that interface because its
+`input_node_features` and `output_index` arguments have no meaning in the
+named-attribute schema. Applications that need normalization should normalize
+their named tensors explicitly and store the associated statistics with their
+dataset or application configuration.
+
+The schema is authoritative over HydraGNN's internal tensors. Because at least
+one node feature input is required, `data.x` is always rebuilt and overwrites any
+pre-existing `data.x`. Edge inputs, graph inputs, and outputs are optional:
+HydraGNN rebuilds their internal tensors when they are declared and removes
+stale `data.edge_attr`, `data.graph_attr`, `data.y`, `data.y_loc`, or
+level-specific output tensors when they are not. This prevents attributes
+provided by a third-party PyG dataset or an earlier schema preparation from
+silently reaching the model.
 
   - `["Training"]`
     - `["num_epoch"]`  
@@ -186,12 +463,16 @@ Additionally, many important arguments fall within the `["NeuralNetwork"]` secti
       Examples: `16`, `32`, `64` (int)
     - `["Optimizer"]["learning_rate"]`  
       Examples: `2e-3`, `0.005` (float)
-    - `["compute_grad_energy"]`  
-      Use the gradient of energy to predict forces (bool)
     - `["precision"]`  
       Training precision: `"fp32"`, `"bf16"`, `"fp64"` (str, default `"fp32"`)
     - `["conv_checkpointing"]`  
       Enable gradient checkpointing to reduce memory usage (bool, default `false`)
+    - `["LocalSGD"]`
+      Optional post-local-SGD configuration for ordinary DDP. Set `enabled`,
+      `warmup_steps`, and `synchronization_period` to replace per-step global
+      gradient averaging after warm-up with periodic model-parameter averaging.
+      `optimizer_state_policy` selects rank-local state (default) or strict
+      optimizer-aware synchronization; see the User Manual for constraints.
 
 
 ### Citations

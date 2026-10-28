@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -24,20 +24,29 @@ try:
 except:
     from torch_geometric.data import DataLoader
 
-from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
-from hydragnn.preprocess.lsms_raw_dataset_loader import LSMS_RawDataLoader
-from hydragnn.preprocess.cfg_raw_dataset_loader import CFG_RawDataLoader
-from hydragnn.utils.datasets.compositional_data_splitting import (
+from hydragnn.preprocess.graph_dataset import load_prepared_graph_dataset
+from hydragnn.preprocess.batch_sampler import (
+    CostAwareBatchSampler,
+    DistributedCostAwareBatchSampler,
+)
+from hydragnn.data.compositional_data_splitting import (
     compositional_stratified_splitting,
 )
-from hydragnn.utils.distributed import get_comm_size_and_rank
+from hydragnn.distributed import get_comm_size_and_rank
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 import pickle
 
 from hydragnn.utils.print.print_utils import log
 
 from torch_geometric.data import Batch
+from torch.utils.data import Dataset
 from torch.utils.data.dataloader import _DatasetKind
+
+from hydragnn.config.variable_schema import (
+    VariableSchema,
+    parse_variable_schema,
+    prepare_data_from_schema,
+)
 
 from concurrent.futures import ThreadPoolExecutor
 import multiprocessing as mp
@@ -89,6 +98,69 @@ class SimpleDataLoader(DataLoader):
         index = next(self._sampler_iter)
         data = self._dataset_fetcher.fetch(index)  # may raise StopIteration
         return data
+
+
+class SchemaPreparedDataset(Dataset):
+    """Compile named variables on individual samples before PyG collation.
+
+    The wrapped sample is cloned so constructing internal ``x``, ``y``,
+    ``y_loc``, ``edge_attr``, and ``graph_attr`` tensors does not mutate an
+    in-memory source dataset. Delegating unknown attributes preserves dataset
+    metadata used by PNA and cost-aware batching.
+    """
+
+    def __init__(self, dataset, schema: VariableSchema):
+        self.dataset = dataset
+        self.schema = schema
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, index):
+        data = self.dataset[index]
+        if not hasattr(data, "clone"):
+            raise TypeError("Named-variable datasets must return PyG Data objects")
+        return prepare_data_from_schema(data.clone(), self.schema)
+
+    def __iter__(self):
+        for index in range(len(self)):
+            yield self[index]
+
+    def __getattr__(self, name):
+        if name in {"dataset", "schema"}:
+            raise AttributeError(name)
+        return getattr(self.dataset, name)
+
+
+def build_dataset_on_rank_zero(factory):
+    """Build a shared processed dataset once before other ranks open it.
+
+    ``factory`` must construct and return the dataset. Rank zero performs any
+    download or preprocessing, broadcasts a failure message when construction
+    fails, and then enters a barrier. Other ranks call the factory only after
+    that barrier, at which point the processed cache is complete.
+    """
+    if not dist.is_initialized() or dist.get_world_size() == 1:
+        return factory()
+
+    rank = dist.get_rank()
+    dataset = None
+    error = None
+    if rank == 0:
+        try:
+            dataset = factory()
+        except Exception as exception:
+            error = f"{type(exception).__name__}: {exception}"
+
+    status = [error]
+    dist.broadcast_object_list(status, src=0)
+    if status[0] is not None:
+        raise RuntimeError(f"Rank-zero dataset preprocessing failed: {status[0]}")
+
+    dist.barrier()
+    if rank != 0:
+        dataset = factory()
+    return dataset
 
 
 class HydraDataLoader(DataLoader):
@@ -160,7 +232,8 @@ class HydraDataLoader(DataLoader):
         # log (f"Worker done: pid={os.getpid()} hostname={hostname} ibatch={ibatch}")
         data = Batch.from_data_list(batch)
         if pin_memory:
-            data = torch.utils.data._utils.pin_memory.pin_memory(data)
+            if torch.cuda.is_available():
+                data = torch.utils.data._utils.pin_memory.pin_memory(data)
         return (ibatch, data)
 
     def __iter__(self):
@@ -205,9 +278,13 @@ class HydraDataLoader(DataLoader):
 
 
 def dataset_loading_and_splitting(config: {}):
-    ##check if serialized pickle files or folders for raw files provided
-    if not list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
-        transform_raw_data_to_serialized(config["Dataset"])
+    for split_name, dataset_path in config["Dataset"]["path"].items():
+        if not dataset_path.endswith(".pkl") and not os.path.isdir(dataset_path):
+            raise ValueError(
+                f"Dataset.path.{split_name} must be a pickle dataset or a "
+                "directory of serialized PyG .pt samples; got "
+                f"{dataset_path!r}. Convert raw source files before training."
+            )
 
     ##if total datasets is provided, split the datasets and save them to pkl files and update config with pkl file locations
     if "total" in config["Dataset"]["path"].keys():
@@ -220,6 +297,8 @@ def dataset_loading_and_splitting(config: {}):
         valset,
         testset,
         batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
+        batching=config["NeuralNetwork"]["Training"].get("Batching"),
+        variables=config["Variables"],
     )
 
 
@@ -234,7 +313,80 @@ def create_dataloaders(
     group=None,
     oversampling=False,
     num_samples=None,  ## tuple of number of samples (train, val, test)
+    batching=None,
+    variables=None,
 ):
+    if variables is not None:
+        schema = (
+            variables
+            if isinstance(variables, VariableSchema)
+            else parse_variable_schema(variables)
+        )
+        trainset = SchemaPreparedDataset(trainset, schema)
+        valset = SchemaPreparedDataset(valset, schema)
+        testset = SchemaPreparedDataset(testset, schema)
+
+    if batching and batching.get("mode", "fixed") != "fixed":
+        if oversampling:
+            raise ValueError("cost-aware batching cannot be combined with oversampling")
+        if batching["mode"] != "node_budget":
+            raise ValueError(f"unsupported batching mode: {batching['mode']}")
+
+        sampler_type = CostAwareBatchSampler
+        distributed_options = {}
+        if dist.is_initialized():
+            if group is None:
+                group = dist.group.WORLD
+            if isinstance(group, dist.ProcessGroup):
+                group_size = dist.get_world_size(group=group)
+                group_rank = dist.get_rank(group=group)
+            elif isinstance(group, MPI.Comm):
+                group_size = group.Get_size()
+                group_rank = group.Get_rank()
+            else:
+                raise ValueError("Unsupported group type for distributed sampling")
+            sampler_type = DistributedCostAwareBatchSampler
+            distributed_options = {
+                "num_replicas": group_size,
+                "rank": group_rank,
+                "pad_batches": not batching.get("drop_last", False),
+            }
+
+        def make_loader(dataset, shuffle):
+            sampler_drop_last = (
+                batching.get("drop_last", False)
+                if sampler_type is CostAwareBatchSampler
+                else False
+            )
+            batch_sampler = sampler_type(
+                dataset,
+                max_cost=batching["max_nodes"],
+                max_graphs=batching.get("max_graphs"),
+                shuffle=batching.get("shuffle", shuffle),
+                seed=batching.get("seed", 0),
+                oversized_sample=batching.get("oversized_sample", "error"),
+                drop_last=sampler_drop_last,
+                **distributed_options,
+            )
+            loader_type = DataLoader
+            if dist.is_initialized() and int(
+                os.getenv("HYDRAGNN_CUSTOM_DATALOADER", "0")
+            ):
+                loader_type = HydraDataLoader
+            return loader_type(
+                dataset,
+                batch_sampler=batch_sampler,
+                num_workers=int(os.getenv("HYDRAGNN_NUM_WORKERS", "0")),
+                pin_memory=dist.is_initialized(),
+                persistent_workers=False,
+            )
+
+        return (
+            make_loader(trainset, train_sampler_shuffle),
+            make_loader(valset, val_sampler_shuffle),
+            make_loader(testset, test_sampler_shuffle),
+        )
+
     if dist.is_initialized():
         if oversampling:
             assert num_samples is not None
@@ -365,13 +517,14 @@ def load_train_val_test_sets(config, isdist=False):
     datasetname_list = []
 
     for dataset_name, raw_data_path in config["Dataset"]["path"].items():
-        if raw_data_path.endswith(".pkl"):
+        if raw_data_path.endswith(".pkl") or os.path.isdir(raw_data_path):
             files_dir = raw_data_path
         else:
-            files_dir = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}_{dataset_name}.pkl"
-        # loading serialized data and recalculating neighbourhoods depending on the radius and max num of neighbours
-        loader = SerializedDataLoader(config, dist=isdist)
-        dataset = loader.load_serialized_data(dataset_path=files_dir)
+            serialized_data_path = os.environ.get("SERIALIZED_DATA_PATH", os.getcwd())
+            files_dir = f"{serialized_data_path}/serialized_dataset/{config['Dataset']['name']}_{dataset_name}.pkl"
+        # Prepared artifacts are authoritative and are loaded without
+        # rebuilding or otherwise mutating their graph samples.
+        dataset = load_prepared_graph_dataset(files_dir)
 
         dataset_list.append(dataset)
         datasetname_list.append(dataset_name)
@@ -385,46 +538,60 @@ def load_train_val_test_sets(config, isdist=False):
     return trainset, valset, testset
 
 
-def transform_raw_data_to_serialized(config):
-    _, rank = get_comm_size_and_rank()
-
-    if rank == 0:
-        if config["format"] == "LSMS" or config["format"] == "unit_test":
-            loader = LSMS_RawDataLoader(config)
-        elif config["format"] == "CFG":
-            loader = CFG_RawDataLoader(config)
-        else:
-            raise NameError("Data format not recognized for raw data loader")
-
-        loader.load_raw_data()
-
-    if dist.is_initialized():
-        dist.barrier()
-
-
 def total_to_train_val_test_pkls(config, isdist=False):
     _, rank = get_comm_size_and_rank()
 
-    if list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
-        file_dir = config["Dataset"]["path"]["total"]
+    total_path = config["Dataset"]["path"]["total"]
+    if os.path.isdir(total_path):
+        paths = sorted(
+            os.path.join(total_path, name)
+            for name in os.listdir(total_path)
+            if name.endswith(".pt")
+        )
+        if not paths:
+            raise ValueError(f"No serialized PyG .pt samples found in {total_path}")
+        # Split lightweight paths before deserializing so the complete dataset
+        # is not materialized at once. Compositional stratification needs the
+        # samples themselves and therefore retains the eager path.
+        if config["Dataset"]["compositional_stratified_splitting"]:
+            schema = parse_variable_schema(config["Variables"])
+            dataset_total = [
+                prepare_data_from_schema(_load_trusted_pyg_sample(path), schema)
+                for path in paths
+            ]
+            samples_are_paths = False
+        else:
+            dataset_total = paths
+            samples_are_paths = True
+        minmax_node_feature = None
+        minmax_graph_feature = None
+        serialized_data_path = os.environ.get("SERIALIZED_DATA_PATH", os.getcwd())
+        serialized_dir = os.path.join(serialized_data_path, "serialized_dataset")
+        os.makedirs(serialized_dir, exist_ok=True)
     else:
-        file_dir = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}.pkl"
-    # if "total" raw datasets is provided, generate train/val/test pkl files and update config dict.
-    with open(file_dir, "rb") as f:
-        minmax_node_feature = pickle.load(f)
-        minmax_graph_feature = pickle.load(f)
-        dataset_total = pickle.load(f)
+        if total_path.endswith(".pkl"):
+            file_dir = total_path
+        else:
+            serialized_data_path = os.environ.get("SERIALIZED_DATA_PATH", os.getcwd())
+            file_dir = f"{serialized_data_path}/serialized_dataset/{config['Dataset']['name']}.pkl"
+        with open(file_dir, "rb") as f:
+            minmax_node_feature = pickle.load(f)
+            minmax_graph_feature = pickle.load(f)
+            dataset_total = pickle.load(f)
+        serialized_dir = os.path.dirname(file_dir)
+        samples_are_paths = False
 
     trainset, valset, testset = split_dataset(
         dataset=dataset_total,
         perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
         stratify_splitting=config["Dataset"]["compositional_stratified_splitting"],
     )
-    serialized_dir = os.path.dirname(file_dir)
     config["Dataset"]["path"] = {}
     for dataset_type, dataset in zip(
         ["train", "validate", "test"], [trainset, valset, testset]
     ):
+        if samples_are_paths:
+            dataset = [_load_trusted_pyg_sample(path) for path in dataset]
         serial_data_name = config["Dataset"]["name"] + "_" + dataset_type + ".pkl"
         config["Dataset"]["path"][dataset_type] = (
             serialized_dir + "/" + serial_data_name
@@ -444,3 +611,13 @@ def total_to_train_val_test_pkls(config, isdist=False):
 
     if dist.is_initialized():
         dist.barrier()
+
+
+def _load_trusted_pyg_sample(path):
+    """Load a trusted HydraGNN/PyG sample.
+
+    PyTorch ``.pt`` files use pickle-backed deserialization and can execute
+    code. Only files produced by a trusted HydraGNN workflow should be passed
+    here; dataset directories from untrusted sources must not be loaded.
+    """
+    return torch.load(path, weights_only=False)

@@ -1,21 +1,23 @@
-import os, json
-import sys
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
+import os
+import torch  # noqa: F401  (must load before mpi4py)
 from mpi4py import MPI
 import argparse
 
-import torch
 import numpy as np
 
-import hydragnn
-from hydragnn.utils.distributed import nsplit
-from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
+from hydragnn.distributed import nsplit
+from hydragnn.data.adiosdataset import AdiosWriter, AdiosDataset
 from tqdm import tqdm
-
-# This import requires having installed the package mpi_list
-try:
-    from mpi_list import Context, DFM
-except ImportError:
-    print("mpi_list requires having installed: https://github.com/frobnitzem/mpi_list")
 
 
 def solve_least_squares_svd(A, b):

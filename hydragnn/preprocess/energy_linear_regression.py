@@ -1,13 +1,22 @@
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 import os
 from mpi4py import MPI
 import argparse
 import numpy as np
 
-from hydragnn.utils.distributed import nsplit
-from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
+from hydragnn.distributed import nsplit
+from hydragnn.data.adiosdataset import AdiosWriter, AdiosDataset
 from tqdm import tqdm
 import logging
-
 
 logger = logging.getLogger("energy_linear_transform")
 logging.basicConfig(

@@ -1,10 +1,19 @@
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 import os, json
 import logging
 import sys
+import torch
 from mpi4py import MPI
 import argparse
-
-import torch
 
 # FIX random seed
 random_state = 0
@@ -14,23 +23,21 @@ import numpy as np
 
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-from hydragnn.utils.model import print_model, print_optimizer
-from hydragnn.utils.datasets.distdataset import DistDataset
-from hydragnn.utils.datasets.pickledataset import SimplePickleDataset
+from hydragnn.models.utils import print_model
+from hydragnn.data.distdataset import DistDataset
 
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 from hydragnn.utils.print.print_utils import log, log0
-from hydragnn.utils.distributed import nsplit
-from hydragnn.utils.distributed import get_device
+from hydragnn.distributed import nsplit
+from hydragnn.distributed import get_device
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosDataset, adios2_open
+    from hydragnn.data.adiosdataset import AdiosDataset, adios2_open
 except ImportError:
     pass
 
-from scipy.interpolate import BSpline, make_interp_spline
-import adios2 as ad2
+from scipy.interpolate import make_interp_spline
 
 import torch.distributed as dist
 from torch.distributed.device_mesh import init_device_mesh, DeviceMesh
@@ -137,15 +144,7 @@ if __name__ == "__main__":
     with open(input_filename, "r") as f:
         config = json.load(f)
     verbosity = config["Verbosity"]["level"]
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
-    var_config["graph_feature_names"] = graph_feature_names
-    var_config["graph_feature_dims"] = graph_feature_dims
-    var_config["node_feature_names"] = node_feature_names
-    var_config["node_feature_dims"] = node_feature_dims
-    if args.parameters["mpnn_type"] == "MACE":
-        # Currently, MACE only supports atomic number node attributes, see hydragnn/models/MACEStack.py
-        var_config["input_node_features"] = [0]
-
+    var_config = config["Variables"]
     # Update the config dictionary with the suggested hyperparameters
     config["NeuralNetwork"]["Architecture"]["mpnn_type"] = args.parameters["mpnn_type"]
     config["NeuralNetwork"]["Architecture"]["hidden_dim"] = args.parameters[
@@ -190,7 +189,7 @@ if __name__ == "__main__":
 
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
+    comm_size, rank = hydragnn.distributed.setup_ddp()
     ##################################################################################################################
 
     if rank == 0:
@@ -213,7 +212,7 @@ if __name__ == "__main__":
 
     log_name = "GFM" if args.log is None else args.log
     hydragnn.utils.print.setup_log(log_name)
-    writer = hydragnn.utils.model.get_summary_writer(log_name)
+    writer = hydragnn.models.utils.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
@@ -523,7 +522,11 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset,
         valset,
         testset,
@@ -541,7 +544,7 @@ if __name__ == "__main__":
 
     if args.ddstore:
         train_loader.dataset.ddstore.epoch_begin()
-    config = hydragnn.utils.input_config_parsing.update_config(
+    config = hydragnn.config.update_config(
         config, train_loader, val_loader, test_loader
     )
     if args.ddstore:
@@ -549,7 +552,7 @@ if __name__ == "__main__":
     ## Good to sync with everyone right after DDStore setup
     comm.Barrier()
 
-    hydragnn.utils.input_config_parsing.save_config(config, log_name)
+    hydragnn.config.save_config(config, log_name)
 
     timer.stop()
 
@@ -577,7 +580,7 @@ if __name__ == "__main__":
         )
     else:
         ## Wrap the model with DDP
-        model = hydragnn.utils.distributed.get_distributed_model(
+        model = hydragnn.distributed.get_distributed_model(
             model, verbosity, find_unused_parameters=True
         )
         optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
@@ -588,7 +591,7 @@ if __name__ == "__main__":
     # Print details of neural network architecture
     print_model(model)
 
-    hydragnn.utils.model.load_existing_model_config(
+    hydragnn.models.utils.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
 
@@ -609,14 +612,14 @@ if __name__ == "__main__":
             test_loader,
             writer,
             scheduler,
-            config["NeuralNetwork"],
+            config,
             log_name,
             verbosity,
             create_plots=False,
             precision=precision,
         )
 
-    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.models.utils.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
     if writer is not None:
         writer.close()

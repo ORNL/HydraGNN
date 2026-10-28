@@ -1,3 +1,13 @@
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 import os, sys
 
 import torch
@@ -7,12 +17,6 @@ torch.backends.cudnn.enabled = False
 # FIX random seed
 random_state = 0
 torch.manual_seed(random_state)
-
-# deprecated in torch_geometric 2.0
-try:
-    from torch_geometric.loader import DataLoader
-except:
-    from torch_geometric.data import DataLoader
 
 import pandas as pd
 import subprocess
@@ -125,10 +129,10 @@ if __name__ == "__main__":
     log_name = f"gfm-{SLURM_JOB_ID}"
 
     # Choose the sampler (e.g., TPESampler or RandomSampler)
-    from deephyper.evaluator import Evaluator, ProcessPoolEvaluator, queued
+    from deephyper.evaluator import ProcessPoolEvaluator, queued
     from deephyper.problem import HpProblem
     from deephyper.search.hps import CBO
-    from hydragnn.utils.deephyper import read_node_list
+    from hydragnn.utils.hpo.deephyper import read_node_list
 
     # define the variable you want to optimize
     problem = HpProblem()

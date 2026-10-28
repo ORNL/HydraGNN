@@ -1,3 +1,13 @@
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 """
 This is a tracer package to act as a wrapper to execute gptl and/or scorep.
 """
@@ -12,7 +22,7 @@ from mpi4py import MPI
 
 from collections import defaultdict
 import numpy as np
-from hydragnn.utils.distributed import get_comm_size_and_rank, get_local_rank
+from hydragnn.distributed import get_comm_size_and_rank, get_local_rank
 import os
 
 
@@ -77,7 +87,6 @@ try:
             self.hist = dict()
             self.last = dict()
 
-
 except:
     pass
 
@@ -103,7 +112,6 @@ try:
 
         def reset(self):
             pass
-
 
 except:
     pass
@@ -178,7 +186,6 @@ try:
                     file.write(
                         f"{k}, {len(v)}, {mean_energy}, {total_energy}, {median_energy}, {stdDev}, {max_energy}, {min_energy}\n"
                     )
-
 
 except:
     pass
@@ -277,7 +284,6 @@ try:
                         f"{k}, {len(v)}, {mean_energy}, {total_energy}, {median_energy}, {stdDev}, {max_energy}, {min_energy}\n"
                     )
 
-
 except:
     pass
 
@@ -352,7 +358,6 @@ try:
                     file.write(
                         f"{k}, {len(v)}, {mean_energy}, {total_energy}, {median_energy}, {stdDev}, {max_energy}, {min_energy}\n"
                     )
-
 
 except:
     pass

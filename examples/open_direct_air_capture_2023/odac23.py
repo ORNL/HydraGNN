@@ -1,23 +1,34 @@
-import os, random, torch, glob, sys, pickle, shutil, traceback
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
+import os
+import random
+import torch
+import glob
+import shutil
+import traceback
 import queue, threading
 import numpy as np
 from mpi4py import MPI
-from yaml import full_load
 
-from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
-from torch_geometric.transforms import Distance, Spherical, LocalCartesian
+from hydragnn.data.abstractbasedataset import AbstractBaseDataset
+from torch_geometric.transforms import Distance
 from torch_geometric.data import Data
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
     RadiusGraph,
     RadiusGraphPBC,
     PBCDistance,
-    PBCLocalCartesian,
     pbc_as_tensor,
-    gather_deg,
     should_skip_self_loops,
 )
-from hydragnn.utils.distributed import nsplit
-
+from hydragnn.distributed import nsplit
 
 # transform_coordinates = Spherical(norm=False, cat=False)
 # transform_coordinates = LocalCartesian(norm=False, cat=False)
@@ -29,16 +40,12 @@ transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 # charge and spin are constant across MPTrj dataset
 charge = 0.0  # neutral
 spin = 1.0  # singlet
-graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
 
 import torch
 from torch_geometric.data import Data, Dataset
 from ase.io import read
 from ase import Atoms
 import os
-from typing import List
-
-from hydragnn.utils.print.print_utils import iterate_tqdm, log
 
 
 class ExtendedXYZDataset(Dataset):
@@ -157,7 +164,7 @@ class ODAC2023(AbstractBaseDataset):
                 # dataset = ExtendedXYZDataset(total_file_list[index])
                 dataset = ExtendedXYZDataset(dataitem)
             except Exception as e:
-                print(f"Encountered {e} for {total_file_list[index]}. Ignoring ...")
+                print(f"Encountered {e} for {dataitem}. Ignoring ...")
                 os.remove(dataitem)
                 continue
 
@@ -202,7 +209,7 @@ class ODAC2023(AbstractBaseDataset):
 
             energy = torch.tensor(
                 dataset.get(index).get_total_energy(), dtype=torch.float32
-            ).unsqueeze(0)
+            ).reshape(1, 1)
 
             energy_per_atom = energy.detach().clone() / natoms
             forces = torch.tensor(dataset.get(index).get_forces(), dtype=torch.float32)
@@ -238,8 +245,6 @@ class ODAC2023(AbstractBaseDataset):
                 cell = torch.eye(3, dtype=torch.float32)
                 pbc = torch.tensor([False, False, False], dtype=torch.bool)
 
-            x = torch.cat([atomic_numbers, pos, forces], dim=1)
-
             # Calculate chemical composition
             atomic_number_list = atomic_numbers.tolist()
             assert len(atomic_number_list) == natoms
@@ -255,20 +260,13 @@ class ODAC2023(AbstractBaseDataset):
                 pbc=pbc,
                 edge_index=None,
                 edge_attr=None,
-                atomic_numbers=atomic_numbers,
+                atomic_numbers=atomic_numbers.long().view(-1),
                 chemical_composition=chemical_composition,
                 smiles_string=None,
-                x=x,
                 energy=energy,
                 energy_per_atom=energy_per_atom,
                 forces=forces,
-                graph_attr=graph_attr,
             )
-
-            if self.energy_per_atom:
-                data_object.y = data_object.energy_per_atom
-            else:
-                data_object.y = data_object.energy
 
             if data_object.pbc.any():
                 try:
@@ -286,7 +284,7 @@ class ODAC2023(AbstractBaseDataset):
 
             # Skip samples that still contain self-loops
             if should_skip_self_loops(data_object, context="odac23"):
-                continue
+                return
 
             # Default edge_shifts for when radius_graph_pbc is not activated
             if not hasattr(data_object, "edge_shifts"):

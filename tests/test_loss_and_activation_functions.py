@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# Copyright (c) 2024, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -15,6 +15,9 @@ import pytest
 import shutil
 
 import hydragnn, tests
+from tests._training_workflow import train_and_checkpoint
+
+pytestmark = pytest.mark.mpi
 
 
 # Loss function unit test called by pytest wrappers.
@@ -22,7 +25,7 @@ import hydragnn, tests
 def unittest_loss_and_activation_functions(
     activation_function_type, loss_function_type, ci_input, overwrite_data=False
 ):
-    world_size, rank = hydragnn.utils.distributed.get_comm_size_and_rank()
+    world_size, rank = hydragnn.distributed.get_comm_size_and_rank()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
@@ -53,7 +56,12 @@ def unittest_loss_and_activation_functions(
                 + dataset_name
                 + ".pkl"
             )
-        if os.path.exists(pkl_file):
+        required_names = {
+            spec["name"]
+            for group in ("inputs", "outputs")
+            for spec in config["Variables"][group]
+        }
+        if tests.prepared_pickle_has_attributes(pkl_file, required_names):
             config["Dataset"]["path"][dataset_name] = pkl_file
 
     if rank == 0:
@@ -88,23 +96,23 @@ def unittest_loss_and_activation_functions(
                         * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
                         * 0.5
                     )
-                if not os.listdir(data_path):
-                    tests.deterministic_graph_data(
-                        data_path, number_configurations=num_samples
-                    )
+                tests.ensure_deterministic_graph_data(data_path, num_samples)
 
     config["NeuralNetwork"]["Training"]["loss_function_type"] = loss_function_type
     config["NeuralNetwork"]["Training"]["num_epoch"] = 2
 
     # Make sure training works with each loss function.
-    hydragnn.run_training(config)
+    train_loader, val_loader, test_loader = (
+        hydragnn.preprocess.dataset_loading_and_splitting(config)
+    )
+    train_and_checkpoint(config, train_loader, val_loader, test_loader)
 
 
 # Test all supported loss function types. Separate input file because only 2 steps are run.
 @pytest.mark.parametrize(
     "loss_function_type", ["mse", "mae", "rmse", "GaussianNLLLoss"]
 )
-def pytest_loss_functions(loss_function_type, ci_input="ci.json", overwrite_data=False):
+def test_loss_functions(loss_function_type, ci_input="ci.json", overwrite_data=False):
     if loss_function_type == "GaussianNLLLoss":
         ci_input = "ci_multihead.json"
     unittest_loss_and_activation_functions(
@@ -115,9 +123,18 @@ def pytest_loss_functions(loss_function_type, ci_input="ci.json", overwrite_data
 # Test all supported activation function types.
 @pytest.mark.parametrize(
     "activation_function_type",
-    ["relu", "selu", "prelu", "elu", "lrelu_01", "lrelu_025", "lrelu_05"],
+    [
+        "relu",
+        "silu",
+        "selu",
+        "prelu",
+        "elu",
+        "lrelu_01",
+        "lrelu_025",
+        "lrelu_05",
+    ],
 )
-def pytest_activation_functions_multihead(
+def test_activation_functions_multihead(
     activation_function_type, ci_input="ci_multihead.json", overwrite_data=False
 ):
     unittest_loss_and_activation_functions(
@@ -128,9 +145,18 @@ def pytest_activation_functions_multihead(
 # Test all supported activation function types.
 @pytest.mark.parametrize(
     "activation_function_type",
-    ["relu", "selu", "prelu", "elu", "lrelu_01", "lrelu_025", "lrelu_05"],
+    [
+        "relu",
+        "silu",
+        "selu",
+        "prelu",
+        "elu",
+        "lrelu_01",
+        "lrelu_025",
+        "lrelu_05",
+    ],
 )
-def pytest_activation_functions_vectoroutput(
+def test_activation_functions_vectoroutput(
     activation_function_type, ci_input="ci_vectoroutput.json", overwrite_data=False
 ):
     unittest_loss_and_activation_functions(

@@ -1,3 +1,13 @@
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 import os, sys
 
 import math
@@ -9,17 +19,10 @@ torch.backends.cudnn.enabled = False
 random_state = 0
 torch.manual_seed(random_state)
 
-# deprecated in torch_geometric 2.0
-try:
-    from torch_geometric.loader import DataLoader
-except:
-    from torch_geometric.data import DataLoader
-
 import pandas as pd
 import subprocess
 import re
 import argparse
-import time
 import glob
 
 pd.options.display.max_columns = None
@@ -43,6 +46,7 @@ MULTI_MODEL_LIST = os.environ["MULTI_MODEL_LIST"]
 NUM_EPOCH = int(os.environ["NUM_EPOCH"])
 BATCH_SIZE = int(os.environ["BATCH_SIZE"])
 HYDRAGNN_MAX_NUM_BATCH = int(os.environ["HYDRAGNN_MAX_NUM_BATCH"])
+PRECISION = os.environ.get("PRECISION", "fp64")
 
 
 def to_float(x):
@@ -89,7 +93,7 @@ def run(trial, dequed=None):
             f"--inputfile=gfm_mlip.json",
             f"--multi",
             f"--ddstore",
-            f"--precision=fp64",
+            f"--precision={PRECISION}",
             f"--multi_model_list={MULTI_MODEL_LIST}",
             f"--num_epoch={NUM_EPOCH}",
             f"--batch_size={BATCH_SIZE}",
@@ -128,17 +132,28 @@ def run(trial, dequed=None):
     try:
         result = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
         fout = open(f"{DEEPHYPER_LOG_DIR}/error_{SLURM_JOB_ID}_{trial.id}.txt", "r")
+        energy_per_atom_val_loss = None
         while True:
             line = fout.readline()
-            if "Tasks Val Loss" in line:
-                nums = re.findall(num_pattern, line, flags=re.IGNORECASE)
-                ## Task Val Loss: [a, b, c]. The output must be -(b+c)/2
-                output = -0.5 * (to_float(nums[1]) + to_float(nums[2]))
-                print(
-                    f"Val losses: {-to_float(nums[1])}, {-to_float(nums[2])} Average: {output}",
-                    flush=True,
-                    file=f,
+            if "Energy Per Atom Train Loss" in line:
+                match = re.search(
+                    rf"Val Loss:\s*({num_pattern})", line, flags=re.IGNORECASE
                 )
+                if match:
+                    energy_per_atom_val_loss = to_float(match.group(1))
+            elif "Forces Train Loss" in line:
+                match = re.search(
+                    rf"Val Loss:\s*({num_pattern})", line, flags=re.IGNORECASE
+                )
+                if match and energy_per_atom_val_loss is not None:
+                    force_val_loss = to_float(match.group(1))
+                    output = -0.5 * (energy_per_atom_val_loss + force_val_loss)
+                    print(
+                        f"Val losses: {-energy_per_atom_val_loss}, "
+                        f"{-force_val_loss} Average: {output}",
+                        flush=True,
+                        file=f,
+                    )
             if not line:
                 break
         fout.close()
@@ -205,24 +220,24 @@ if __name__ == "__main__":
     # ~10B params target (rough): problem.add_hyperparameter((4000, 600), "dim_headlayers")
     # ~100B params target (rough): problem.add_hyperparameter((6000, 9000), "dim_headlayers")
 
-    hyperparameters["force_weight"] = [10.0, 50.0, 100.0]
+    hyperparameters["force_loss_weight"] = [10.0, 50.0, 100.0]
     hyperparameters["learning_rate"] = (1e-5, 1e-3)
     hyperparameters["mpnn_type"] = mpnn_type_list
 
     ## Model specific hyperparameters
     if len(mpnn_type_list) == 1:
         if mpnn_type_list[0] == "EGNN":
-            hyperparameters["force_weight"] = (10.0, 1000.0)
+            hyperparameters["force_loss_weight"] = (10.0, 1000.0)
             hyperparameters["learning_rate"] = (1e-5, 3e-3)
         elif mpnn_type_list[0] == "SchNet":
-            hyperparameters["force_weight"] = (10.0, 1000.0)
+            hyperparameters["force_loss_weight"] = (10.0, 1000.0)
             hyperparameters["learning_rate"] = (1e-5, 3e-3)
 
             hyperparameters["num_filters"] = (6, 300)
             hyperparameters["num_gaussians"] = (3, 100)
         elif mpnn_type_list[0] == "DimeNet":
             hyperparameters["hidden_dim"] = (10, 100)
-            hyperparameters["force_weight"] = (10.0, 1000.0)
+            hyperparameters["force_loss_weight"] = (10.0, 1000.0)
             hyperparameters["learning_rate"] = (1e-5, 3e-3)
 
             hyperparameters["basis_emb_size"] = (8, 200)
@@ -235,7 +250,7 @@ if __name__ == "__main__":
             hyperparameters["num_spherical"] = (2, 8)
         elif mpnn_type_list[0] == "MACE":
             hyperparameters["hidden_dim"] = (100, 1000)
-            hyperparameters["force_weight"] = (10.0, 1000.0)
+            hyperparameters["force_loss_weight"] = (10.0, 1000.0)
             hyperparameters["learning_rate"] = (1e-5, 3e-3)
 
             hyperparameters["radial_type"] = ["bessel", "gaussian", "chebyshev"]
@@ -246,19 +261,41 @@ if __name__ == "__main__":
             hyperparameters["correlation"] = (2, 3)
         elif mpnn_type_list[0] == "PAINN":
             hyperparameters["hidden_dim"] = (100, 1000)
-            hyperparameters["force_weight"] = (10.0, 1000.0)
+            hyperparameters["force_loss_weight"] = (10.0, 1000.0)
             hyperparameters["learning_rate"] = (1e-5, 3e-3)
 
             hyperparameters["num_radial"] = (3, 12)
         elif mpnn_type_list[0] == "EGNN":
-            hyperparameters["force_weight"] = (10.0, 1000.0)
+            hyperparameters["force_loss_weight"] = (10.0, 1000.0)
             hyperparameters["learning_rate"] = (1e-5, 3e-3)
         elif mpnn_type_list[0] == "PNAEq":
             hyperparameters["hidden_dim"] = (100, 1000)
-            hyperparameters["force_weight"] = (10.0, 1000.0)
+            hyperparameters["force_loss_weight"] = (10.0, 1000.0)
             hyperparameters["learning_rate"] = (1e-5, 3e-3)
 
             hyperparameters["num_radial"] = (3, 12)
+        elif mpnn_type_list[0] == "AllScAIP":
+            # EScAIP/AllScAIP is an invariant attention model; scale attention width
+            # and depth rather than rotation order (Qu & Krishnapriyan, NeurIPS 2024).
+            # hidden_dim is restricted to multiples of 16 so it stays divisible by any
+            # allscaip_num_heads in {4, 8, 16}.
+            hyperparameters["hidden_dim"] = [128, 256, 384, 512, 768]
+            hyperparameters["num_conv_layers"] = (4, 8)
+            hyperparameters["allscaip_num_heads"] = [4, 8, 16]
+            hyperparameters["max_neighbours"] = (20, 30)
+            hyperparameters["force_loss_weight"] = [10.0, 50.0, 100.0]
+            hyperparameters["learning_rate"] = (1e-4, 1e-3)
+        elif mpnn_type_list[0] == "UMA":
+            # UMA (equivariant, eSEN backbone): keep lmax/mmax fixed (=2, set in the
+            # training script) and add capacity via sphere_channels (hidden_dim) and
+            # edge_channels rather than lmax. Dense variant "S" is used (MoLE only pays
+            # off for multi-task/multi-dataset training).
+            hyperparameters["hidden_dim"] = [128, 256, 384, 512]
+            hyperparameters["num_conv_layers"] = (4, 8)
+            hyperparameters["uma_edge_channels"] = [64, 128, 256]
+            hyperparameters["max_neighbours"] = (20, 30)
+            hyperparameters["force_loss_weight"] = [10.0, 50.0, 100.0]
+            hyperparameters["learning_rate"] = (1e-4, 1e-3)
         else:
             raise ValueError(f"Unsupported MPNN type: {mpnn_type_list[0]}")
 

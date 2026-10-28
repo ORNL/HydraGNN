@@ -1,8 +1,18 @@
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 # pylint: disable=stop-iteration-return
 
 import h5py
 
-from hydragnn.utils.distributed import nsplit
+from hydragnn.distributed import nsplit
 from hydragnn.utils.print.print_utils import iterate_tqdm
 
 REFERENCE_ENERGIES = {

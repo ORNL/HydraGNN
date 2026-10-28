@@ -1,3 +1,13 @@
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 """
 Copyright (c) Facebook, Inc. and its affiliates.
 
@@ -13,13 +23,13 @@ import numpy as np
 
 import torch
 from torch_geometric.data import Data
-from torch_geometric.transforms import Distance, Spherical, LocalCartesian
+from torch_geometric.data import InMemoryDataset
+from torch_geometric.transforms import Distance
 
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
     RadiusGraph,
     RadiusGraphPBC,
     PBCDistance,
-    PBCLocalCartesian,
     pbc_as_tensor,
 )
 
@@ -33,7 +43,6 @@ transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 # charge and spin are constant across Open Catalyst 2020 dataset
 charge = 0.0  # neutral
 spin = 1.0  # singlet
-graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
 
 
 class AtomsToGraphs:
@@ -93,7 +102,7 @@ class AtomsToGraphs:
         """
 
         # set the atomic numbers, positions, and cell
-        atomic_numbers = torch.Tensor(atoms.get_atomic_numbers()).unsqueeze(1)
+        atomic_numbers = torch.tensor(atoms.get_atomic_numbers(), dtype=torch.long)
         positions = torch.Tensor(atoms.get_positions())
         natoms = torch.IntTensor([positions.shape[0]])
         # initialized to torch.zeros(natoms) if tags missing.
@@ -118,12 +127,10 @@ class AtomsToGraphs:
             pbc = torch.tensor([False, False, False], dtype=torch.bool)
 
         energy = atoms.get_potential_energy(apply_constraint=False)
-        energy_tensor = torch.tensor(energy).to(dtype=torch.float32).unsqueeze(0)
+        energy_tensor = torch.tensor(energy).to(dtype=torch.float32).reshape(1, 1)
         energy_per_atom_tensor = energy_tensor.detach().clone() / natoms
 
         forces = torch.Tensor(atoms.get_forces(apply_constraint=False))
-
-        x = torch.cat((atomic_numbers, positions, forces), dim=1)
 
         # put the minimum data in torch geometric data object
         data_object = Data(
@@ -135,18 +142,11 @@ class AtomsToGraphs:
             edge_index=None,
             edge_attr=None,
             atomic_numbers=atomic_numbers,
-            x=x,
             energy=energy_tensor,
             energy_per_atom=energy_per_atom_tensor,
             forces=forces,
             tags=tags,
-            graph_attr=graph_attr,
         )
-
-        if energy_per_atom:
-            data_object.y = data_object.energy_per_atom
-        else:
-            data_object.y = data_object.energy
 
         if data_object.pbc.any():
             try:
@@ -223,7 +223,7 @@ class AtomsToGraphs:
                 data_list.append(data)
 
         if collate_and_save:
-            data, slices = collate(data_list)
+            data, slices = InMemoryDataset.collate(data_list)
             torch.save((data, slices), processed_file_path)
 
         return data_list

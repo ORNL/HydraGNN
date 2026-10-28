@@ -1,10 +1,19 @@
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 import os, json, copy
 import logging
 import sys
+import torch
 from mpi4py import MPI
 import argparse
-
-import torch
 
 # FIX random seed
 random_state = 0
@@ -13,19 +22,19 @@ torch.manual_seed(random_state)
 import numpy as np
 
 import hydragnn
+from hydragnn.domain_losses import uses_interatomic_potential
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-from hydragnn.utils.model import print_model, print_optimizer
-from hydragnn.utils.datasets.distdataset import DistDataset
-from hydragnn.utils.datasets.pickledataset import SimplePickleDataset
+from hydragnn.models.utils import print_model
+from hydragnn.data.distdataset import DistDataset
 
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 from hydragnn.utils.print.print_utils import log, log0
-from hydragnn.utils.distributed import nsplit
-from hydragnn.utils.distributed import get_device
+from hydragnn.distributed import nsplit
+from hydragnn.distributed import get_device
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import (
+    from hydragnn.data.adiosdataset import (
         AdiosDataset,
         AdiosMultiDataset,
         adios2_open,
@@ -33,11 +42,10 @@ try:
 except ImportError:
     pass
 
-from scipy.interpolate import BSpline, make_interp_spline
-import adios2 as ad2
+from scipy.interpolate import make_interp_spline
 
 import torch.distributed as dist
-from torch.distributed.device_mesh import init_device_mesh, DeviceMesh
+from torch.distributed.device_mesh import init_device_mesh
 from hydragnn.models import MultiTaskModelMP, DualOptimizer
 from contextlib import nullcontext
 import re
@@ -140,10 +148,10 @@ if __name__ == "__main__":
         help="Precision to use; defaults to fp64 and overrides the JSON unless explicitly set",
     )
     parser.add_argument(
-        "--force_weight",
+        "--force_loss_weight",
         type=float,
         default=None,
-        help="Override Architecture.force_weight; when omitted the JSON value is used",
+        help="Override Training.loss.supervised force-term weight.",
     )
     parser.add_argument(
         "--learning_rate",
@@ -176,8 +184,23 @@ if __name__ == "__main__":
     parser.add_argument("--max_ell", type=int, help="max_ell", default=None)
     parser.add_argument("--node_max_ell", type=int, help="node_max_ell", default=None)
     parser.add_argument("--correlation", type=int, help="correlation", default=None)
+    parser.add_argument(
+        "--max_neighbours", type=int, help="max_neighbours", default=None
+    )
+    parser.add_argument(
+        "--allscaip_num_heads", type=int, help="allscaip_num_heads", default=None
+    )
+    parser.add_argument(
+        "--uma_edge_channels", type=int, help="uma_edge_channels", default=None
+    )
     parser.add_argument("--nvme", action="store_true", help="use NVME")
     parser.add_argument("--startfrom", type=str, help="startfrom", default=None)
+    parser.add_argument(
+        "--datadir",
+        type=str,
+        help="path to directory containing .bp dataset files",
+        default=None,
+    )
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -210,7 +233,9 @@ if __name__ == "__main__":
     node_feature_names = ["atomic_number", "cartesian_coordinates", "forces"]
     node_feature_dims = [1, 3, 3]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
-    datadir = os.path.join(dirpwd, "dataset")
+    datadir = (
+        args.datadir if args.datadir is not None else os.path.join(dirpwd, "dataset")
+    )
     ##################################################################################################################
     input_filename = os.path.join(dirpwd, args.inputfile)
     ##################################################################################################################
@@ -218,19 +243,18 @@ if __name__ == "__main__":
     with open(input_filename, "r") as f:
         config = json.load(f)
     verbosity = config["Verbosity"]["level"]
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
-    var_config["graph_feature_names"] = graph_feature_names
-    var_config["graph_feature_dims"] = graph_feature_dims
-    var_config["node_feature_names"] = node_feature_names
-    var_config["node_feature_dims"] = node_feature_dims
+    var_config = config["Variables"]
     # Force use of atomic number only; MACE stack expects this
-    var_config["input_node_features"] = [0]
 
     ## If command line argument is given, it will override. Otherwise, use values in the config file.
     set_param_value("mpnn_type")
     set_param_value("hidden_dim")
     set_param_value("num_conv_layers")
-    set_param_value("force_weight")
+    if args.force_loss_weight is not None:
+        terms = config["NeuralNetwork"]["Training"]["loss"]["supervised"]["terms"]
+        next(term for term in terms if term["variable"] == "forces")[
+            "weight"
+        ] = args.force_loss_weight
 
     set_param_value("num_filters")
     set_param_value("num_gaussians")
@@ -247,6 +271,19 @@ if __name__ == "__main__":
     set_param_value("max_ell")
     set_param_value("node_max_ell")
     set_param_value("correlation")
+    set_param_value("max_neighbours")
+    set_param_value("allscaip_num_heads")
+    set_param_value("uma_edge_channels")
+
+    # AllScAIP (EScAIP) is invariant and learns equivariance from data; UMA is
+    # equivariant with a fixed low rotation order (lmax=2, mmax=2 by default).
+    _mpnn_type = config["NeuralNetwork"]["Architecture"]["mpnn_type"]
+    if _mpnn_type == "AllScAIP":
+        config["NeuralNetwork"]["Architecture"]["equivariance"] = False
+    elif _mpnn_type == "UMA":
+        config["NeuralNetwork"]["Architecture"]["equivariance"] = True
+        if args.parameters["max_ell"] is None:
+            config["NeuralNetwork"]["Architecture"]["max_ell"] = 2
 
     if not args.multi_model_list or args.multi_model_list.strip() == "":
         logging.warning(
@@ -319,7 +356,16 @@ if __name__ == "__main__":
                 head_type
             ] = head_branches
 
-    equivariant_models = ["EGNN", "SchNet", "DimeNet", "MACE", "PAINN", "PNAEq"]
+    equivariant_models = [
+        "EGNN",
+        "SchNet",
+        "DimeNet",
+        "MACE",
+        "PAINN",
+        "PNAEq",
+        "AllScAIP",
+        "UMA",
+    ]
     assert (
         config["NeuralNetwork"]["Architecture"]["mpnn_type"] in equivariant_models
     ), f"mpnn_type must be one of {equivariant_models} for this workflow"
@@ -355,7 +401,7 @@ if __name__ == "__main__":
 
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
+    comm_size, rank = hydragnn.distributed.setup_ddp()
     ##################################################################################################################
 
     if rank == 0:
@@ -378,7 +424,7 @@ if __name__ == "__main__":
 
     log_name = "GFM" if args.log is None else args.log
     hydragnn.utils.print.setup_log(log_name, filename=args.logfilename)
-    writer = hydragnn.utils.model.get_summary_writer(log_name)
+    writer = hydragnn.models.utils.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
@@ -428,9 +474,7 @@ if __name__ == "__main__":
             ndata_list = list()
             pna_deg_list = list()
             for model in modellist:
-                fname = os.path.join(
-                    os.path.dirname(__file__), "./dataset/%s-v2.bp" % model
-                )
+                fname = os.path.join(datadir, "%s-v2.bp" % model)
                 with adios2_open(fname, "r", MPI.COMM_SELF) as f:
                     f.__next__()
                     ndata = f.read_attribute("trainset/ndata").item()
@@ -598,7 +642,7 @@ if __name__ == "__main__":
         local_comm_rank = local_comm.Get_rank()
         local_comm_size = local_comm.Get_size()
 
-        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s-v2.bp" % mymodel)
+        fname = os.path.join(datadir, "%s-v2.bp" % mymodel)
 
         ## FIXME: only for Frontier NVME
         bbpath = f"/mnt/bb/{os.getenv('USER')}"
@@ -626,7 +670,7 @@ if __name__ == "__main__":
                 for file in os.listdir(fname):
                     total_size += os.path.getsize(os.path.join(fname, file))
 
-                if total_size < 1.5 * 1024 ** 4:
+                if total_size < 1.5 * 1024**4:
                     print(
                         f"Copying {fname} to local NVME (size: {total_size/1024**4:.2f} TB)"
                     )
@@ -700,10 +744,29 @@ if __name__ == "__main__":
             keys=common_variable_names,
         )
         ## FIXME
+        dataset_name_dict = {
+            "alexandria": torch.tensor([[0]]),
+            "ani1x": torch.tensor([[1]]),
+            "mptrj": torch.tensor([[2]]),
+            "oc2020": torch.tensor([[3]]),
+            "oc2022": torch.tensor([[4]]),
+            "oc25": torch.tensor([[5]]),
+            "odac23": torch.tensor([[6]]),
+            "omat24": torch.tensor([[7]]),
+            "omol25": torch.tensor([[8]]),
+            "omol25-neutral": torch.tensor([[9]]),
+            "omol25-non-neutral": torch.tensor([[10]]),
+            "opoly2026": torch.tensor([[11]]),
+            "nabla2dft": torch.tensor([[12]]),
+            "qcml": torch.tensor([[13]]),
+            "qm7x": torch.tensor([[14]]),
+            "transition1x": torch.tensor([[15]]),
+        }
+        assert (
+            trainset.dataset_name in dataset_name_dict
+        ), f"{trainset.dataset_name} not in {dataset_name_dict.keys()}"
         for ds in [trainset, valset, testset]:
-            ds.dataset_name_dict = dict()
-            for i, name in enumerate(modellist):
-                ds.dataset_name_dict[name.lower()] = torch.tensor([[i]])
+            ds.dataset_name_dict = dataset_name_dict
 
         ## Set local set
         num_samples_list = list()
@@ -826,9 +889,7 @@ if __name__ == "__main__":
         ## No DDStore. Each process opens multiple adios files.
         filename_list = list()
         for model in modellist:
-            fname = os.path.join(
-                os.path.dirname(__file__), "./dataset/%s-v2.bp" % model
-            )
+            fname = os.path.join(datadir, "%s-v2.bp" % model)
             filename_list.append(fname)
 
         kwargs = {"var_config": var_config, "keys": common_variable_names}
@@ -860,7 +921,11 @@ if __name__ == "__main__":
     elif args.ddstore and args.ddstore_width is not None:
         group = trainset.ddstore_comm
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset,
         valset,
         testset,
@@ -878,7 +943,7 @@ if __name__ == "__main__":
 
     if args.ddstore:
         train_loader.dataset.ddstore.epoch_begin()
-    config = hydragnn.utils.input_config_parsing.update_config(
+    config = hydragnn.config.update_config(
         config, train_loader, val_loader, test_loader
     )
     if args.ddstore:
@@ -886,7 +951,7 @@ if __name__ == "__main__":
     ## Good to sync with everyone right after DDStore setup
     comm.Barrier()
 
-    hydragnn.utils.input_config_parsing.save_config(config, log_name)
+    hydragnn.config.save_config(config, log_name)
 
     timer.stop()
 
@@ -917,7 +982,7 @@ if __name__ == "__main__":
         )
     else:
         ## Wrap the model with DDP
-        model = hydragnn.utils.distributed.get_distributed_model(
+        model = hydragnn.distributed.get_distributed_model(
             model, verbosity, find_unused_parameters=True
         )
         optimizer = build_optimizer(model.parameters(), optimizer_cfg)
@@ -928,7 +993,7 @@ if __name__ == "__main__":
     # Print details of neural network architecture
     print_model(model)
 
-    hydragnn.utils.model.load_existing_model_config(
+    hydragnn.models.utils.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
 
@@ -940,9 +1005,7 @@ if __name__ == "__main__":
     else:
         context = nullcontext()
 
-    enable_interatomic_potential = config["NeuralNetwork"]["Architecture"].get(
-        "enable_interatomic_potential", False
-    )
+    interatomic_loss_enabled = uses_interatomic_potential(config)
 
     with context:
         hydragnn.train.train_validate_test(
@@ -953,15 +1016,15 @@ if __name__ == "__main__":
             test_loader,
             writer,
             scheduler,
-            config["NeuralNetwork"],
+            config,
             log_name,
             verbosity,
             create_plots=False,
-            compute_grad_energy=enable_interatomic_potential,
+            compute_grad_energy=interatomic_loss_enabled,
             precision=precision,
         )
 
-    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.models.utils.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
     if writer is not None:
         writer.close()

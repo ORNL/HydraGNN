@@ -1,8 +1,19 @@
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 """
 Creates LMDB files with extracted graph features from provided *.extxyz files
 for the S2EF task.
 """
 
+import torch
 import mpi4py
 
 mpi4py.rc.thread_level = "serialized"
@@ -11,7 +22,6 @@ mpi4py.rc.threads = False
 import os
 
 import ase.io
-import torch
 from tqdm import tqdm
 
 
@@ -37,7 +47,7 @@ def write_images_to_adios(
                 continue
 
         except Exception as e:
-            print(f"WARN:", type(error).__name__)
+            print("WARN:", type(e).__name__)
             continue
 
         for i, frame in enumerate(traj_frames):

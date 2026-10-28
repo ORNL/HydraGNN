@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 """Cached stacking for branch weighting with optional top-k gating.
 
 Workflow:
@@ -8,7 +18,6 @@ Workflow:
 
 import argparse
 import copy
-import glob
 import json
 import os
 import pickle
@@ -24,9 +33,9 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 
 import hydragnn
 from hydragnn.models.create import create_model_config
-from hydragnn.train.train_validate_test import move_batch_to_device, resolve_precision
-from hydragnn.utils.distributed import get_device
-from hydragnn.utils.input_config_parsing.config_utils import update_config
+from hydragnn.train.precision import move_batch_to_device, resolve_precision
+from hydragnn.distributed import get_device
+from hydragnn.config.config_utils import update_config
 from hydragnn.utils.print.print_utils import iterate_tqdm
 
 from branch_weighting_mlp import BranchWeightMLP
@@ -38,7 +47,6 @@ try:
         configure_variable_names,
         resolve_selected_precision,
         infer_num_branches,
-        load_multidataset_dataloaders,
         load_single_dataset_dataloaders,
         load_single_dataset_chunk,
         get_modellist_and_pna_deg,
@@ -53,7 +61,6 @@ except ImportError:
         configure_variable_names,
         resolve_selected_precision,
         infer_num_branches,
-        load_multidataset_dataloaders,
         load_single_dataset_dataloaders,
         load_single_dataset_chunk,
         get_modellist_and_pna_deg,
@@ -407,9 +414,9 @@ def main():
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
     configure_variable_names(config)
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
+    var_config = config["Variables"]
 
-    hydragnn.utils.distributed.setup_ddp()
+    hydragnn.distributed.setup_ddp()
     rank = dist.get_rank() if dist.is_available() and dist.is_initialized() else 0
 
     # Get modellist and pna_deg once from metadata only
@@ -470,7 +477,7 @@ def main():
     total_train_cached = 0
     total_val_cached = 0
 
-    chunk_size = args.chunk_size or (args.num_samples or 10 ** 9)
+    chunk_size = args.chunk_size or (args.num_samples or 10**9)
 
     for model_index, model_name in enumerate(modellist):
         if rank == 0:
@@ -511,7 +518,7 @@ def main():
         os.makedirs(os.path.dirname(out_train), exist_ok=True)
         os.makedirs(os.path.dirname(out_val), exist_ok=True)
 
-        num_samples = args.num_samples or 10 ** 9
+        num_samples = args.num_samples or 10**9
         train_batches_written = 0
         val_batches_written = 0
 
@@ -644,15 +651,24 @@ def main():
         if "scheduler_state_dict" in ckpt_mlp:
             scheduler.load_state_dict(ckpt_mlp["scheduler_state_dict"])
 
+    loss_terms = {
+        term["variable"]: term
+        for term in config["NeuralNetwork"]["Training"]["loss"]["supervised"]["terms"]
+    }
+    energy_term = loss_terms.get("energy") or loss_terms.get("energy_per_atom")
+    if energy_term is None:
+        raise ValueError(
+            "Branch weighting requires an energy or energy_per_atom loss term."
+        )
     energy_weight = (
         args.energy_weight
         if args.energy_weight is not None
-        else config["NeuralNetwork"]["Architecture"].get("energy_weight", 1.0)
+        else energy_term.get("weight", 1.0)
     )
     force_weight = (
         args.force_weight
         if args.force_weight is not None
-        else config["NeuralNetwork"]["Architecture"].get("force_weight", 1.0)
+        else loss_terms["forces"].get("weight", 1.0)
     )
 
     # Load existing timing history if resuming

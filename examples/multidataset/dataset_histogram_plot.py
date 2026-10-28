@@ -1,13 +1,21 @@
-import adios2 as ad2
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 import numpy as np
-import pickle
 import os
 from tqdm import tqdm
 
 import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from hydragnn.utils.datasets.adiosdataset import adios2_open
+from hydragnn.data.adiosdataset import adios2_open
 
 font = {"size": 12}
 matplotlib.rc("font", **font)

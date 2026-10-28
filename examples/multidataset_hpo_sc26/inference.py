@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 
 import argparse
 import glob
@@ -10,9 +20,9 @@ import torch.distributed as dist
 
 import hydragnn
 from hydragnn.models.create import create_model_config
-from hydragnn.train.train_validate_test import move_batch_to_device, resolve_precision
-from hydragnn.utils.distributed import get_device
-from hydragnn.utils.input_config_parsing.config_utils import update_config
+from hydragnn.train.precision import move_batch_to_device, resolve_precision
+from hydragnn.distributed import get_device
+from hydragnn.config.config_utils import update_config
 from hydragnn.utils.print.print_utils import iterate_tqdm
 
 try:
@@ -209,9 +219,9 @@ def main():
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
     configure_variable_names(config)
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
+    var_config = config["Variables"]
 
-    hydragnn.utils.distributed.setup_ddp()
+    hydragnn.distributed.setup_ddp()
 
     train_loader, val_loader, test_loader = load_multidataset_dataloaders(
         args, config, var_config

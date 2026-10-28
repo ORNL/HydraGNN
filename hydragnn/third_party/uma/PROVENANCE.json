@@ -1,0 +1,14 @@
+{
+  "upstream": "https://github.com/FAIR-Chem/fairchem",
+  "vendored_snapshot_commit": null,
+  "compared_against_commit": "de5db01588da57665bde96966091d268a9b6b8f7",
+  "audited_at": "2026-08-19",
+  "note": "The existing vendored snapshot predates this audit. Re-run tools/vendor_uma.py --apply --fairchem-source PATH to refresh and record exact generated provenance.",
+  "transformations": [
+    "fairchem.core imports rewritten to HydraGNN vendored namespace",
+    "package initializers stripped to avoid unrelated eager imports",
+    "lazy-import compatibility patches documented in tools/vendor_uma.py",
+    "MIT AND BSD-3-Clause copyright/SPDX header prepended while preserving upstream notices",
+    "upstream FAIR-Chem LICENSE.md copied as FAIRCHEM_LICENSE.md"
+  ]
+}

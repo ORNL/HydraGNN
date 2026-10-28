@@ -1,5 +1,0 @@
-black==21.5b1
-pre-commit
-pytest==8.4.2
-pytest-mpi
-mendeleev==0.16.0

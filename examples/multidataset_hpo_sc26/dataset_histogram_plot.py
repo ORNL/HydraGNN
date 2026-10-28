@@ -1,10 +1,20 @@
 #!/usr/bin/env python3
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 """Compute element occurrence probabilities from multiple HydraGNN ADIOS datasets.
 
 This script follows the same dataset-loading pattern used in
 examples/multidataset_hpo_sc26/gfm_mlip_all_mpnn.py:
 - dataset files are expected as <dataset_name>-v2.bp
-- ADIOS data is read through hydragnn.utils.datasets.adiosdataset.AdiosDataset
+- ADIOS data is read through hydragnn.data.adiosdataset.AdiosDataset
 - train/val/test splits are processed
 
 For each dataset, a JSON file is created containing probabilities for all 118
@@ -25,7 +35,7 @@ import torch
 from mpi4py import MPI
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosDataset
+    from hydragnn.data.adiosdataset import AdiosDataset
 except ImportError as exc:
     raise ImportError(
         "AdiosDataset is unavailable; install adios2 and HydraGNN dataset dependencies."

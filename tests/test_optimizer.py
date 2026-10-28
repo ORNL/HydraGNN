@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# Copyright (c) 2024, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -15,12 +15,15 @@ import pytest
 import shutil
 
 import hydragnn, tests
+from tests._training_workflow import train_and_checkpoint
+
+pytestmark = pytest.mark.mpi
 
 
 # Loss function unit test called by pytest wrappers.
 # Note the intent of this test is to make sure all interfaces work - it does not assert anything
 def unittest_optimizers(optimizer_type, use_zero, ci_input, overwrite_data=False):
-    world_size, rank = hydragnn.utils.distributed.get_comm_size_and_rank()
+    world_size, rank = hydragnn.distributed.get_comm_size_and_rank()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
@@ -47,7 +50,12 @@ def unittest_optimizers(optimizer_type, use_zero, ci_input, overwrite_data=False
                 + dataset_name
                 + ".pkl"
             )
-        if os.path.exists(pkl_file):
+        required_names = {
+            spec["name"]
+            for group in ("inputs", "outputs")
+            for spec in config["Variables"][group]
+        }
+        if tests.prepared_pickle_has_attributes(pkl_file, required_names):
             config["Dataset"]["path"][dataset_name] = pkl_file
 
     if rank == 0:
@@ -82,16 +90,16 @@ def unittest_optimizers(optimizer_type, use_zero, ci_input, overwrite_data=False
                         * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
                         * 0.5
                     )
-                if not os.listdir(data_path):
-                    tests.deterministic_graph_data(
-                        data_path, number_configurations=num_samples
-                    )
+                tests.ensure_deterministic_graph_data(data_path, num_samples)
 
     config["NeuralNetwork"]["Training"]["num_epoch"] = 2
     config["NeuralNetwork"]["Training"]["Optimizer"]["type"] = optimizer_type
     config["NeuralNetwork"]["Training"]["Optimizer"]["use_zero_redundancy"] = use_zero
 
-    hydragnn.run_training(config)
+    train_loader, val_loader, test_loader = (
+        hydragnn.preprocess.dataset_loading_and_splitting(config)
+    )
+    train_and_checkpoint(config, train_loader, val_loader, test_loader)
 
 
 # Test all supported loss function types. Separate input file because only 2 steps are run.
@@ -104,7 +112,7 @@ def unittest_optimizers(optimizer_type, use_zero, ci_input, overwrite_data=False
     "use_zero_redundancy",
     [False, True],
 )
-def pytest_optimizers(
+def test_optimizers(
     optimizer_type, use_zero_redundancy, ci_input="ci.json", overwrite_data=False
 ):
     unittest_optimizers(optimizer_type, use_zero_redundancy, ci_input, overwrite_data)

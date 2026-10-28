@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 """Fused HydraGNN + BranchWeightMLP inference – per-GPU ADIOS2 BP5 to node-local NVMe.
 
 Each GPU writes a BP5 file where every ADIOS step is one atomistic structure.
@@ -32,7 +42,7 @@ from typing import List
 import numpy as np
 import adios2.bindings as adios2
 
-from hydragnn.utils.distributed import get_comm_size_and_rank, get_local_rank
+from hydragnn.distributed import get_comm_size_and_rank, get_local_rank
 
 from inference_random_structures import build_argument_parser
 
@@ -43,7 +53,6 @@ from inference_fused import (
     print_fused_results,
     run_fused_inference,
 )
-
 
 # ---------------------------------------------------------------------------
 # ADIOS2 setup

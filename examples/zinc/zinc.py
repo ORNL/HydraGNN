@@ -1,20 +1,23 @@
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 import sys
 import os, json
-import pdb
 import torch
 import torch.distributed as dist
-import torch_geometric
 from torch_geometric.datasets import ZINC
-import torch_geometric.transforms as T
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
 
-# deprecated in torch_geometric 2.0
-try:
-    from torch_geometric.loader import DataLoader
-except:
-    from torch_geometric.data import DataLoader
-
 import hydragnn
+
+ZINC_CACHE_VERSION = "named-schema-v1:subset"
 
 # Set this path for output.
 try:
@@ -27,10 +30,10 @@ filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), "zinc.json")
 with open(filename, "r") as f:
     config = json.load(f)
 verbosity = config["Verbosity"]["level"]
-var_config = config["NeuralNetwork"]["Variables_of_interest"]
+var_config = config["Variables"]
 
 # Always initialize for multi-rank training.
-world_size, world_rank = hydragnn.utils.distributed.setup_ddp()
+world_size, world_rank = hydragnn.distributed.setup_ddp()
 
 log_name = "zinc_test"
 # Enable print to log file.
@@ -47,8 +50,10 @@ lapPE = AddLaplacianEigenvectorPE(
 
 
 def zinc_pre_transform(data):
-    data.x = data.x.float().view(-1, 1)
-    data.edge_attr = data.edge_attr.float().view(-1, 1)
+    data.atom_type = data.x.float().view(-1, 1)
+    data.bond_type = data.edge_attr.float().view(-1, 1)
+    data.free_energy = data.y.reshape(1, 1)
+    del data.x, data.edge_attr, data.y
     data = lapPE(data)
     # gps requires relative edge features, introduced rel_lapPe as edge encodings
     source_pe = data.pe[data.edge_index[0]]
@@ -57,23 +62,39 @@ def zinc_pre_transform(data):
     return data
 
 
-train = ZINC(
-    root="dataset/zinc", subset=True, split="train", pre_transform=zinc_pre_transform
-)
-val = ZINC(
-    root="dataset/zinc", subset=True, split="val", pre_transform=zinc_pre_transform
-)
-test = ZINC(
-    root="dataset/zinc", subset=True, split="test", pre_transform=zinc_pre_transform
+cache_root = "dataset/zinc"
+
+
+def build_datasets():
+    hydragnn.data.prepare_pyg_cache(cache_root, ZINC_CACHE_VERSION)
+    datasets = tuple(
+        ZINC(
+            root=cache_root,
+            subset=True,
+            split=split,
+            pre_transform=zinc_pre_transform,
+        )
+        for split in ("train", "val", "test")
+    )
+    hydragnn.data.mark_pyg_cache_current(cache_root, ZINC_CACHE_VERSION)
+    return datasets
+
+
+train, val, test = hydragnn.preprocess.build_dataset_on_rank_zero(build_datasets)
+
+(
+    train_loader,
+    val_loader,
+    test_loader,
+) = hydragnn.preprocess.create_dataloaders(
+    train,
+    val,
+    test,
+    config["NeuralNetwork"]["Training"]["batch_size"],
+    variables=config["Variables"],
 )
 
-(train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
-    train, val, test, config["NeuralNetwork"]["Training"]["batch_size"]
-)
-
-config = hydragnn.utils.input_config_parsing.update_config(
-    config, train_loader, val_loader, test_loader
-)
+config = hydragnn.config.update_config(config, train_loader, val_loader, test_loader)
 
 model = hydragnn.models.create_model_config(
     config=config["NeuralNetwork"],
@@ -86,17 +107,17 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
     optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
 )
 
-model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
-    model, optimizer, verbosity
+model, optimizer = hydragnn.distributed.distributed_model_wrapper(
+    model, optimizer, verbosity, config=config
 )
 
-hydragnn.utils.model.model.load_existing_model_config(
+hydragnn.models.utils.model.load_existing_model_config(
     model=model, config=config["NeuralNetwork"]["Training"]
 )
 
 # Run training with the given model and zinc dataset.
-writer = hydragnn.utils.model.model.get_summary_writer(log_name)
-hydragnn.utils.input_config_parsing.save_config(config, log_name)
+writer = hydragnn.models.utils.model.get_summary_writer(log_name)
+hydragnn.config.save_config(config, log_name)
 
 hydragnn.train.train_validate_test(
     model,
@@ -106,7 +127,7 @@ hydragnn.train.train_validate_test(
     test_loader,
     writer,
     scheduler,
-    config["NeuralNetwork"],
+    config,
     log_name,
     verbosity,
 )

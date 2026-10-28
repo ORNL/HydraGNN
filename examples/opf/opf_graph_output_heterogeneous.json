@@ -1,0 +1,67 @@
+{
+    "Verbosity": {
+        "level": 2
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "mpnn_type": "HeteroGIN",
+            "hidden_dim": 64,
+            "num_conv_layers": 4,
+            "pe_dim": 0,
+            "max_neighbours": 100,
+            "edge_types": [
+                {"source_type": "bus", "relation": "ac_line", "target_type": "bus", "dim": 9},
+                {"source_type": "bus", "relation": "transformer", "target_type": "bus", "dim": 11},
+                {"source_type": "generator", "relation": "generator_link", "target_type": "bus", "dim": 0},
+                {"source_type": "bus", "relation": "generator_link", "target_type": "generator", "dim": 0},
+                {"source_type": "load", "relation": "load_link", "target_type": "bus", "dim": 0},
+                {"source_type": "bus", "relation": "load_link", "target_type": "load", "dim": 0},
+                {"source_type": "shunt", "relation": "shunt_link", "target_type": "bus", "dim": 0},
+                {"source_type": "bus", "relation": "shunt_link", "target_type": "shunt", "dim": 0}
+            ],
+            "output_heads": {
+                "graph": {
+                    "num_sharedlayers": 1,
+                    "dim_sharedlayers": 64,
+                    "num_headlayers": 2,
+                    "dim_headlayers": [32, 16]
+                }
+            },
+            "task_weights": [1.0],
+            "hetero_pooling_mode": "sum"
+        },
+        "Training": {
+            "num_epoch": 2,
+            "batch_size": 32,
+            "patience": 10,
+            "early_stopping": true,
+            "Checkpoint": true,
+            "checkpoint_warmup": 1,
+            "continue": 0,
+            "startfrom": "existing_model",
+            "Optimizer": {
+                "type": "AdamW",
+                "learning_rate": 1e-3
+            }
+        }
+    },
+    "Visualization": {
+        "plot_init_solution": false,
+        "plot_hist_solution": false,
+        "create_plots": false
+    },
+    "Variables": {
+        "graph_type": "heterogeneous",
+        "node_types": ["bus", "generator", "load", "shunt"],
+        "inputs": [
+            {"name": "context", "level": "graph", "dim": 1},
+            {"name": "bus_features", "level": "node", "dim": 4, "node_type": "bus"},
+            {"name": "generator_features", "level": "node", "dim": 11, "node_type": "generator"},
+            {"name": "load_features", "level": "node", "dim": 2, "node_type": "load"},
+            {"name": "shunt_features", "level": "node", "dim": 2, "node_type": "shunt"}
+        ],
+        "outputs": [
+            {"name": "objective", "level": "graph", "dim": 1}
+        ]
+    }
+}
