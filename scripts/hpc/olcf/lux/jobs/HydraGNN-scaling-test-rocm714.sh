@@ -100,7 +100,7 @@ fi
 # MULTI_MODEL_LIST=Alexandria,ANI1x,MPTrj,OC2020,OC2022,OC25,ODAC23,OMat24,OMol25-neutral,OMol25-non-neutral,OMol25,OPoly2026,QCML,QM7X,transition1x
 MULTI_MODEL_LIST=OC2020
 
-cmd srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-node=8 \
+cmd srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c8 --gpus-per-node=8 \
 python -u $HYDRAGNN_ROOT/examples/multidataset_hpo_sc26/gfm_mlip_all_mpnn.py \
     --log=multidataset_hpo-${SLURM_JOB_ID}-NN${SLURM_JOB_NUM_NODES} --everyone \
     --inputfile=gfm_mlip.json --num_samples=$((BATCH_SIZE*HYDRAGNN_MAX_NUM_BATCH)) \
