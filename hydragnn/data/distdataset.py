@@ -115,6 +115,9 @@ class DistDataset(AbstractBaseDataset):
                 if system == "frontier":
                     gpu_id = int(os.getenv("SLURM_LOCALID", "0"))
                     os.environ["FABRIC_IFACE"] = f"hsn{gpu_id//2}"
+                elif system == "lux":
+                    gpu_id = int(os.getenv("SLURM_LOCALID", "0"))
+                    os.environ["FABRIC_IFACE"] = f"ai{gpu_id//2}"
                 elif system == "perlmutter":
                     gpu_id = int(os.getenv("SLURM_LOCALID", "0"))
                     os.environ["FABRIC_IFACE"] = f"hsn{gpu_id}"
