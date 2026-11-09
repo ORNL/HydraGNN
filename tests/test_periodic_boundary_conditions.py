@@ -11,6 +11,7 @@
 
 import json, numpy as np
 
+import pytest
 import torch
 from torch_geometric.data import Data
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
@@ -78,6 +79,20 @@ def unittest_periodic_boundary_conditions(
     dist = torch.norm(vec, p=2, dim=-1)
     assert ((dist <= config["Architecture"]["radius"]) & (dist >= 0.0)).all()
 
+    for d in (data_periodic_no_self_loops, data_periodic_with_self_loops):
+        check_integer_edge_shifts(d)
+
+
+def check_integer_edge_shifts(data):
+    num_edges = data.edge_index.size(1)
+    assert data.integer_edge_shifts.dtype == torch.int8
+    assert data.integer_edge_shifts.shape == (num_edges, 3)
+    assert data.edge_shifts.shape == (num_edges, 3)
+    assert data.edge_shifts.dtype == data.pos.dtype
+    # Cartesian shifts must be the integer image labels expressed in the physical cell.
+    expected = data.integer_edge_shifts.to(data.cell.dtype) @ data.cell
+    assert torch.allclose(data.edge_shifts, expected)
+
 
 def test_periodic_h2():
     config_file = "./tests/inputs/ci_periodic.json"
@@ -125,3 +140,74 @@ def test_periodic_bcc_large():
     unittest_periodic_boundary_conditions(
         config, data2, neigh_per_atom, neigh_per_atom + 1
     )
+
+
+def test_integer_edge_shifts_triclinic_and_mixed_pbc():
+    config_file = "./tests/inputs/ci_periodic.json"
+    with open(config_file, "r") as f:
+        config = json.load(f)
+    config["Architecture"]["radius"] = 3.0
+
+    atoms = build.bulk("Cu", crystalstructure="fcc", a=3.6)  # primitive, triclinic cell
+    for pbc in ([True, True, True], [True, True, False]):
+        data = Data()
+        data.cell = torch.tensor(atoms.cell[:], dtype=torch.float64)
+        data.pbc = pbc
+        data.pos = torch.tensor(atoms.positions, dtype=torch.float64)
+        data.x = torch.ones(data.pos.size(0), 1)
+
+        data = get_radius_graph_pbc_config(config["Architecture"], loop=False)(data)
+        check_integer_edge_shifts(data)
+        assert (data.integer_edge_shifts != 0).any()
+        # No periodic images across a non-periodic direction.
+        for dim, periodic in enumerate(pbc):
+            if not periodic:
+                assert (data.integer_edge_shifts[:, dim] == 0).all()
+
+        row, col = data.edge_index
+        dist = torch.norm(data.pos[col] - data.pos[row] + data.edge_shifts, dim=-1)
+        assert (dist <= config["Architecture"]["radius"] + 1e-8).all()
+
+
+def test_integer_edge_shifts_out_of_int8_range_raises():
+    config_file = "./tests/inputs/ci_periodic.json"
+    with open(config_file, "r") as f:
+        config = json.load(f)
+    config["Architecture"]["radius"] = 13.0
+    config["Architecture"]["max_neighbours"] = 1000
+
+    data = Data()
+    # A 0.1 A periodic direction needs image indices up to +/-130 > int8 max.
+    data.cell = torch.diag(torch.tensor([0.1, 50.0, 50.0], dtype=torch.float64))
+    data.pbc = [True, False, False]
+    data.pos = torch.zeros(1, 3, dtype=torch.float64)
+    data.x = torch.ones(1, 1)
+
+    with pytest.raises(ValueError, match="int8 range"):
+        get_radius_graph_pbc_config(config["Architecture"], loop=False)(data)
+
+
+def test_adios_setkeys_loads_optional_keys_only_when_present():
+    from types import SimpleNamespace
+
+    from hydragnn.data.adiosdataset.dataset import AdiosDataset
+
+    stub = SimpleNamespace(keys=["x", "edge_shifts", "integer_edge_shifts"])
+    AdiosDataset.setkeys(
+        stub, ["x", "edge_shifts"], optional_keys=["integer_edge_shifts"]
+    )
+    assert stub.keys == ["x", "edge_shifts", "integer_edge_shifts"]
+
+    stub = SimpleNamespace(keys=["x", "edge_shifts"])
+    AdiosDataset.setkeys(
+        stub, ["x", "edge_shifts"], optional_keys=["integer_edge_shifts"]
+    )
+    assert stub.keys == ["x", "edge_shifts"]
+
+
+def test_adios_dtype_map_supports_int8():
+    import numpy as np
+
+    from hydragnn.data.adiosdataset._backend import DTYPE_MAP
+
+    assert DTYPE_MAP["int8_t"] is np.int8

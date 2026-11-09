@@ -34,6 +34,47 @@ from hydragnn.utils.profiling_and_tracing.profile import Profiler
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 
 
+def _format_lrs(lrs):
+    if len(lrs) == 1:
+        return f"{lrs[0]:.8f}"
+    return "[" + ", ".join(f"{lr:.8f}" for lr in lrs) + "]"
+
+
+_PER_BATCH_SCHEDULERS = (
+    torch.optim.lr_scheduler.OneCycleLR,
+    torch.optim.lr_scheduler.CyclicLR,
+)
+
+
+def _scheduler_steps_per_batch(scheduler, config):
+    """Return True if ``scheduler`` should be stepped after every optimizer step.
+
+    Controlled by ``Training.Optimizer.scheduler_interval`` ("epoch" or
+    "batch"). When unset, OneCycleLR/CyclicLR and schedulers exposing
+    ``step_per_batch = True`` are stepped per batch; all others per epoch.
+    """
+    if scheduler is None:
+        return False
+    optimizer_config = config.get("Training", {}).get("Optimizer", {}) or {}
+    interval = optimizer_config.get("scheduler_interval")
+    if interval is not None:
+        interval = str(interval).lower()
+        if interval not in ("epoch", "batch"):
+            raise ValueError(
+                f"Training.Optimizer.scheduler_interval must be 'epoch' or 'batch', got {interval!r}"
+            )
+        if interval == "batch" and isinstance(
+            scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau
+        ):
+            raise ValueError(
+                "ReduceLROnPlateau needs the validation loss and cannot be stepped per batch"
+            )
+        return interval == "batch"
+    if getattr(scheduler, "step_per_batch", False):
+        return True
+    return isinstance(scheduler, _PER_BATCH_SCHEDULERS)
+
+
 def _print_named_task_losses(verbosity, task_names, losses_by_split):
     """Print each task loss with its name and a consistent split format."""
     for task_index, task_name in enumerate(task_names):
@@ -109,6 +150,9 @@ def train_validate_test(
     task_loss_test = torch.zeros((num_epoch, num_tasks), device=device)
     task_loss_val = torch.zeros((num_epoch, num_tasks), device=device)
 
+    # Plain floats: no host-device copies, and the pickle loads without CUDA.
+    # Each entry holds the learning rate of every optimizer parameter group.
+    lr_history = [None] * num_epoch
     # preparing for results visualization
     ## collecting node feature
     if create_plots:
@@ -137,6 +181,7 @@ def train_validate_test(
             verbosity,
             compute_grad_energy=compute_grad_energy,
             num_tasks=num_tasks,
+            precision=precision,
         )
 
         visualizer.create_scatter_plots(
@@ -202,6 +247,7 @@ def train_validate_test(
     timer.start()
 
     epoch_start = config["Training"].get("epoch_start", 0)
+    scheduler_per_batch = _scheduler_steps_per_batch(scheduler, config)
     for epoch in range(epoch_start, num_epoch):
         os.environ["HYDRAGNN_EPOCH"] = str(epoch)
         ## timer per epoch
@@ -232,6 +278,7 @@ def train_validate_test(
                 performer_redraw_interval=config["Training"].get(
                     "global_attn_redraw_interval", 1000
                 ),
+                scheduler=scheduler if scheduler_per_batch else None,
             )
             train_loss_report = dict(model.module.last_epoch_loss_report)
             tr.stop("train")
@@ -274,11 +321,34 @@ def train_validate_test(
             precision=precision,
         )
         test_loss_report = dict(model.module.last_epoch_loss_report)
-        scheduler.step(val_loss)
+        # LR used during this epoch (latest value for per-batch schedulers),
+        # captured before an epoch-level scheduler updates it.
+        current_lrs = [float(group["lr"]) for group in optimizer.param_groups]
+
+        # Per-batch schedulers were already stepped inside train(). Epoch-based
+        # torch schedulers (StepLR, CosineAnnealingLR, ...) take no metric;
+        # ReduceLROnPlateau and custom schedulers keep step(val_loss).
+        if scheduler is None or scheduler_per_batch:
+            pass
+        elif isinstance(
+            scheduler, torch.optim.lr_scheduler.LRScheduler
+        ) and not isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+            scheduler.step()
+        else:
+            scheduler.step(val_loss)
+
         if writer is not None:
             writer.add_scalar("train error", train_loss, epoch)
             writer.add_scalar("validate error", val_loss, epoch)
             writer.add_scalar("test error", test_loss, epoch)
+            if len(current_lrs) == 1:
+                writer.add_scalar("learning rate", current_lrs[0], epoch)
+            else:
+                writer.add_scalars(
+                    "learning rate",
+                    {f"group_{i}": lr for i, lr in enumerate(current_lrs)},
+                    epoch,
+                )
             for ivar, task_name in enumerate(task_names):
                 writer.add_scalar(
                     "train error of " + task_name, train_taskserr[ivar], epoch
@@ -286,7 +356,7 @@ def train_validate_test(
         print_distributed(
             verbosity,
             f"Epoch: {epoch:02d}, Train Loss: {train_loss:.8f}, Val Loss: {val_loss:.8f}, "
-            f"Test Loss: {test_loss:.8f}",
+            f"Test Loss: {test_loss:.8f}, LR: {_format_lrs(current_lrs)}",
         )
         _print_named_task_losses(
             verbosity,
@@ -312,6 +382,7 @@ def train_validate_test(
         task_loss_train[epoch, :] = train_taskserr
         task_loss_val[epoch, :] = val_taskserr
         task_loss_test[epoch, :] = test_taskserr
+        lr_history[epoch] = current_lrs
 
         ###tracking the solution evolving with training
         if plot_hist_solution:
@@ -393,4 +464,5 @@ def train_validate_test(
             task_loss_test,
             task_weights,
             output_names,
+            lr_history=lr_history,
         )

@@ -243,13 +243,34 @@ class RadiusGraphPBC(RadiusGraph):
             np.stack([edge_src, edge_dst], axis=0).astype(np.int64)
         ).to(device)
 
-        # Compute edge_shifts: multiply integer cell shifts by ORIGINAL cell vectors
-        # (not the modified cell used for vesin, which has large values in non-periodic directions)
-        data.edge_shifts = torch.from_numpy(
-            (edge_cell_shifts @ cell_np).astype(
-                np.float32 if dtype == torch.float32 else np.float64
+        # Keep the discrete periodic-image label for every edge.  For example,
+        # [1, 0, -1] means the neighbour lives one cell away in +x and one
+        # cell away in -z.  The label must be an integer: it is fixed graph
+        # topology, while the Cartesian edge shift changes with the cell.
+        # Stored as int8 (3 bytes/edge instead of 24 for int64); image indices
+        # beyond +/-127 would require an unphysically large radius.
+        # Not consumed by any model yet: reserved for stress / cell-gradient
+        # calculations (d edge_vec / d cell = integer_edge_shifts).  Dataset
+        # loaders with explicit key lists must opt in to load it.
+        int8_info = np.iinfo(np.int8)
+        if edge_cell_shifts.size > 0 and (
+            edge_cell_shifts.min() < int8_info.min
+            or edge_cell_shifts.max() > int8_info.max
+        ):
+            raise ValueError(
+                "Periodic image shift out of int8 range "
+                f"[{int8_info.min}, {int8_info.max}]: radius {cutoff} is too "
+                "large relative to the cell."
             )
+        data.integer_edge_shifts = torch.from_numpy(
+            edge_cell_shifts.astype(np.int8)
         ).to(device)
+
+        # Use the original, physical cell rather than cell_for_vesin.  The
+        # latter may contain artificial large vectors for mixed PBC.  This
+        # produces the same shifts as the previous NumPy calculation, while
+        # making the relationship explicit for later stress calculations.
+        data.edge_shifts = data.integer_edge_shifts.to(dtype=dtype) @ data.cell
 
         return data
 

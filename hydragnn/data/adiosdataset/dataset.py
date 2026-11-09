@@ -44,6 +44,7 @@ class AdiosDataset(AbstractBaseDataset):
         subset_iend=None,
         keys=None,
         ddstore_store_per_sample=True,  ## True for per-sample saving. False for feature-first saving
+        optional_keys=None,
     ):
         """
         Parameters
@@ -62,6 +63,11 @@ class AdiosDataset(AbstractBaseDataset):
             Option to cache data object which was already read
         ddstore: bool, optional
             Option to use Distributed Data Store
+        keys: list of str, optional
+            Variables to load; each must exist in the file
+        optional_keys: list of str, optional
+            Variables to load only if present in the file (e.g. fields added
+            by newer preprocessing such as ``integer_edge_shifts``)
         """
         # Test import of adios2. Let it fail with an ImportError if ADIOS2 is not installed
         import adios2  # noqa: F401
@@ -141,7 +147,7 @@ class AdiosDataset(AbstractBaseDataset):
             self.keys = self.read_attribute_string0(f, "%s/keys" % label)
 
             if keys is not None:
-                self.setkeys(keys)
+                self.setkeys(keys, optional_keys=optional_keys)
 
             self.ndata = self.read_attribute0(f, "%s/ndata" % label).item()
 
@@ -463,10 +469,11 @@ class AdiosDataset(AbstractBaseDataset):
         val = self.comm.bcast(val, root=0)
         return val
 
-    def setkeys(self, keys):
+    def setkeys(self, keys, optional_keys=None):
         for k in keys:
             assert k in self.keys, f"Error reading ADIOS file. {k} not in {self.keys}"
-        self.keys = keys
+        extra = [k for k in (optional_keys or []) if k in self.keys and k not in keys]
+        self.keys = list(keys) + extra
 
     def setsubset(self, subset_istart, subset_iend, preload=False):
         self.subset_istart = subset_istart

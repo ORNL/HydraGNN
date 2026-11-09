@@ -687,9 +687,12 @@ class Visualizer:
         task_loss_test,
         task_weights,
         task_names,
+        lr_history=None,
     ):
         nrow = 1
         fhist = open(f"./logs/{self.model_with_config_name}/history_loss.pckl", "wb")
+        # lr_history is appended last so existing readers indexing [0..7] keep working.
+        # It is a list (one entry per epoch) of per-param-group learning rates.
         pickle.dump(
             [
                 total_loss_train,
@@ -700,6 +703,7 @@ class Visualizer:
                 task_loss_test,
                 task_weights,
                 task_names,
+                lr_history,
             ],
             fhist,
         )
