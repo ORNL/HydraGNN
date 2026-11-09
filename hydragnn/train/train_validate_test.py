@@ -34,6 +34,12 @@ from hydragnn.utils.profiling_and_tracing.profile import Profiler
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 
 
+def _format_lrs(lrs):
+    if len(lrs) == 1:
+        return f"{lrs[0]:.8f}"
+    return "[" + ", ".join(f"{lr:.8f}" for lr in lrs) + "]"
+
+
 def _print_named_task_losses(verbosity, task_names, losses_by_split):
     """Print each task loss with its name and a consistent split format."""
     for task_index, task_name in enumerate(task_names):
@@ -109,7 +115,9 @@ def train_validate_test(
     task_loss_test = torch.zeros((num_epoch, num_tasks), device=device)
     task_loss_val = torch.zeros((num_epoch, num_tasks), device=device)
 
-    lr_history = torch.zeros(num_epoch, device=device)
+    # Plain floats: no host-device copies, and the pickle loads without CUDA.
+    # Each entry holds the learning rate of every optimizer parameter group.
+    lr_history = [None] * num_epoch
     # preparing for results visualization
     ## collecting node feature
     if create_plots:
@@ -277,7 +285,7 @@ def train_validate_test(
         )
         test_loss_report = dict(model.module.last_epoch_loss_report)
         # LR used during this epoch, captured before the scheduler updates it.
-        current_lr = optimizer.param_groups[0]["lr"]
+        current_lrs = [float(group["lr"]) for group in optimizer.param_groups]
 
         # Epoch-based torch schedulers (StepLR, CosineAnnealingLR, ...) take no
         # metric; ReduceLROnPlateau and custom schedulers keep step(val_loss).
@@ -294,7 +302,14 @@ def train_validate_test(
             writer.add_scalar("train error", train_loss, epoch)
             writer.add_scalar("validate error", val_loss, epoch)
             writer.add_scalar("test error", test_loss, epoch)
-            writer.add_scalar("learning rate", current_lr, epoch)
+            if len(current_lrs) == 1:
+                writer.add_scalar("learning rate", current_lrs[0], epoch)
+            else:
+                writer.add_scalars(
+                    "learning rate",
+                    {f"group_{i}": lr for i, lr in enumerate(current_lrs)},
+                    epoch,
+                )
             for ivar, task_name in enumerate(task_names):
                 writer.add_scalar(
                     "train error of " + task_name, train_taskserr[ivar], epoch
@@ -302,7 +317,7 @@ def train_validate_test(
         print_distributed(
             verbosity,
             f"Epoch: {epoch:02d}, Train Loss: {train_loss:.8f}, Val Loss: {val_loss:.8f}, "
-            f"Test Loss: {test_loss:.8f}, LR: {current_lr:.8f}",
+            f"Test Loss: {test_loss:.8f}, LR: {_format_lrs(current_lrs)}",
         )
         _print_named_task_losses(
             verbosity,
@@ -328,7 +343,7 @@ def train_validate_test(
         task_loss_train[epoch, :] = train_taskserr
         task_loss_val[epoch, :] = val_taskserr
         task_loss_test[epoch, :] = test_taskserr
-        lr_history[epoch] = current_lr
+        lr_history[epoch] = current_lrs
 
         ###tracking the solution evolving with training
         if plot_hist_solution:

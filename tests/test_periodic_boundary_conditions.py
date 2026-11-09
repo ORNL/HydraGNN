@@ -11,6 +11,7 @@
 
 import json, numpy as np
 
+import pytest
 import torch
 from torch_geometric.data import Data
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
@@ -84,7 +85,7 @@ def unittest_periodic_boundary_conditions(
 
 def check_integer_edge_shifts(data):
     num_edges = data.edge_index.size(1)
-    assert data.integer_edge_shifts.dtype == torch.int64
+    assert data.integer_edge_shifts.dtype == torch.int8
     assert data.integer_edge_shifts.shape == (num_edges, 3)
     assert data.edge_shifts.shape == (num_edges, 3)
     assert data.edge_shifts.dtype == data.pos.dtype
@@ -166,3 +167,21 @@ def test_integer_edge_shifts_triclinic_and_mixed_pbc():
         row, col = data.edge_index
         dist = torch.norm(data.pos[col] - data.pos[row] + data.edge_shifts, dim=-1)
         assert (dist <= config["Architecture"]["radius"] + 1e-8).all()
+
+
+def test_integer_edge_shifts_out_of_int8_range_raises():
+    config_file = "./tests/inputs/ci_periodic.json"
+    with open(config_file, "r") as f:
+        config = json.load(f)
+    config["Architecture"]["radius"] = 13.0
+    config["Architecture"]["max_neighbours"] = 1000
+
+    data = Data()
+    # A 0.1 A periodic direction needs image indices up to +/-130 > int8 max.
+    data.cell = torch.diag(torch.tensor([0.1, 50.0, 50.0], dtype=torch.float64))
+    data.pbc = [True, False, False]
+    data.pos = torch.zeros(1, 3, dtype=torch.float64)
+    data.x = torch.ones(1, 1)
+
+    with pytest.raises(ValueError, match="int8 range"):
+        get_radius_graph_pbc_config(config["Architecture"], loop=False)(data)

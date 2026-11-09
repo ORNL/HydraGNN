@@ -111,7 +111,13 @@ def test_split_accumulator_averages_raw_and_weighted_values_independently():
 
 
 def _run_minimal_training_workflow(
-    tmp_path, monkeypatch, log_name, scheduler_factory=None, num_epoch=1
+    tmp_path,
+    monkeypatch,
+    log_name,
+    scheduler_factory=None,
+    num_epoch=1,
+    optimizer_factory=None,
+    writer=None,
 ):
     workflow = importlib.import_module("hydragnn.train.train_validate_test")
 
@@ -133,7 +139,10 @@ def _run_minimal_training_workflow(
         sampler = None
 
     model = Wrapped()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+    if optimizer_factory is None:
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+    else:
+        optimizer = optimizer_factory(model)
     if scheduler_factory is None:
         scheduler = SimpleNamespace(step=lambda loss: None)
     else:
@@ -183,7 +192,7 @@ def _run_minimal_training_workflow(
         Loader(),
         Loader(),
         Loader(),
-        None,
+        writer,
         scheduler,
         {
             "Variables": {
@@ -262,6 +271,43 @@ def test_training_workflow_steps_plateau_scheduler_with_val_loss(tmp_path, monke
     assert seen == [pytest.approx(20.0)]
 
 
+def test_training_workflow_logs_lr_of_every_param_group(tmp_path, monkeypatch):
+    class FakeWriter:
+        def __init__(self):
+            self.scalars = []
+            self.multi = []
+
+        def add_scalar(self, tag, value, step):
+            self.scalars.append((tag, value, step))
+
+        def add_scalars(self, tag, values, step):
+            self.multi.append((tag, dict(values), step))
+
+    def two_groups(model):
+        extra = torch.nn.Parameter(torch.tensor(0.0))
+        return torch.optim.SGD(
+            [
+                {"params": model.parameters(), "lr": 0.1},
+                {"params": [extra], "lr": 0.01},
+            ]
+        )
+
+    writer = FakeWriter()
+    _, run_log = _run_minimal_training_workflow(
+        tmp_path,
+        monkeypatch,
+        "lr-groups-ci",
+        optimizer_factory=two_groups,
+        writer=writer,
+    )
+
+    assert writer.multi == [
+        ("learning rate", {"group_0": pytest.approx(0.1), "group_1": 0.01}, 0)
+    ]
+    assert not any(tag == "learning rate" for tag, _, _ in writer.scalars)
+    assert "LR: [0.10000000, 0.01000000]" in run_log
+
+
 def test_plot_history_saves_lr_history(tmp_path, monkeypatch):
     import pickle
 
@@ -271,7 +317,7 @@ def test_plot_history_saves_lr_history(tmp_path, monkeypatch):
     (tmp_path / "logs/lr-history-ci").mkdir(parents=True)
     visualizer = Visualizer("lr-history-ci", node_feature=[[0.0]], num_nodes_list=[1])
     epochs = 3
-    lr_history = [0.1, 0.05, 0.025]
+    lr_history = [[0.1], [0.05], [0.025]]
     visualizer.plot_history(
         torch.ones(epochs),
         torch.ones(epochs),

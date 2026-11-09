@@ -247,8 +247,20 @@ class RadiusGraphPBC(RadiusGraph):
         # [1, 0, -1] means the neighbour lives one cell away in +x and one
         # cell away in -z.  The label must be an integer: it is fixed graph
         # topology, while the Cartesian edge shift changes with the cell.
+        # Stored as int8 (3 bytes/edge instead of 24 for int64); image indices
+        # beyond +/-127 would require an unphysically large radius.
+        int8_info = np.iinfo(np.int8)
+        if edge_cell_shifts.size > 0 and (
+            edge_cell_shifts.min() < int8_info.min
+            or edge_cell_shifts.max() > int8_info.max
+        ):
+            raise ValueError(
+                "Periodic image shift out of int8 range "
+                f"[{int8_info.min}, {int8_info.max}]: radius {cutoff} is too "
+                "large relative to the cell."
+            )
         data.integer_edge_shifts = torch.from_numpy(
-            edge_cell_shifts.astype(np.int64)
+            edge_cell_shifts.astype(np.int8)
         ).to(device)
 
         # Use the original, physical cell rather than cell_for_vesin.  The
