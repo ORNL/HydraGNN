@@ -138,7 +138,7 @@ def train_validate_test(
             verbosity,
             compute_grad_energy=compute_grad_energy,
             num_tasks=num_tasks,
-            precision=precision
+            precision=precision,
         )
 
         visualizer.create_scatter_plots(
@@ -276,17 +276,25 @@ def train_validate_test(
             precision=precision,
         )
         test_loss_report = dict(model.module.last_epoch_loss_report)
+        # LR used during this epoch, captured before the scheduler updates it.
         current_lr = optimizer.param_groups[0]["lr"]
-        
-        if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-            scheduler.step(val_loss)
-        elif scheduler is not None:
+
+        # Epoch-based torch schedulers (StepLR, CosineAnnealingLR, ...) take no
+        # metric; ReduceLROnPlateau and custom schedulers keep step(val_loss).
+        if scheduler is None:
+            pass
+        elif isinstance(
+            scheduler, torch.optim.lr_scheduler.LRScheduler
+        ) and not isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
             scheduler.step()
+        else:
+            scheduler.step(val_loss)
 
         if writer is not None:
             writer.add_scalar("train error", train_loss, epoch)
             writer.add_scalar("validate error", val_loss, epoch)
             writer.add_scalar("test error", test_loss, epoch)
+            writer.add_scalar("learning rate", current_lr, epoch)
             for ivar, task_name in enumerate(task_names):
                 writer.add_scalar(
                     "train error of " + task_name, train_taskserr[ivar], epoch
@@ -294,7 +302,7 @@ def train_validate_test(
         print_distributed(
             verbosity,
             f"Epoch: {epoch:02d}, Train Loss: {train_loss:.8f}, Val Loss: {val_loss:.8f}, "
-            f"Test Loss: {test_loss:.8f}, LR {current_lr: .8f}",
+            f"Test Loss: {test_loss:.8f}, LR: {current_lr:.8f}",
         )
         _print_named_task_losses(
             verbosity,
@@ -401,6 +409,6 @@ def train_validate_test(
             task_loss_val,
             task_loss_test,
             task_weights,
-            lr_history,
             output_names,
+            lr_history=lr_history,
         )

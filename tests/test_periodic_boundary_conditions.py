@@ -78,6 +78,20 @@ def unittest_periodic_boundary_conditions(
     dist = torch.norm(vec, p=2, dim=-1)
     assert ((dist <= config["Architecture"]["radius"]) & (dist >= 0.0)).all()
 
+    for d in (data_periodic_no_self_loops, data_periodic_with_self_loops):
+        check_integer_edge_shifts(d)
+
+
+def check_integer_edge_shifts(data):
+    num_edges = data.edge_index.size(1)
+    assert data.integer_edge_shifts.dtype == torch.int64
+    assert data.integer_edge_shifts.shape == (num_edges, 3)
+    assert data.edge_shifts.shape == (num_edges, 3)
+    assert data.edge_shifts.dtype == data.pos.dtype
+    # Cartesian shifts must be the integer image labels expressed in the physical cell.
+    expected = data.integer_edge_shifts.to(data.cell.dtype) @ data.cell
+    assert torch.allclose(data.edge_shifts, expected)
+
 
 def test_periodic_h2():
     config_file = "./tests/inputs/ci_periodic.json"
@@ -125,3 +139,30 @@ def test_periodic_bcc_large():
     unittest_periodic_boundary_conditions(
         config, data2, neigh_per_atom, neigh_per_atom + 1
     )
+
+
+def test_integer_edge_shifts_triclinic_and_mixed_pbc():
+    config_file = "./tests/inputs/ci_periodic.json"
+    with open(config_file, "r") as f:
+        config = json.load(f)
+    config["Architecture"]["radius"] = 3.0
+
+    atoms = build.bulk("Cu", crystalstructure="fcc", a=3.6)  # primitive, triclinic cell
+    for pbc in ([True, True, True], [True, True, False]):
+        data = Data()
+        data.cell = torch.tensor(atoms.cell[:], dtype=torch.float64)
+        data.pbc = pbc
+        data.pos = torch.tensor(atoms.positions, dtype=torch.float64)
+        data.x = torch.ones(data.pos.size(0), 1)
+
+        data = get_radius_graph_pbc_config(config["Architecture"], loop=False)(data)
+        check_integer_edge_shifts(data)
+        assert (data.integer_edge_shifts != 0).any()
+        # No periodic images across a non-periodic direction.
+        for dim, periodic in enumerate(pbc):
+            if not periodic:
+                assert (data.integer_edge_shifts[:, dim] == 0).all()
+
+        row, col = data.edge_index
+        dist = torch.norm(data.pos[col] - data.pos[row] + data.edge_shifts, dim=-1)
+        assert (dist <= config["Architecture"]["radius"] + 1e-8).all()
