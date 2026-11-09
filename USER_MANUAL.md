@@ -22,7 +22,7 @@ A comprehensive guide to using HydraGNN for distributed graph neural network tra
 HydraGNN is a distributed PyTorch implementation of multi-headed graph convolutional neural networks designed for supercomputing environments. It provides:
 
 - **Multi-headed Prediction**: Support for both graph-level and node-level property prediction
-- **Distributed Data Parallelism**: Scalable training across multiple nodes and GPUs
+- **Distributed Data Parallelism**: Scalable training across multiple nodes and GPUs (including support for OLCF Frontier and Lux)
 - **Multiple Architectures**: Various GNN architectures (PNA, EGNN, CGCNN, etc.)
 - **Advanced Features**: Global attention, geometric equivariance, and multi-dataset training
 
@@ -30,7 +30,7 @@ HydraGNN is a distributed PyTorch implementation of multi-headed graph convoluti
 
 - Train on molecular and materials datasets with millions of samples
 - Handle multiple datasets simultaneously with different data distributions
-- Scale to hundreds of GPUs using MPI and distributed computing frameworks
+- Scale to hundreds of GPUs using MPI and distributed computing frameworks (optimized for OLCF Frontier and Lux)
 - Support various data formats including ADIOS2 for high-performance I/O
 - Flexible configuration system for rapid prototyping and experimentation
 - Learn on heterogeneous graphs with typed nodes and relations
