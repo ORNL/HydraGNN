@@ -35,6 +35,7 @@ DTYPE_MAP = {
     "float": np.float32,
     "int32_t": np.int32,
     "int64_t": np.int64,
+    "int8_t": np.int8,
     "uint8_t": np.uint8,
 }
 

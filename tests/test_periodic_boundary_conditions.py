@@ -185,3 +185,29 @@ def test_integer_edge_shifts_out_of_int8_range_raises():
 
     with pytest.raises(ValueError, match="int8 range"):
         get_radius_graph_pbc_config(config["Architecture"], loop=False)(data)
+
+
+def test_adios_setkeys_loads_optional_keys_only_when_present():
+    from types import SimpleNamespace
+
+    from hydragnn.data.adiosdataset.dataset import AdiosDataset
+
+    stub = SimpleNamespace(keys=["x", "edge_shifts", "integer_edge_shifts"])
+    AdiosDataset.setkeys(
+        stub, ["x", "edge_shifts"], optional_keys=["integer_edge_shifts"]
+    )
+    assert stub.keys == ["x", "edge_shifts", "integer_edge_shifts"]
+
+    stub = SimpleNamespace(keys=["x", "edge_shifts"])
+    AdiosDataset.setkeys(
+        stub, ["x", "edge_shifts"], optional_keys=["integer_edge_shifts"]
+    )
+    assert stub.keys == ["x", "edge_shifts"]
+
+
+def test_adios_dtype_map_supports_int8():
+    import numpy as np
+
+    from hydragnn.data.adiosdataset._backend import DTYPE_MAP
+
+    assert DTYPE_MAP["int8_t"] is np.int8

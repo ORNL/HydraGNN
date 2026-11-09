@@ -262,6 +262,9 @@ def load_multidataset_dataloaders(args, config, var_config):
         "edge_index",
         "cell",
         "edge_shifts",
+        # "integer_edge_shifts" (int8 periodic-image labels from RadiusGraphPBC)
+        # is intentionally not loaded: no model consumes it yet, and older .bp
+        # files lack it, which would break collation when mixing datasets.
         "y",
         "chemical_composition",
         "natoms",
@@ -363,6 +366,9 @@ def load_single_dataset_chunk(
         "edge_index",
         "cell",
         "edge_shifts",
+        # "integer_edge_shifts" (int8 periodic-image labels from RadiusGraphPBC)
+        # is intentionally not loaded: no model consumes it yet, and older .bp
+        # files lack it, which would break collation when mixing datasets.
         "y",
         "chemical_composition",
         "natoms",

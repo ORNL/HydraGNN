@@ -118,6 +118,8 @@ def _run_minimal_training_workflow(
     num_epoch=1,
     optimizer_factory=None,
     writer=None,
+    optimizer_config=None,
+    train_calls=None,
 ):
     workflow = importlib.import_module("hydragnn.train.train_validate_test")
 
@@ -164,6 +166,14 @@ def _run_minimal_training_workflow(
         }
 
     def fake_train(*args, **kwargs):
+        if train_calls is not None:
+            train_calls.append(kwargs)
+        sched = kwargs.get("scheduler")
+        if sched is not None:
+            # Emulate two optimizer steps per epoch.
+            for _ in range(2):
+                optimizer.step()
+                sched.step()
         publish("train")
         return torch.tensor(10.0), torch.tensor([1.0])
 
@@ -213,6 +223,11 @@ def _run_minimal_training_workflow(
                     "Checkpoint": False,
                     "EarlyStopping": False,
                     "CheckRemainingTime": False,
+                    **(
+                        {"Optimizer": optimizer_config}
+                        if optimizer_config is not None
+                        else {}
+                    ),
                 }
             },
         },
@@ -269,6 +284,77 @@ def test_training_workflow_steps_plateau_scheduler_with_val_loss(tmp_path, monke
     )
 
     assert seen == [pytest.approx(20.0)]
+
+
+def test_training_workflow_steps_onecycle_scheduler_per_batch(tmp_path, monkeypatch):
+    train_calls = []
+    optimizer, _ = _run_minimal_training_workflow(
+        tmp_path,
+        monkeypatch,
+        "lr-onecycle-ci",
+        scheduler_factory=lambda opt: torch.optim.lr_scheduler.OneCycleLR(
+            opt, max_lr=0.1, total_steps=4
+        ),
+        num_epoch=2,
+        train_calls=train_calls,
+    )
+
+    assert len(train_calls) == 2
+    assert all(
+        isinstance(c["scheduler"], torch.optim.lr_scheduler.OneCycleLR)
+        for c in train_calls
+    )
+    # 2 epochs x 2 batches = 4 steps, no extra epoch-level step (which would
+    # exceed total_steps and raise).
+    assert train_calls[0]["scheduler"].last_epoch == 4
+
+
+def test_training_workflow_scheduler_interval_config(tmp_path, monkeypatch):
+    train_calls = []
+    optimizer, run_log = _run_minimal_training_workflow(
+        tmp_path,
+        monkeypatch,
+        "lr-interval-ci",
+        scheduler_factory=lambda opt: torch.optim.lr_scheduler.StepLR(
+            opt, step_size=1, gamma=0.5
+        ),
+        num_epoch=2,
+        optimizer_config={"scheduler_interval": "batch"},
+        train_calls=train_calls,
+    )
+
+    assert all(c["scheduler"] is not None for c in train_calls)
+    # Stepped 4 times per batch, never at epoch end.
+    assert optimizer.param_groups[0]["lr"] == pytest.approx(0.1 * 0.5**4)
+
+
+def test_training_workflow_epoch_scheduler_not_passed_to_train(tmp_path, monkeypatch):
+    train_calls = []
+    _run_minimal_training_workflow(
+        tmp_path,
+        monkeypatch,
+        "lr-epoch-default-ci",
+        scheduler_factory=lambda opt: torch.optim.lr_scheduler.StepLR(
+            opt, step_size=1, gamma=0.5
+        ),
+        train_calls=train_calls,
+    )
+
+    assert train_calls[0]["scheduler"] is None
+
+
+@pytest.mark.parametrize(
+    "optimizer_config",
+    [{"scheduler_interval": "step"}, {"scheduler_interval": "batch"}],
+)
+def test_scheduler_interval_rejects_invalid_settings(optimizer_config):
+    workflow = importlib.import_module("hydragnn.train.train_validate_test")
+    optimizer = torch.optim.SGD([torch.nn.Parameter(torch.tensor(0.0))], lr=0.1)
+    plateau = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
+    with pytest.raises(ValueError):
+        workflow._scheduler_steps_per_batch(
+            plateau, {"Training": {"Optimizer": optimizer_config}}
+        )
 
 
 def test_training_workflow_logs_lr_of_every_param_group(tmp_path, monkeypatch):

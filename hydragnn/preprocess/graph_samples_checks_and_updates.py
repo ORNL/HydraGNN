@@ -249,6 +249,9 @@ class RadiusGraphPBC(RadiusGraph):
         # topology, while the Cartesian edge shift changes with the cell.
         # Stored as int8 (3 bytes/edge instead of 24 for int64); image indices
         # beyond +/-127 would require an unphysically large radius.
+        # Not consumed by any model yet: reserved for stress / cell-gradient
+        # calculations (d edge_vec / d cell = integer_edge_shifts).  Dataset
+        # loaders with explicit key lists must opt in to load it.
         int8_info = np.iinfo(np.int8)
         if edge_cell_shifts.size > 0 and (
             edge_cell_shifts.min() < int8_info.min

@@ -40,6 +40,41 @@ def _format_lrs(lrs):
     return "[" + ", ".join(f"{lr:.8f}" for lr in lrs) + "]"
 
 
+_PER_BATCH_SCHEDULERS = (
+    torch.optim.lr_scheduler.OneCycleLR,
+    torch.optim.lr_scheduler.CyclicLR,
+)
+
+
+def _scheduler_steps_per_batch(scheduler, config):
+    """Return True if ``scheduler`` should be stepped after every optimizer step.
+
+    Controlled by ``Training.Optimizer.scheduler_interval`` ("epoch" or
+    "batch"). When unset, OneCycleLR/CyclicLR and schedulers exposing
+    ``step_per_batch = True`` are stepped per batch; all others per epoch.
+    """
+    if scheduler is None:
+        return False
+    optimizer_config = config.get("Training", {}).get("Optimizer", {}) or {}
+    interval = optimizer_config.get("scheduler_interval")
+    if interval is not None:
+        interval = str(interval).lower()
+        if interval not in ("epoch", "batch"):
+            raise ValueError(
+                f"Training.Optimizer.scheduler_interval must be 'epoch' or 'batch', got {interval!r}"
+            )
+        if interval == "batch" and isinstance(
+            scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau
+        ):
+            raise ValueError(
+                "ReduceLROnPlateau needs the validation loss and cannot be stepped per batch"
+            )
+        return interval == "batch"
+    if getattr(scheduler, "step_per_batch", False):
+        return True
+    return isinstance(scheduler, _PER_BATCH_SCHEDULERS)
+
+
 def _print_named_task_losses(verbosity, task_names, losses_by_split):
     """Print each task loss with its name and a consistent split format."""
     for task_index, task_name in enumerate(task_names):
@@ -212,6 +247,7 @@ def train_validate_test(
     timer.start()
 
     epoch_start = config["Training"].get("epoch_start", 0)
+    scheduler_per_batch = _scheduler_steps_per_batch(scheduler, config)
     for epoch in range(epoch_start, num_epoch):
         os.environ["HYDRAGNN_EPOCH"] = str(epoch)
         ## timer per epoch
@@ -242,6 +278,7 @@ def train_validate_test(
                 performer_redraw_interval=config["Training"].get(
                     "global_attn_redraw_interval", 1000
                 ),
+                scheduler=scheduler if scheduler_per_batch else None,
             )
             train_loss_report = dict(model.module.last_epoch_loss_report)
             tr.stop("train")
@@ -284,12 +321,14 @@ def train_validate_test(
             precision=precision,
         )
         test_loss_report = dict(model.module.last_epoch_loss_report)
-        # LR used during this epoch, captured before the scheduler updates it.
+        # LR used during this epoch (latest value for per-batch schedulers),
+        # captured before an epoch-level scheduler updates it.
         current_lrs = [float(group["lr"]) for group in optimizer.param_groups]
 
-        # Epoch-based torch schedulers (StepLR, CosineAnnealingLR, ...) take no
-        # metric; ReduceLROnPlateau and custom schedulers keep step(val_loss).
-        if scheduler is None:
+        # Per-batch schedulers were already stepped inside train(). Epoch-based
+        # torch schedulers (StepLR, CosineAnnealingLR, ...) take no metric;
+        # ReduceLROnPlateau and custom schedulers keep step(val_loss).
+        if scheduler is None or scheduler_per_batch:
             pass
         elif isinstance(
             scheduler, torch.optim.lr_scheduler.LRScheduler

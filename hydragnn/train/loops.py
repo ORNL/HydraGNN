@@ -65,7 +65,14 @@ def train(
     compute_grad_energy=False,
     precision="fp32",
     performer_redraw_interval=1000,
+    scheduler=None,
 ):
+    """Run one training epoch.
+
+    ``scheduler`` is optional and, when given, is stepped once after every
+    optimizer step (per-batch schedulers such as OneCycleLR or CyclicLR).
+    Epoch-level schedulers must not be passed here.
+    """
     if profiler is None:
         profiler = Profiler()
 
@@ -210,6 +217,8 @@ def train(
                 scaler.update()
             else:
                 opt.step()
+        if scheduler is not None:
+            scheduler.step()
         if rank0 and not optimizer_state_dtype_logged:
             optimizer_state_dtype = first_optimizer_state_dtype(opt)
             print(
