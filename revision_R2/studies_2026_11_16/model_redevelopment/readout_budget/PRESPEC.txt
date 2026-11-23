@@ -1,0 +1,67 @@
+READOUT LABEL BUDGET AND ERROR DECOMPOSITION DIAGNOSTIC
+Frozen before new diagnostic outcomes: 16 November 2026
+
+Scope: reuse the ten saved HGB grouped-OOF summary matrices and corresponding
+outer production features. No encoder/tree fitting, new grain inference, new
+outer-label selection, manuscript modification or production-model adoption.
+This is exploratory development evidence on the reused940-SVE cohort.
+
+First reproduce BOTH existing same_case/ridge100_raw and all_cases/ridge100_raw
+predictions and metrics from cross_case_readout. Require target/split/feature
+identity and numerical parity before performing the budget intervention.
+
+Features: the existing20same-case grain summaries in their saved order, plus
+five size indicators(25columns). The all-case matrix keeps shared count/logcount
+once and appends18non-count summaries for each of four cases, plus five size
+indicators(79columns). Use raw physical maximum targets exactly as the existing
+ridge100_raw routes. StandardScaler is fitted only on each readout's fitting
+rows; the target mean/intercept is likewise learned only there.
+
+For each outer fold, draw100 deterministic, size-stratified75-row subsets of
+the751–753-SVE outer-training union. Match the actual75stopping-SVE size counts.
+Draws depend only on IDs,size and seed2026111607, plus repeat/fold/draw via
+SeedSequence; use identical subset IDs across feature groups and allfourcases.
+The feature-producing inner HGB models and outer production model remain fixed.
+Preserve allsubset IDs and hashes. A subset is not a new independent dataset.
+
+For each group and subset, report all three prespecified shrinkage settings:
+1. alpha100, identical to the full-union reference.
+2. alpha100*n/N, matching the penalty per training observation.
+3. alpha solved using X only to match full-union effective ridge degrees of
+   freedom atalpha100: df=sum(s_j^2/(s_j^2+alpha)) on centered standardizedX,
+   excluding the unpenalized intercept. The full reference and subset scalers
+   differ by design. If targetdf exceeds subsetrank, report it as unreachable
+   and use the finite minimum-norm(alpha0) prediction, explicitly flagged;
+   never silently drop or retune that draw. No response selects alpha.
+
+Allnewpredictions use the same saved outer features as the full reference.
+Outputs include everycase/size, all100draws and allthree settings. Report
+fullunion versus expected75-label readout performance, not an ensemble formed
+by averaging100predictions. Average squared/absolute errors overdraws and then
+the two repeats within each physicalSVE before aggregate errors/paired bootstrap.
+Correlation and decomposition are computed for each repeat/draw/cell and then
+summarized, so averagingpredictions cannot inflate performance. MonteCarlo
+dispersion acrossdraws is labeled variability, not independent replication.
+
+Paired uncertainty:4000physical-SVE bootstrap samples, stratifiedbysize for
+pooled contrasts, same resamples for pairedroutes. These are descriptive
+pointwise conditional intervals; no multiplicity-adjusted or fresh-validation
+claim. Positive fullbudgetRMSE reduction means(full75RMSE-fullunionRMSE)/full75RMSE.
+
+Error decomposition for clearlyidentified current routes and the recovered
+historical directbranch/lambda0/source-policy controls, keepingcohortsseparate:
+MSE=bias^2+(sd_pred-sd_true)^2+2*sd_pred*sd_true*(1-rho), populationSD.
+Compute the correlationcomponent equivalently as2*(sd_pred*sd_true-covariance)
+to handle constantpredictions exactly; mark rho undefined diagnostically for
+zeroSD while allerrorcomponentsremainfinite. Verify reconstruction numerically.
+No response-fitted recalibration is generated or presented asdeployable. The
+decomposition is descriptive, not a causal attribution of each term.
+
+Historical assessment records must retain partition, seed, cohortIDs and their
+original variance denominators. Do not merge with940 or joinmodelsbydisplayname.
+If complete historical prediction artifacts cannot be resolved, report that
+scope explicitly and complete the current diagnostic first.
+
+Sourcehashes, partition/OOFchecks, parity, finitepredictioncoverage, dfmatching,
+samplingidentity and decompositionchecks go toverification.json. Only this
+readout_budget directory receives the analysis outputs.

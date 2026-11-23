@@ -1,0 +1,95 @@
+PAIRED GRAIN-COUNT DIAGNOSTIC — PRESPECIFICATION
+16 November 2026
+
+Status at creation: only the grain-count metadata, existing feasibility report,
+and external consultation have been read. No outcome arrays have been loaded
+and no diagnostic results have been computed. This is an exploratory diagnostic
+of existing frozen predictions, not a new held-out model comparison.
+
+Scope and data
+Use only the ten original-GNN outer-evaluation grain archives under
+revision_R2/studies_2026_11_15/data/grain_predictions_repeat{r}_fold{f}.npz.
+There are940 physical SVEs and two prediction repeats. No stopping fields,
+new encoder inference, model fitting, calibration, threshold fitting, or
+manuscript changes. Source arrays and existing studies remain unchanged.
+
+Metadata-only count support (count/min/median/max):
+125um:200/26/30/34;177um:199/79/83/88;250um:200/225/233/239;
+354um:200/657/665/671;500um:141/1879/1883/1888.
+
+Fixed configurations
+1. Full field at its observed N for all940 SVEs; one deterministic draw.
+2. K=26 for all940 SVEs; common support with no exclusions.
+3. K=30,83,233,665 for all141 500um SVEs, representing the four smaller-size
+   median counts. These are random subsets of an existing500um response field,
+   not simulated smaller physical SVEs.
+No count or configuration will be selected after viewing scores.
+
+Subsets and identities
+Use100 draws without replacement, PCG64 seeded separately by
+SeedSequence([20261116,dataset_idx,draw_id]). Generate one permutation of all
+canonical grain rows per physical SVE/draw. Every K is a prefix of that same
+permutation; sort retained indices into canonical order before calculations
+and SHA256 hashing. The same rows are used for all four cases and both
+prediction repeats. Full-field indices are arange(N). Store each subset hash,
+originalN,K,physical size,IDs,repeat/fold and all draw-level results.
+Check all source archive hashes, canonical offsets/IDs/counts, finiteness,
+case order, partition membership, and exact true-field equality across repeats.
+Check every full true grain maximum against the saved SVE target and the
+raw_truth940 contract. Do not couple sorted ranks from different fields.
+
+Endpoints and routes
+The subset endpoint is M_K=max(true_peak on retained rows).
+The raw predictor is max(pred_peak on those same rows).
+The true-location oracle is the mean predicted value over all retained rows
+attaining M_K. It uses the observed response and is NOT a deployable predictor
+or an accuracy ceiling. Predicted ties select the smallest canonical grain ID.
+Record the true value at the predicted winner, absolute shortfall M_K-y_winner,
+and capture fraction y_winner/M_K. If M_K=0 and all true values are zero,
+define capture=1 and record the zero-target count explicitly.
+Record whether the predicted winner attains the true maximum and whether the
+top-five predicted rows contain any true maximum; use canonical-ID tie breaks.
+Record true-maximum tie count and exact random-choice chances accounting for
+that count (top1=m/K; top5=1-C(K-m,min(5,K))/C(K,min(5,K))).
+Include the saved original direct SVE head only for the full M_N endpoint.
+Do not apply that head or an existing full-SVE calibrator to subset targets.
+
+Metrics and interpretation
+Report every case/configuration/physical size: bias,MSE,RMSE,target SD,
+prediction SD,correlation,diagnostic R2,oracle-location metrics,localization
+and true capture. FS is dimensionless;WP uses the existing MPa convention.
+No outcome rescaling or clipping of finite raw predictions.
+
+For random subsets distinguish two estimands:
+A. Equal-SVE mixture of draw-level errors/moments, averaging the100 draws and
+   two prediction-repeat losses/moments WITHIN each SVE before averaging SVEs.
+   The resulting correlation and R2 describe the random-subset joint
+   distribution and include within-SVE subset variation.
+B. Between-SVE correlation/target SD/R2 of per-SVE draw/repeat-mean predictions
+   and draw-mean targets. This describes expected subset maxima and is not the
+   same as predicting a particular M_K or the physical M_N.
+Keep those estimands separately named; never infer improved full-SVE skill from
+larger subset R2 or a changed target variance.
+
+Uncertainty
+Use2000 fixed bootstrap resamples of physical SVE IDs within each physical
+size (seed20261117 plus size). Use the SAME resamples for all configurations
+and routes available at that size. Resample per-SVE sufficient moments and
+losses, never grains,draws,cases or repeats as independent samples. Report
+pointwise conditional95% intervals, without a multiple-comparison or fresh-
+validation interpretation. Paired oracle-minus-raw correlation/RMSE differences
+are descriptive and label-informed; no adoption rule follows from them.
+
+Limits
+Predicted grain fields came from the complete physical graph and its original
+size context. Thinning exported rows is not new graph inference. Random subsets
+alter spatial dependence and the endpoint. No contiguous-block assumption,
+pooled-small-SVE synthetic population, or independently resampled tail-error
+simulation is included. Any apparent count trend may reflect several mechanisms;
+it neither establishes irreducible noise nor rules out improved representation,
+training,calibration or maximum readouts.
+
+Deliverables
+run_diagnostic.py,draw-level NPZ files,per-SVE sufficient-statistic arrays,
+complete metrics.csv and paired comparisons,source/identity verification.json,
+and a concise REPORT.txt. No paper figures or manuscript edits in this task.

@@ -1,0 +1,72 @@
+MECHANICAL TREE COMPARATORS — 17 November 2026
+Specified before any new mechanical tree fit or its outer-evaluation score.
+
+Question: do conventional input-only surrogates recover the mechanical variation
+that the matched no-message neural controls predict poorly? Existing graph/control
+mechanical point scores motivated this secondary study. No new holdout is claimed.
+
+Cohort and outcomes
+Use the existing canonical 940 SVEs and the exact two size-stratified five-fold
+partitions. Six targets in their saved order: yield_stress, hardening_modulus,
+Wp_lcf, Wp_hcf, sigma_amp_lcf, sigma_amp_hcf. All numerical values are in MPa
+(work is stress-strain energy density). Require exact identity/size/grain-count
+agreement between the raw249 feature artifact and true_auxiliary_cache.npz.
+No mechanical labels are missing or imputed. Each physical SVE is evaluated once
+in each repeat. Keep the existing graph and two no-message predictions unchanged.
+
+Predictors and label budgets
+Reuse established raw input-only249 descriptors and the fixed RF/HGB settings
+from label_matched_trees/protocol.json. These descriptors summarize raw32 grain
+inputs (four orientation components, twelve Schmid factors, morphology and degree),
+size/count, and six input-only Schmid/morphology interactions. They contain no
+CPFEM response, model prediction, maximum or mechanical target. They summarize
+texture but are not a full orientation distribution or spatial texture encoding.
+Degree is graph-derived; this is a conventional aggregated-input comparator, not
+a topology-free feature claim.
+
+Evaluate both fixed budgets, without choosing a winner by outcomes:
+  fitting: original inner fitting IDs only (676–678); stopping IDs unused.
+  outer_training: fitting plus stopping IDs (751–753).
+For each budget use RF, HGB and a size-specific mean of mechanical labels.
+All fitted centers, target means and scales use only that budget's IDs. Outer
+evaluation IDs are excluded from every fitted preprocessing statistic and model.
+
+RF:128 trees, max_depth8, min_samples_leaf8, max_features0.8, n_jobs1.
+RF jointly fits six size-standardized mechanical targets. HGB fits six separate
+targets:80 iterations, max_leaf_nodes7, max_depth3, min_samples_leaf30,
+learning_rate0.05, l2_regularization1, early_stoppingFalse. Reuse the original
+partition initialization_seed. No tuning, additional feature selection, early
+stopping, clipping, neural refitting or outcome-dependent model/size choice.
+
+Preprocessing is exactly the existing direct-tree recipe, extended to the six
+mechanical targets. Size-specific raw32 grain-weighted feature centers and size9
+SVE means are subtracted from the established mean/max/q90/q99/top3 and size blocks.
+For each size/target, subtract the fitting mean and divide by the square root of
+max(sample variance,1e-6 pooled fitting variance,1e-30); invert those same values.
+The size-mean baseline uses the corresponding budget's fitted means.
+
+Outputs and comparisons
+Save every prediction in physical units, fit IDs/preprocessing, model pickles,
+source hashes, feature schema, fitted model records and runtime/environment.
+Report absolute R2, physical RMSE/MAE/bias and Pearson correlation for each repeat,
+each of five sizes, and pooled; report arithmetic means across repeats. Also
+report prediction/target SD ratios and within-partition ratios to characterize
+the controls' compressed variation. Do not infer a causal training failure from
+those statistics alone.
+
+For graph versus every fixed reference, report absolute R2 differences and
+physical RMSE differences. Average squared losses over the two repeats within
+each physical SVE; use4000 paired physical-SVE bootstrap draws, stratified by
+size for pooled scope, seed20261117, common draws for all models and targets.
+R2 differences use the same resampled truth variance. Positive deltaR2 favors
+the graph; negative deltaRMSE favors the graph. RMSE percentage reduction may be
+provided as a secondary compatibility statistic, never as percent change in R2.
+Intervals are pointwise, conditional on fixed models and the reused development
+cohort; no retraining or multiplicity adjustment. All outcomes/scopes are reported.
+
+Verification
+Require exact truth/identity matches to all30 original mechanical replay files,
+recompute prior graph/control metrics, independently replay all fitted trees and
+preprocessing, recompute metrics/paired intervals from saved rows, and require
+complete finite predictions. Preserve prior study files. Interpret graph/control
+benefits separately from conventional-surrogate comparisons and active capacity.

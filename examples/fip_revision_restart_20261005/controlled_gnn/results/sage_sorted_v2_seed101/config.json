@@ -1,0 +1,445 @@
+{
+  "Verbosity": {
+    "level": 1
+  },
+  "NeuralNetwork": {
+    "Architecture": {
+      "mpnn_type": "SAGE",
+      "radius": 7,
+      "max_neighbours": 5,
+      "periodic_boundary_conditions": false,
+      "hidden_dim": 256,
+      "num_conv_layers": 3,
+      "num_radial": 6,
+      "num_gaussians": 50,
+      "envelope_exponent": 5,
+      "activation_function": "elu",
+      "edge_features": [],
+      "graph_pooling": "max",
+      "global_attn_engine": "",
+      "global_attn_type": "",
+      "pe_dim": 2,
+      "global_attn_heads": 1,
+      "dropout": 0.1,
+      "use_graph_attr_conditioning": true,
+      "graph_attr_conditioning_mode": "concat_node",
+      "input_dim": 32,
+      "output_heads": {
+        "node": [
+          {
+            "type": "branch-0",
+            "architecture": {
+              "type": "mlp",
+              "num_headlayers": 2,
+              "dim_headlayers": [
+                64,
+                32
+              ]
+            }
+          }
+        ],
+        "graph": [
+          {
+            "type": "branch-0",
+            "architecture": {
+              "num_sharedlayers": 2,
+              "dim_sharedlayers": 16,
+              "num_headlayers": 2,
+              "dim_headlayers": [
+                32,
+                16
+              ]
+            }
+          }
+        ]
+      },
+      "task_weights": [
+        1.0,
+        1.0
+      ],
+      "edge_dim": null,
+      "output_dim": [
+        20,
+        18
+      ],
+      "output_type": [
+        "node",
+        "graph"
+      ],
+      "num_nodes": 29,
+      "pna_deg": null,
+      "avg_num_neighbors": null,
+      "radial_type": null,
+      "distance_transform": null,
+      "num_filters": null,
+      "num_after_skip": null,
+      "num_before_skip": null,
+      "basis_emb_size": null,
+      "int_emb_size": null,
+      "out_emb_size": null,
+      "num_spherical": null,
+      "correlation": null,
+      "max_ell": null,
+      "node_max_ell": null,
+      "enable_interatomic_potential": false,
+      "equivariance": null,
+      "freeze_conv_layers": false,
+      "initial_bias": null,
+      "SyncBatchNorm": false
+    },
+    "Training": {
+      "num_epoch": 120,
+      "perc_train": 0.8,
+      "loss_function_type": "mse",
+      "batch_size": 16,
+      "EarlyStopping": true,
+      "patience": 50,
+      "Checkpoint": true,
+      "checkpoint_warmup": 5,
+      "Optimizer": {
+        "type": "AdamW",
+        "learning_rate": 0.0001586668862464421
+      },
+      "weight_decay": 1e-05,
+      "lr_scheduler": "reduce_on_plateau",
+      "lr_scheduler_factor": 0.3,
+      "lr_scheduler_patience": 15,
+      "lr_scheduler_min_lr": 1e-07,
+      "conv_checkpointing": false,
+      "precision": "fp32"
+    },
+    "Variables_of_interest": {
+      "input_node_features": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31
+      ],
+      "output_names": [
+        "pn_targets",
+        "pg_targets"
+      ],
+      "output_dim": [
+        20,
+        18
+      ],
+      "output_index": [
+        0,
+        0
+      ],
+      "type": [
+        "node",
+        "graph"
+      ],
+      "node_features": {
+        "x_input": {
+          "role": "input",
+          "dim": 32,
+          "output_type": "node"
+        },
+        "pn_targets": {
+          "role": "output",
+          "dim": 20,
+          "output_type": "node"
+        }
+      },
+      "graph_features": {
+        "pg_targets": {
+          "role": "output",
+          "dim": 18,
+          "output_type": "graph"
+        }
+      },
+      "denormalize_output": false
+    }
+  },
+  "Visualization": {
+    "plot_init_solution": false,
+    "plot_hist_solution": false,
+    "create_plots": false
+  },
+  "Recipe": {
+    "size_bucket": null,
+    "use_per_grain_target": true,
+    "use_per_graph_target": true,
+    "node_task_weight": 1.0,
+    "per_grain_transform": "zscore",
+    "per_graph_transform": "log1p",
+    "split_fracs": [
+      0.9,
+      0.05,
+      0.05
+    ],
+    "dropout": 0.0,
+    "graph_head_dims": {
+      "num_sharedlayers": 2,
+      "dim_sharedlayers": 16,
+      "num_headlayers": 2,
+      "dim_headlayers": [
+        32,
+        16
+      ]
+    },
+    "use_x_blocks": [
+      "quat",
+      "schmid12",
+      "volume",
+      "surface_area",
+      "perimeter",
+      "degree",
+      "Iuu",
+      "Ivv",
+      "Iuv",
+      "J_polar",
+      "I1",
+      "I2",
+      "voxel_geom"
+    ],
+    "use_edge_cols": [
+      "edge_length"
+    ],
+    "drop_periodic_edges": false,
+    "graph_attr_source": "size_bucket_onehot",
+    "graph_attr_conditioning_mode": "concat_node",
+    "stratify_by_bucket": true,
+    "split_seed": 42,
+    "train_buckets": null,
+    "test_buckets": null,
+    "target_residual_baseline": null,
+    "per_graph_target_aggr": "max",
+    "use_fcc_sym_augment": false,
+    "use_so3_augment": false,
+    "per_grain_target_col": 0,
+    "loss_recipe": "het_nll_both_50_10_distB",
+    "per_grain_target_field": "fs_fip",
+    "aux_targets": null,
+    "aux_task_weights": null,
+    "pt_path": "examples/cpfem_fip_data/outputs/full_data_v5.pt",
+    "per_grain_targets": [
+      {
+        "name": "lcf_fs_max",
+        "field": "lcf_fs_fip_dist",
+        "col": 0,
+        "transform": "yeo_johnson"
+      },
+      {
+        "name": "lcf_wp_max",
+        "field": "lcf_wp_fip_dist",
+        "col": 0,
+        "transform": "yeo_johnson"
+      },
+      {
+        "name": "hcf_fs_max",
+        "field": "hcf_fs_fip_dist",
+        "col": 0,
+        "transform": "yeo_johnson"
+      },
+      {
+        "name": "hcf_wp_max",
+        "field": "hcf_wp_fip_dist",
+        "col": 0,
+        "transform": "yeo_johnson"
+      },
+      {
+        "name": "lcf_fs_within_mean",
+        "field": "lcf_fs_fip_dist",
+        "col": 1,
+        "transform": "yeo_johnson"
+      },
+      {
+        "name": "lcf_wp_within_mean",
+        "field": "lcf_wp_fip_dist",
+        "col": 1,
+        "transform": "yeo_johnson"
+      },
+      {
+        "name": "hcf_fs_within_mean",
+        "field": "hcf_fs_fip_dist",
+        "col": 1,
+        "transform": "yeo_johnson"
+      },
+      {
+        "name": "hcf_wp_within_mean",
+        "field": "hcf_wp_fip_dist",
+        "col": 1,
+        "transform": "yeo_johnson"
+      },
+      {
+        "name": "lcf_fs_logmu_voxel",
+        "field": "lcf_fs_fip_dist",
+        "col": 6,
+        "transform": "yeo_johnson"
+      },
+      {
+        "name": "lcf_wp_logmu_voxel",
+        "field": "lcf_wp_fip_dist",
+        "col": 6,
+        "transform": "yeo_johnson"
+      },
+      {
+        "name": "hcf_fs_logmu_voxel",
+        "field": "hcf_fs_fip_dist",
+        "col": 6,
+        "transform": "yeo_johnson"
+      },
+      {
+        "name": "hcf_wp_logmu_voxel",
+        "field": "hcf_wp_fip_dist",
+        "col": 6,
+        "transform": "yeo_johnson"
+      },
+      {
+        "name": "lcf_fs_logsigma_voxel",
+        "field": "lcf_fs_fip_dist",
+        "col": 7,
+        "transform": "yeo_johnson"
+      },
+      {
+        "name": "lcf_wp_logsigma_voxel",
+        "field": "lcf_wp_fip_dist",
+        "col": 7,
+        "transform": "yeo_johnson"
+      },
+      {
+        "name": "hcf_fs_logsigma_voxel",
+        "field": "hcf_fs_fip_dist",
+        "col": 7,
+        "transform": "yeo_johnson"
+      },
+      {
+        "name": "hcf_wp_logsigma_voxel",
+        "field": "hcf_wp_fip_dist",
+        "col": 7,
+        "transform": "yeo_johnson"
+      }
+    ],
+    "pergraph_targets": [
+      {
+        "name": "lcf_fs_pergraph_max",
+        "source": "lcf_fs_pergraph_max",
+        "transform": "yeo_johnson"
+      },
+      {
+        "name": "lcf_wp_pergraph_max",
+        "source": "lcf_wp_pergraph_max",
+        "transform": "yeo_johnson"
+      },
+      {
+        "name": "hcf_fs_pergraph_max",
+        "source": "hcf_fs_pergraph_max",
+        "transform": "yeo_johnson"
+      },
+      {
+        "name": "hcf_wp_pergraph_max",
+        "source": "hcf_wp_pergraph_max",
+        "transform": "yeo_johnson"
+      },
+      {
+        "name": "lcf_fs_ve_mu_pergraph",
+        "source": "lcf_fs_ve_mu_pergraph",
+        "transform": "zscore"
+      },
+      {
+        "name": "lcf_wp_ve_mu_pergraph",
+        "source": "lcf_wp_ve_mu_pergraph",
+        "transform": "zscore"
+      },
+      {
+        "name": "hcf_fs_ve_mu_pergraph",
+        "source": "hcf_fs_ve_mu_pergraph",
+        "transform": "zscore"
+      },
+      {
+        "name": "hcf_wp_ve_mu_pergraph",
+        "source": "hcf_wp_ve_mu_pergraph",
+        "transform": "zscore"
+      },
+      {
+        "name": "yield_stress",
+        "source": "yield_stress",
+        "transform": "zscore"
+      },
+      {
+        "name": "hardening_modulus",
+        "source": "hardening_modulus",
+        "transform": "zscore"
+      },
+      {
+        "name": "Wp_lcf",
+        "source": "Wp_lcf",
+        "transform": "zscore"
+      },
+      {
+        "name": "Wp_hcf",
+        "source": "Wp_hcf",
+        "transform": "zscore"
+      },
+      {
+        "name": "sigma_amp_lcf",
+        "source": "sigma_amp_lcf",
+        "transform": "zscore"
+      },
+      {
+        "name": "sigma_amp_hcf",
+        "source": "sigma_amp_hcf",
+        "transform": "zscore"
+      }
+    ],
+    "node_head_dims": {
+      "num_headlayers": 2,
+      "dim_headlayers": [
+        64,
+        32
+      ]
+    },
+    "use_residual_node_head": true,
+    "use_heteroscedastic_max": true,
+    "use_heteroscedastic_pergraph_max": true
+  },
+  "Dataset": {
+    "node_features": {
+      "name": [
+        "pn_targets"
+      ],
+      "dim": [
+        20
+      ]
+    },
+    "graph_features": {
+      "name": [
+        "pg_targets"
+      ],
+      "dim": [
+        18
+      ]
+    }
+  }
+}

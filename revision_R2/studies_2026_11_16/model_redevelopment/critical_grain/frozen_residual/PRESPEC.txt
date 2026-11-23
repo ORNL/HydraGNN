@@ -1,0 +1,79 @@
+FROZEN-ORIGINAL RESIDUAL RAW-GRAIN MAGNITUDE/COMPETITION — CANDIDATE V1
+Fixed residual-head experiment, 16 November 2026.
+Fitting uses a configuration bound to the source and partition hashes.
+
+Twenty new HEAD fits: bulk_control and critical_treatment, each on ten existing
+repeat/fold partitions. Strict-load each ORIGINAL current baseline best.pt using
+saved fitting-only preprocessing. Freeze/eval encoder, BatchNorm buffers and all
+legacy decoders permanently. Cache original final node h256, original raw grain
+p0, and every original output. No graph branch is added. No L0 optimization.
+This is a frozen-representation residual readout experiment, not representation
+learning or a restoration of auxiliary fidelity by retaining loss terms.
+
+Both heads are identical256->64 ELU->4, zero final weights/bias, no dropout.
+Seed2026111700+10*repeat+fold, isolated CPU/CUDA RNG. New raw grain prediction
+r=p0+sqrt(v_g[size,case])*delta(h). Thus delta0 reproduces p0 exactly and all
+original outputs remain unchanged for all updates, including original maxima.
+Only16708new head parameters belong to the optimizer. No inverse is differentiated.
+
+Fitting-only grain mean and v_g use an equal-SVE mixture: uniformly select a
+fitting SVE within size, then a grain. v_g is the mean squared deviation from
+that mixture mean, population convention. Floor=max(1e-6*pooled_equalSVE_grain
+variance,1e-30). v_M is original fitting-size/case maximum SAMPLE variance;
+existing graph floor=max(1e-6*pooled_fitting_max_sample_variance,1e-30).
+Both floors are declared and must be inactive in this fixed cohort; otherwise
+abort preparation for protocol review. All raw peak labels must be finite.
+Original auxiliary missing-label zero filling is unchanged; export source masks.
+
+B=mean_grain[(r-y)^2]/v_g. P=(max_ALL_grains(r)-true_full_maximum)^2/v_M.
+For T, K=min(4,N), t=Kth-largest true label, a=count>t, e=count=t.
+Weights1above,tie weight(K-a)/e at t,zero below. T=sum(weight*(r-y)^2)/(K*v_g).
+Predicted max uses torch.amax, with equal derivative among exact predicted ties.
+False winners outside true top4 receive P gradients. No labels enter inference.
+All new terms use fixed fitting size weight Nfit/(5*nfit,size), then average
+four cases and batch SVEs. This estimates equal20size/case-cell risk.
+Control=B. Treatment=B+.5T+.5P. This is one magnitude/competition package.
+No architecture/K/temperature/coefficient sweep, attention or gradient clipping.
+
+Common stopping and scheduler score=.5*equal20cell mean(B)+.5*equal20cell mean(P).
+Primary scientific contrast is treatment-control FULL-N predicted-grain maximum
+P; report B, LCF, all sizes/cases, and original/new routes separately. Improved
+composite or grain risk cannot certify maximum improvement. Frozen original
+outputs are preserved by construction; this does not promise a better new route.
+
+Untrained identity is eligible checkpoint epoch-1 in BOTH arms. Earliest strict
+finite best; ties keep earlier checkpoint. This guarantees only stopping-score
+nonworsening relative to identity, never an outer guarantee. Report selected-1
+counts. Current AdamW lr0.0001586668862464421,wd1e-5,defaultbetas/epsilon;
+batch16, exact saved fitting permutations, no stochastic encoder forwards.
+ReduceLROnPlateau factor.3,patience15,minlr1e-7 starts observations at trained
+epoch0. Identity affects checkpoint/early-stop reference, not scheduler history.
+Cap120updateepochs; stop after50completed epochs without strict checkpoint
+improvement. If identity remains best, epochs0...49 run. No adaptive outer tuning.
+
+Preparation caches only fitting/stopping. Source loader reads the complete raw
+container but new outer target arrays, transforms, h and forwards are forbidden
+until that arm's selected head is saved, strict-reloaded and sealed by hash.
+The first sealed arm creates one versioned, hashed outer cache per partition.
+The second arm accesses those identical h/p0/legacy arrays only after its OWN
+selected-head seal; neither arm's fitting/stopping path reads the outer cache.
+Outer comparisons require all twenty fits to complete and their checkpoint
+and prediction identities to be verified.
+
+Canonical cache device is EACH original checkpoint's recorded completion.device
+(four CPU, six CUDA), batch16, original subset order. All20 NEW-head fits use
+cuda:0, identical paired arms, regardless of cache source device. CPU/CUDA technical cross-device checks
+have an explicit source-parity tolerance;
+same-device before/after replay is checked directly with measured tolerances for
+CUDA reduction roundoff. Exact cached-array preservation and exact paired inputs
+are distinct from tolerant repeated original inference. Original file hash/full
+model state including buffers must remain unchanged; original gradients absent.
+New nonfinite predictions/losses/gradients fail the fit, never fall back to
+identity. Keep/count finite negative predictions. Preserve all failures/partials.
+No automatic scientific restart, overwrite, calibration search or manuscript edit.
+
+Export original transformed/raw grain and graph means, original labels/masks,
+new residual grain predictions and full-N maxima, cases, original point-output
+identity, canonical SVE/grain-row/VTK IDs. Old uncertainty refers to the old head;
+do not attach it to this new point predictor. Any operational bridge/calibration
+belongs to the previously fixed downstream pipeline, not checkpoint selection.

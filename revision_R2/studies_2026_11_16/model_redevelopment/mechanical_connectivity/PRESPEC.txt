@@ -1,0 +1,34 @@
+SECONDARY MECHANICAL CONNECTIVITY SUMMARY — 16 November 2026
+
+Scope fixed before calculating the new paired intervals. Previously reported
+auxiliary point metrics were inspected and motivate this secondary analysis;
+this is not a prospectively chosen primary endpoint or independent validation.
+No training, new inference, calibration, head selection or response imputation.
+
+Use all thirty completed checkpoint replays in hierarchy_output_probe: original,
+no_message_degree and no_message_no_degree; two complete five-fold repeats on
+940 physical SVEs. Extract mechanical_pred and mechanical_true, never the
+filled or readout/oracle arrays. Require every value finite and every source
+mechanical label valid. Match dataset_idx to each original evaluation partition
+and canonical source labels. Preserve exact paired truth and target order.
+
+Report all six mechanical targets at all five sizes and pooled: each repeat's
+R2, RMSE, MAE, bias and Pearson correlation; arithmetic repeat means. Independently
+match the already published auxiliary metrics. Do not equate these checkpoints
+with the separate 846/47/47 evaluation reporting mean mechanical R2 about .82.
+These current checkpoints were selected by the repeated-maximum protocol.
+
+Compare original graph versus EACH no-message control for every target and
+scope, using raw-unit squared errors averaged across the two repeats per
+physical SVE. RMSE reduction=100*(1-sqrt(mean graph loss/mean control loss)).
+Use 4000 physical-SVE bootstrap resamples, stratified by size for pooled scope;
+seed20261116, same draws for targets and both comparisons. Pointwise percentile
+95% intervals, no multiplicity correction; conditional on fitted models and
+the reused development cohort. No selecting favorable sizes or targets.
+
+The graph/no-message recipe matches allocations and training protocol, but
+139264 neighbor-weight parameters become inactive when messages are removed.
+The result measures the effect of this ablation under that recipe, not a pure
+test of physical adjacency against equal active capacity or rewired graphs.
+Mechanical benefit is separate from maximum prediction and cannot substitute
+for the direct within-size maximum comparison requested by reviewers.

@@ -1,0 +1,108 @@
+Literature-based threshold comparison
+Defined 16 November 2026 before computing the new threshold-selector results
+
+Purpose
+Compare literature-based tail threshold selectors on the same frozen predicted
+grain fields, and distinguish distributional tail diagnostics from accuracy of
+one maximum per SVE. This is an exploratory extension on an already examined
+cohort, not an independent confirmation study.
+
+Population and separation
+Use the existing two five-fold partitions of all 940 SVEs and all four FIP cases.
+Use original frozen GNN checkpoints through the saved, verified raw prediction
+exports. Each evaluated SVE has two predictions from models excluding that SVE.
+Compute thresholds using only that SVE's predicted grain field. Fit each affine
+calibrator on the original stopping predictions within its outer training
+partition. Never use an outer evaluation maximum to choose a threshold, fit a
+calibrator, choose a numerical setting, or select a reported method.
+The stopping SVEs also selected the neural checkpoint; this is not an independent
+calibration-validation sample. Their actual counts are recorded per fold.
+
+Common numerical model
+GPD excess likelihood with fixed location zero and shape restricted to
+[-0.49, 0.95]. These common bounds are an explicit regularization adaptation,
+not a claim to reproduce unrestricted estimators in the cited papers. They
+keep the fitted mean finite and avoid the nonregular negative-shape region.
+Candidate thresholds are empirical quantiles .50, .60, .70, .80, .85, .90,
+.925 and .95. Exceedances are strict and at least 10 are required. Duplicate
+thresholds are removed. Every estimate must satisfy its GPD support condition.
+The scalar map is the conditional expected maximum of the observed selected
+count k of excesses under that fitted GPD. It is a working tail model for
+correlated predicted grain values, not an independence claim for the material.
+Sparse or constant inputs and unrecoverable numerical failures return the
+largest predicted grain value, with a recorded reason. No SVE is omitted.
+
+Selector families
+1. Bootstrap expected quantile discrepancy (Murphy, Tawn and Varty): B=100
+   nonparametric resamples; m=500 probability points; each fitted bootstrap
+   sample is compared with its own interpolated empirical quantiles.
+2. Ordered Anderson-Darling goodness-of-fit (Bader, Yan and Zhang):
+   ForwardStop and StrongStop at alpha=.05; fitted-parameter null calibration
+   by parametric simulation using the same constrained estimator. The finite
+   simulation grid, interpolation and Monte Carlo precision are audited.
+3. Shape stability (Northrop and Coleman): piecewise-GPD score tests across
+   candidate thresholds, with the test implementation and boundary policy
+   documented. This is not a visual overlapping-interval heuristic.
+4. Predictive selection and averaging (Northrop, Attalides and Jonathan):
+   Bayesian leave-one-out scores at a common validation threshold, including
+   the special treatment needed when leaving out the sample maximum.
+   Bounded-prior deterministic quadrature and shared MLE scalar maps are
+   explicit adaptations; convergence is checked before the full experiment.
+5. Fixed-threshold GPD/POT controls use the common estimator and maximum map
+   below. Together these groups yield six adaptive procedures and fixed
+   distributional controls; GPD/POT is not itself a threshold selector.
+Mean-residual-life curves are a separate graphical diagnostic on five SVEs
+chosen using grain counts alone. No automated MRL selector is claimed.
+
+Controls and endpoints
+Use fixed .50, .75 and .90 quantiles and mean+sample-SD thresholds with the
+same GPD estimator and finite-count map. Include the largest predicted grain,
+the manuscript's original calibrated bridge, its calibrated direct graph
+head, and available size/count and direct-RF baselines.
+For every new method report raw outputs and standardized scalar Ridge10
+calibration with an unpenalized intercept using the same stopping identities.
+Do not add response
+summaries, count interactions, size indicators, hyperparameter searches or
+post-hoc positivity clipping to these calibrators.
+The original bridge is imported unchanged. Its source chooses Ridge10 through
+the condition 'ridge' in method; the word 'bridge' satisfies that condition.
+Thus its actual scalar calibration is Ridge10, as previously reconstructed.
+Its historical direct-head and grain-maximum affine controls use OLS. The new
+selector comparisons all use the same Ridge10 calibrator. A common completed
+Gumbel reference using predicted-maximum fallback is also calibrated on every
+stopping SVE; the imported original preserves its fitting-size-mean fallback
+and original valid-calibration subset. This separates a threshold comparison
+from differences in the original fallback/eligibility convention.
+
+Report R2, RMSE, MAE, bias and correlation by case, repeat and each of five
+sizes, as well as pooled results. Report all selector families, selected
+quantiles/counts, boundary estimates, fallbacks and runtime. The primary
+comparison concerns the calibrated selector families against the original
+calibrated bridge and a common fixed-q50 GPD control; size-only comparisons
+establish whether any remaining predictive gain exceeds size information.
+No best outer-score method is automatically substituted into the manuscript.
+
+Uncertainty
+Use 4000 paired SVE bootstrap resamples, stratified by size for pooled results.
+Average squared errors over the two repeats within a physical SVE before
+resampling. Include pointwise 95% intervals and a simultaneous comparison
+summary for the prespecified selector family. These describe uncertainty of
+the fixed predictions on this cohort, not repeated training or all prior
+method-development choices. Formal iid GOF/FDR guarantees are not asserted
+for spatially dependent learned grain values.
+
+Observed-input diagnostic
+Run the same threshold maps once on each physical SVE's observed grain field,
+with identical algorithm settings, separately from deployable predictions.
+These fields contain the maximum being summarized. Their reconstruction
+accuracy diagnoses the map; it is neither out-of-sample microstructure
+prediction nor an accuracy ceiling. Never combine them with predictive
+methods in a performance ranking.
+
+Verification and presentation
+Verify GPD likelihood against an independent optimizer, finite-count maximum
+against quadrature, EQD quantile definitions, ordered-test indexing, score
+information and predictive quadrature convergence. Verify all source hashes,
+fold identities, truth alignment and finite full-cohort outputs. Use the
+author's serif/LaTeX, boxed-axis figure style without titles and with short
+captions. Detailed protocols belong in supplementary text, not captions.

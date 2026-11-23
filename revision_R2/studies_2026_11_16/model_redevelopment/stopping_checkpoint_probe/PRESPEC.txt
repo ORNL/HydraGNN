@@ -1,0 +1,62 @@
+STOPPING-ONLY SAVED-CHECKPOINT DIAGNOSTIC
+Protocol written 16 November 2026, before this probe generated predictions.
+
+Question
+Do final saved joint-trained checkpoints improve grain peaks, mechanics or the
+fixed uncalibrated bridge relative to the checkpoint selected by raw maximum
+error? This diagnoses a proposed auxiliary-undertraining explanation. It does
+not select a production checkpoint or estimate independent generalization.
+
+Scope and fixed design
+1. Ten existing current-940 repeat/fold baselines; compare best.pt with last.pt.
+   No fitting, optimizer steps, calibrators, learned readouts or parameter search.
+2. CPU only, two PyTorch/BLAS threads. Preserve the ongoing 20-fit branch study.
+3. Reuse each fold's saved fitting-only preprocessing and exact ordered list of
+   75 stopping IDs. Never transform, forward or score an outer SVE. Raw data may
+   be loaded as the source container; only stopping rows are transformed or
+   extracted for targets. Saved fitting statistics are read, never refitted.
+4. Original 20-node/18-graph output widths, model construction, loss recipe,
+   checkpoints and batch16 stopping order. Evaluate in model.eval/no_grad mode.
+5. Convert outputs to float64 before sklearn target inversions. Preserve the
+   historical torch inverse for raw SVE maxima to match the saved endpoint.
+6. Verify each best checkpoint's direct and grain-peak predictions against its
+   existing stopping archive BEFORE forwarding last.pt in that fold. The direct
+   tolerance is maximum absolute discrepancy <1e-4 of the fitting-size maximum
+   SD. For grain peaks use <1e-4 of saved fitting-case grain SD. Record absolute
+   and scaled discrepancies and devices; fail closed if parity is not met.
+7. Verify stopping identities, grain offsets, zero-based grain IDs, source truth,
+   source auxiliary masks, complete finite predictions and checkpoint hashes.
+
+Endpoints
+- Original joint loss L0=0.5*Lnode+0.5*Lgraph on identical batches; report the
+  graph-count-weighted mean of batch losses plus every batch value. This retains
+  the original loss and missing-label treatment; it is not a raw-unit error.
+- Four raw grain-peak endpoints: MSE, RMSE, R2 and Pearson correlation, pooled
+  over grains and separately by size. Source NaN masks exclude unavailable
+  targets. Also export all 16 raw node means and masks for reproducibility.
+- Six raw mechanical graph outputs (slots8:14): the same metrics, pooled over
+  stopping SVEs and separately by size. Read names/sources from saved dataset.
+- Four legacy direct raw maxima: the same metrics and original equal20-cell
+  MSE/fitting-sample-variance score, retaining ddof1 variance.
+- Fixed uncalibrated operational bridge using existing original_recut selection
+  and untruncated Gumbel expected-maximum functions. No threshold changes. If
+  the fixed map is ineligible, use the saved fitting-size/case mean, recording
+  every fallback. Also report maximum predicted grain as an untuned control.
+
+Aggregation and interpretation
+Report every fold/endpoint/size and descriptive fold averages/medians, paired
+last-minus-best changes and folds improved. Aggregate raw squared errors by
+endpoint without treating repeated stopping observations as independent SVEs.
+No significance testing, confidence intervals, causal selector claim or new
+accuracy-ceiling claim. These stopping labels already selected best.pt and
+influenced scheduling/patience for last.pt; results are development diagnosis.
+Lower fitting loss alone is not evidence of better validation predictions. If
+later checkpoints improve auxiliary endpoints but worsen maxima, state that
+tradeoff. Do not infer later training is always better. Do not alter the frozen
+20-fit protocol or manuscript from this probe alone.
+
+Deliverables
+Standalone probe.py; prediction NPZ per checkpoint/fold; batch-loss CSV;
+per-fold and descriptive aggregate metric CSVs; verification.json; REPORT.txt.
+Record source/input/checkpoint/output hashes, actual epochs, all IDs, tolerances,
+finite checks and explicit zero-outer-transform/forward/scoring checks.

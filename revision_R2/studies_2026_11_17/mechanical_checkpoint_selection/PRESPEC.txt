@@ -1,0 +1,84 @@
+SAVED-CHECKPOINT SELECTION STUDY — 17 NOVEMBER 2026
+Written before outer predictions or scores for any last checkpoint are obtained.
+
+Reason and scope
+Previous stopping-only diagnostics showed that later saved checkpoints improve
+mechanical predictions while often worsening direct maxima. The existing
+maximum-selected graph and no-message controls are already known. This secondary
+study asks whether choosing between the two SAVED graph checkpoints by joint
+stopping loss improves mechanical predictions on the unchanged outer cohorts.
+It is not neural retraining, a new holdout, a full joint-loss training trajectory,
+or a search over epochs. Both saved checkpoints arose from maximum-based
+scheduling and patience. The selection rule is motivated by observed stopping
+results and historical training provenance; it was not chosen before those data.
+
+Fixed selection rule
+For each of the exact ten existing partitions, use the 75 stopping SVEs only.
+Compute L = 0.5 node loss + 0.5 graph loss with the original executed loss recipe,
+original transformed targets and missing-label convention, batch size 16 and
+original ordered stopping IDs. Average batch losses weighted by number of SVEs.
+Choose last.pt only if its L is strictly less than best.pt's L; ties choose best.
+Reuse the independently verified stopping-only caches and recorded batch losses.
+Recompute their aggregation and freeze all ten choices in selection.json before
+any outer inference. Both checkpoints remain eligible in every fold. There is
+one encoder choice for ALL quantities, never a different choice by case or target.
+This uses the same joint loss family as the original model; it need not reproduce
+historical batching/reduction, and does not reproduce historical scheduling.
+
+Endpoints and fixed comparisons
+Evaluate both saved checkpoints on all ten ordered outer cohorts, then assemble:
+  original_maximum_selected: the unchanged verified published-reference mechanics;
+  best_replay: CPU replay for implementation parity only;
+  last_fixed: fixed final-checkpoint diagnostic, not an outcome-selected winner;
+  joint_selected: the stopping-only selection above, main candidate of this study.
+Six mechanical quantities, their exact existing physical truths and MPa units;
+all 940 SVEs, two five-fold repeats, each size and pooled. Compare joint_selected
+and last_fixed with the original, RF/HGB under fitting-only and fitting+stopping
+budgets, and corresponding size means from the verified mechanical-tree study.
+Do not reinterpret joint-selected versus old no-message controls as a matched
+architecture ablation: those controls have no saved last checkpoint.
+
+Preserve full transformed node/graph predictions and raw means for both stopping
+and outer cohorts, including raw node truth/masks, grain identifiers, offsets,
+four grain peaks, direct maxima, six mechanics, all auxiliary output channels.
+Reuse stopping NPZs by immutable path plus hash; newly write outer NPZs here.
+No fitting set or outer label is used to select the checkpoint.
+
+Assess the SAME selected encoder's four direct maximum predictions and existing
+calibrated selected-grain bridge. For each best/last checkpoint independently,
+fit the existing fixed StandardScaler + Ridge(alpha=10) scalar bridge map on its
+eligible stopping predictions only. This alpha matches the existing executed
+bridge implementation (including its method-name dispatch), not assumed OLS.
+The selected-grain scalar and eligibility are exactly the established summaries:
+mean of selected peaks + sqrt(6)/pi * SD(selected peaks) * log(effective count),
+at least four selected and positive SD; fitting-size mean fallback for ineligible
+outer cases, at least ten eligible stopping cases. No tuning or new feature map.
+Report raw direct maximum, maximum predicted grain, operational uncalibrated
+bridge and calibrated bridge under best, last and joint-selected encoders.
+Original best-reference bridge predictions remain unchanged. Reusing stopping
+labels for selection and calibration is explicit; outer labels are excluded.
+
+Verification and uncertainty
+Verify raw source, partitions, checkpoint/preprocessing/source hashes, canonical
+IDs, exact truths and counts. Check CPU best replay against existing grain/direct
+archives below 1e-4 fitting SD, and mechanical replay below 1e-4 physical truth SD.
+Fail closed on identity mismatch or nonfinite mechanical/maximum predictions.
+Record all missing auxiliary truth separately; do not alter historical training.
+Freeze manifests before inference and require input hashes unchanged afterwards.
+
+Metrics are physical RMSE/MAE/bias, absolute R2, Pearson correlation and prediction
+SD/truth SD. Aggregate by arithmetic mean over the two full-cohort repeat metrics.
+Paired contrasts use mean squared losses within each physical SVE over repeats;
+report signed absolute deltaR2 and deltaRMSE, never percentage change in R2.
+Use 4000 paired physical-SVE bootstrap draws, seed 20261117, stratified by size
+when pooled. Intervals condition on fixed fitted predictors, are pointwise and
+unadjusted, and do not include full selection/retraining uncertainty. Use the same
+draws for every candidate/reference/target. Report every size and outcome.
+For maximum consequences compare joint-selected and last with the best encoder
+using the identical route, so calibration changes are not confused with encoder
+changes. No case-specific adoption based on outer results.
+
+Independently recompute metrics, selection and bootstrap results from saved data.
+Record provenance and output schema. Preserve all previous studies and manuscript.
+No neural optimizer update, additional epoch, target modification or checkpoint
+overwrite is permitted. Any further method decision is a separate explicit step.

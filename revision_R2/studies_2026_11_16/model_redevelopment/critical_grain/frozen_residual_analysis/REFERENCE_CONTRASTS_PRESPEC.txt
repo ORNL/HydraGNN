@@ -1,0 +1,23 @@
+FIXED REPORTING CONTRASTS REQUESTED BY ROOT
+16 November 2026, specified before any new residual outcome has been opened.
+
+Root requested an immediately actionable comparison with established calibrated
+bridge/summary routes, including every fixed new route. This adds reporting
+contrasts only; the twenty-head training, routes, calibrators, primary endpoint,
+bootstrap draws and core analysis are unchanged.
+
+For each arm and each of its five already fixed routes, compare with the original
+production bridge/Ridge10 and original summary/Ridge100, all four cases, pooled
+and all five sizes. Do not select a winning route. Contrasts already present in
+the core ledger need not be duplicated. Report paired RMSE reductions and mean
+repeat Pearson differences with the existing physical-SVE bootstrap.
+
+Also report equal-20-cell P risk for each arm's raw grain maximum versus exact
+cached-original raw grain maximum, original direct/raw, original bridge/Ridge10,
+original summary/Ridge100 and the union size mean. These are fixed secondary
+context contrasts; the sole primary inference remains treatment versus control.
+Use exactly the original fitting maximum sample variance and shared draws.
+
+Compute after all twenty fits and their checkpoint and prediction checks pass.
+Independently check every additional interval by physical-SVE multiplicities.
+No new model, tuning, outcome-selected route or adoption gate is introduced.

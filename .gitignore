@@ -7,3 +7,24 @@ dataset/
 logs/
 serialized_dataset/
 exporter.log
+
+
+# FIP publication outputs and downloaded simulation/model data
+/revision_R2/**
+/revision_restart_2026_10_05/**
+/revision_final/**
+/examples/cpfem_fip_data/outputs/
+/examples/data/
+/model_ready_data/
+/Supplementary_data/
+**/*.h5
+**/fitted_preprocessing.pkl
+**/best.pt
+**/last.pt
+**/*.npz
+**/*.npy
+**/*.pkl
+**/*.pk
+**/*.csv
+**/*.csv.gz
+**/__pycache__/

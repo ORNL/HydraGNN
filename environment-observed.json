@@ -1,0 +1,19 @@
+{
+  "python": "3.11.6",
+  "platform": "Linux-6.18.58.1-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+  "torch": "2.8.0",
+  "cuda_build": "12.8",
+  "cudnn": 91700,
+  "distribution_count": 210,
+  "core_packages": {
+    "numpy": "1.26.4",
+    "scipy": "1.14.1",
+    "scikit-learn": "1.5.1",
+    "pandas": "3.0.2",
+    "torch": "2.8.0",
+    "torch-geometric": "2.6.1",
+    "torch-scatter": "2.1.2+pt28cu128",
+    "torch-sparse": "0.6.18+pt28cu128",
+    "mpi4py": "4.1.1"
+  }
+}

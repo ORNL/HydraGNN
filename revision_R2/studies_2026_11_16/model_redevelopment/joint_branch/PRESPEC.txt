@@ -1,0 +1,66 @@
+MATCHED JOINT RAW-MAXIMUM BRANCH — IMPLEMENTATION PREPARATION
+Fixed experiment, 16 November 2026. Training uses a source-fingerprinted configuration.
+
+Twenty fits: detached and attached branches on each of the ten current outer
+partitions. This extends the historical architecture/loss idea under the current
+fold protocol; it is not an exact replication of its592/85/169 experiments.
+
+Both arms reconstruct the same current377974-parameter core initial state from
+the saved seed/config and verify its full state hash, including BatchNorm buffers.
+All current input/output/auxiliary-label handling remains identical, including
+zero-filled physical-sigma labels. All original joint loss blocks remain active.
+Current originals and previously completed studies are read-only references.
+
+New branch: original latent MAX(h256), concatenate fitting-standardized log grain
+count,257->64 ELU->4. New module initialization has a separate fixed seed and
+preserves the original CPU/CUDA RNG streams. Final weights and biases are zero.
+Both new heads initially predict the fitting-size/case mean; the original heads
+are unchanged, but the new head does not initially equal the original head.
+
+The decoder uses fitting-size/case mean and sample SD: sample variance v(ddof1)
+with declared floor max(v,1e-6*pooled fitting-case sample variance,1e-30). The
+preparation verifies whether that floor is inactive relative to saved checkpoint
+variance. Legacy inversion keeps its original population SD(ddof0) contract.
+Log count uses fitting SVEs only, population mean/SD.
+
+L0=.5*original node loss+.5*original graph loss.
+Lmax=mean_S{Nfit/(5*nfit,size)*mean_case[(rawmax-target)^2/v(size,case)]}.
+Total L0+2Lmax in both arms. Detached blocks only the new raw branch gradient
+into pooled node states; original core losses train normally. Attached permits
+both gradients. There is no gradient clipping that couples head and core norms.
+
+Current AdamW: lr0.0001586668862464421,weight_decay1e-5,default betas/epsilon.
+Current ReduceLROnPlateau:factor.3,patience15,minlr1e-7; minibatch16;120epochs;
+early stopping after50epochs without a strict improvement. Same saved fitting
+permutations and initial dropout streams in both arms. Selection/scheduling use
+equal20cell NEWrawhead stopping NMSE and earliest strict finite best. The actual
+current runner permits epoch0 selection despite a stale cfg warmup field; this
+implementation follows the actual runner. Adaptive trajectories may differ.
+
+Finite negative raw predictions are kept and counted. Nonfinite loss/outputs/
+gradients invalidate the run and leave a failure record; no dropped SVE or
+undeclared size-mean substitute. Existing inverses retain their declared behavior
+and their clipping counts are recorded. No new calibration is fit in this trainer.
+
+Only fitting/stopping targets are extracted, transformed or forwarded before
+selection. The underlying source dataset is loaded in full by its original loader,
+but outer target arrays/graphs and forwards are created only after best checkpoint
+is saved, reloaded and hashed. Exports retain all IDs, original/raw new maxima,
+canonical grain fields, all transformed outputs, raw joint means and source masks.
+All arms/cases/sizes remain in the ledger; no outer-selected method or size winner.
+
+Technical verification uses separately constructed clones, never scientific-fit
+instances or deepcopy of the pooling closure: original function/state parity,
+RNG preservation, full paired initial equality, detached gradient equality toL0,
+attached extra gradients after one technical head update, active joint outputs,
+complete optimizer membership, cell-weight identity, node permutation invariance,
+finite raw/inverse roundtrips, and export schema/identity readback.
+
+Saved current baseline is a performance reference. Detached legacy outputs need
+not equal it, because selecting/scheduling on the new head can change the L0
+trajectory. The attached-minus-detached comparison isolates the intervention
+under a common adaptive policy, not under numerically identical learning rates.
+
+Historical branch checkpoints were selected by epoch31(zero-based) despite a400
+cap. Current120budget is declared in advance. Any extension requires a common
+protocol amendment based on convergence/stopping evidence, not outer results.

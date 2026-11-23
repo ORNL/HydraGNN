@@ -1,0 +1,19 @@
+17 November 2026, before calibrated-bridge fits or new outer scores.
+
+Verification includes all 7,520 current best-checkpoint calibrated-bridge rows, matched by repeat/fold/SVE/case, not
+only the upstream direct and grain prediction checks. Compare against the
+saved Graph Affine bridge calibration predictions and the published bridge
+prediction table. Audit stopping/evaluation selected counts, eligibility and
+fallback against the existing summaries and calibration ledger. Report every
+changed row, even if final numerical differences remain below tolerance.
+
+The existing summary computes effective_count = grain_count * selected_count /
+finite_predicted_grain_count. All predicted peaks should be finite and present;
+verify finite_predicted_grain_count == grain_count so effective_count equals
+selected_count exactly. If that assertion fails, stop and disclose the distinct
+formula rather than treating them as aliases.
+
+Bridge parity tolerance is maximum absolute change / saved fitting-size target
+SD < 1e-4. This tolerance is for floating-point replay, not permission to ignore
+a changed selected population. Counts/eligibility changes and per-row numerical
+differences are separately saved. No method modification follows from outer scores.

@@ -1,0 +1,51 @@
+Bounded sensitivity to the GPD shape constraint and minimum excess count
+Defined 16 November 2026 before computing this sensitivity comparison
+
+Motivation
+The completed primary threshold comparison showed frequent lower shape-bound
+fits in small SVEs. A requirement of ten excesses also sends high thresholds
+to the predicted-maximum fallback for most 125 micrometre SVEs, whereas the
+original bridge can use four or more selected grains. These observations
+motivate an explanatory sensitivity analysis. They do not justify choosing
+a new model from its outer evaluation performance.
+
+Fixed design
+Cross lower shape bounds {-0.49,-0.90} with minimum excess counts {10,4}.
+The upper shape bound remains0.95. Compare exactly three scalar maps: EQD,
+fixed median threshold, and fixed mean-plus-sample-SD threshold. EQD retains
+the original candidate quantiles, B=100, m=500, bootstrap definitions, seed
+rule and maximum functional. The minimum-count setting applies uniformly to
+candidate eligibility and deterministic fallbacks. All other numerical
+settings remain identical. The baseline(-0.49,10) arm is recomputed and must
+reproduce the existing frozen outputs exactly.
+
+The range below -0.5 is nonregular for standard GPD likelihood asymptotics.
+Its finite constrained likelihood can still be optimized here, but no AD
+calibration or shape-stability score test is extended into this range. This
+study concerns EQD and fixed-threshold aggregation only; it makes no formal
+GOF, confidence-coverage or independent-grain claim.
+
+Population and fitting
+Use all10,520 saved predicted fields, including7,520 evaluation fields, and
+all3,760 observed fields. Preserve every original SVE identity, outer repeat,
+fold, case and size. Each new map uses its own field only. Calibrate each arm,
+method, fold and case by StandardScaler plus scalar Ridge(alpha10), with a
+free intercept and no positivity clipping, on all75 original stopping SVEs.
+Do not alter neural checkpoints or use evaluation labels for threshold choice,
+calibration fitting, numerical settings or method selection.
+
+Report allfour arms, allthree methods, raw and calibrated predictive accuracy,
+and allcase/size cells. Keep observed-field reconstruction separate. Include
+selected counts, lower/upper boundary frequencies, numerical failures,
+fallbacks and runtime. Import the original calibrated bridge and size-mean
+references unchanged. Include paired comparisons using the same shared4000
+physical-SVE bootstrap draws from the primary study, averaging repeat squared
+errors before resampling. Any simultaneous summary covers the complete
+prespecified sensitivity family and does not erase its exploratory origin.
+
+Verification and stopping rule
+Preserve original source modules and outputs. Use isolated source-hashed
+numerical clones. Verify the expanded negative-shape likelihood against an
+independent optimizer before field computation. Check allfield identities,
+source hashes, finite predictions and exact baseline-arm reproduction. Finish
+this fixed comparison without extending or optimizing the grid after scores.

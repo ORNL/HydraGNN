@@ -29,19 +29,25 @@ class SAGEStack(Base):
             out_channels=output_dim,
         )
 
-        return Sequential(
-            self.input_args,
-            [
-                (sage, self.conv_args + " -> inv_node_feat"),
-                (
-                    lambda inv_node_feat, equiv_node_feat: [
-                        inv_node_feat,
-                        equiv_node_feat,
-                    ],
-                    "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
-                ),
-            ],
+        # Insert a dropout layer after the SAGE conv when self.dropout > 0
+        # so that MC Dropout (training-mode forward at inference) is
+        # available for epistemic UQ. Default dropout=0 preserves prior
+        # behavior (no dropout in the conv path).
+        layers = [(sage, self.conv_args + " -> inv_node_feat")]
+        if getattr(self, "dropout", 0.0) and self.dropout > 0.0:
+            layers.append(
+                (nn.Dropout(p=float(self.dropout)), "inv_node_feat -> inv_node_feat")
+            )
+        layers.append(
+            (
+                lambda inv_node_feat, equiv_node_feat: [
+                    inv_node_feat,
+                    equiv_node_feat,
+                ],
+                "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+            )
         )
+        return Sequential(self.input_args, layers)
 
     def __str__(self):
         return "SAGEStack"

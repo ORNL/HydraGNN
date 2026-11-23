@@ -1,0 +1,119 @@
+FROZEN-ORIGINAL RESIDUAL GRAIN STUDY: FIXED ANALYSIS
+16 November 2026. Written before new outer archives or outcome scores are read.
+
+The frozen_residual/PRESPEC.txt protocol defines training.
+No additional fitting, route search, threshold/alpha selection, or manuscript
+adoption occurs in this analysis. Every case and size remains visible.
+
+Verification
+Analysis verifies all twenty complete records, fixed partitions, selected
+checkpoint hashes, preprocessing statistics and exported prediction hashes
+before calculating comparisons.
+
+Primary endpoint and uncertainty
+Compare critical_treatment with bulk_control on raw FULL-N maximum of the NEW
+predicted grain peaks, not the original legacy graph head. P is squared error
+divided by the ORIGINAL fold's fitting-size/case sample variance. Average both
+repeat losses within each physical SVE, then average the twenty size/case cells
+equally. Positive risk reduction favors treatment. Report absolute and percentage
+reductions with percentile95% intervals from4,000 shared physical-SVE bootstrap
+draws stratified by size. Reuse the pinned draws from joint_branch_analysis.
+Repeat predictions are not independent specimens and are never averaged into an
+ensemble. Intervals are pointwise and conditional on trained models and this
+reused940-SVE development cohort, not fresh validation after prior model search.
+
+B is equal-SVE grain mean squared error divided by fitting equal-SVE grain-mixture
+population variance. T uses the prescribed fractional true-top-four weights and
+the same grain denominator. Report B,T,P and .5B+.5P separately, including all
+size/case cells. A favorable B or composite does not certify improved maxima.
+Report selected epochs, identity epoch-1 selections, execution lengths and rules.
+
+Fixed maximum routes
+For each arm, use new raw grain peaks to compute exactly five routes:
+1. Full predicted grain maximum, raw.
+2. Full predicted grain maximum, StandardScaler plus scalar Ridge(alpha10).
+3. Production operational Gumbel bridge, raw.
+4. The same bridge, eligible-only StandardScaler plus scalar Ridge(alpha10).
+5. Existing twenty same-case grain summaries plus five size indicators,
+   StandardScaler plus Ridge(alpha100), raw maximum target.
+All learned corrections use exactly the75 stopping labels; these labels also
+selected the head. The bridge retains the original mean+sample-SD fraction,
+quantile recut, strict inequality, minimum four selected grains, positive selected
+SD and effective count at least two. Ineligible outer rows use fitting-size means;
+fit only eligible stopping rows, requiring the original minimum ten examples.
+An unmet requirement is a recorded failure, not an invented correction. No
+clipping, completed-Gumbel substitution, new alpha, size winner or correction is
+introduced. Save every fit's IDs, coefficients, features and fallback counts.
+
+Apply these same five recipes to cached original p0 as explicitly labeled
+cached_original routes. These isolate changes from the exact frozen cache anchor.
+Do not claim this cache replay is bitwise equal to historical GPU inference.
+Load and pin all34 previously verified joint_branch_analysis maximum routes as
+context references, including original direct/bridge/summary, size/count controls,
+RF249/HGB249 and cross-fitted HGB summaries, and the earlier matched branch study.
+Keep their identities, label budgets and original CPU/CUDA/selection differences.
+Reuse their verified array file rather than duplicate it or refit calibrators.
+New array artifacts contain only the fifteen new/cached-original routes.
+
+Maximum metrics and contrasts
+For every route, case and size (and pooled), report each repeat's R2, RMSE, MAE,
+bias, Pearson correlation, prediction/target SD and normalized MSE, then arithmetic
+means of repeat metrics. Paired RMSE uses square root after averaging repeat
+squared losses. Pearson contrasts use mean of the two repeat-specific correlations,
+recomputing each correlation on every shared physical-SVE draw; do not average
+predictions. Mark truly undefined correlations and count valid bootstrap draws.
+
+Fixed comparisons: treatment versus control for all five routes; each new route
+versus its cached-original counterpart and union size mean; each arm's raw full
+maximum versus original raw direct, calibrated bridge, summary, RF249, HGB249,
+HGB same/all-case cross-fitted readouts, and prior attached/detached raw branches.
+All scopes/cases are reported, with degradations retained. No automatic adoption
+gate is imposed, and no requirement of positive effects in every cell is invented.
+
+Grain and critical-grain diagnostics
+Score new raw grain peaks and the exact cached original p0 in physical units,
+pooled and by size. Ordinary grain metrics pool grain rows; B/T remain equal-SVE
+objectives. Paired grain RMSE resamples physical SVEs with all their grains intact.
+
+For each SVE/case, true-critical amplitude diagnostics average squared/absolute
+errors and moments over every grain tied at the true full maximum. Near-critical
+amplitude uses the same fractional cutoff weights summing to min(4,N) as T.
+Thus tied critical labels do not receive arbitrary canonical preference. These
+are label-informed magnitude diagnostics, not deployable alternative predictions.
+
+Predicted rankings use descending prediction and canonical grain-row order for
+ties. Top1 capture means the predicted winner attains the true maximum. Top4
+capture means any of the top min(4,N) predicted rows attains that true maximum.
+Record true value at the predicted winner, its fraction of the true maximum and
+shortfall; also maximum true value among predicted top4 as a capture fraction.
+When the true maximum and all labels are zero, define capture fraction1 and
+record the count. Preserve true-max tie counts, grain counts and exact random
+top1/top4 chance with those ties. The endpoint remains the actual full-SVE maximum.
+
+For treatment-control and each arm-cached_original, report paired grain RMSE,
+critical/near-critical RMSE, and differences in capture diagnostics, all with the
+same physical-SVE resamples. These diagnose mechanisms; accurate maximum magnitude
+does not require exact localization, and they are not extra adoption gates.
+
+Preserved legacy outputs and integrity
+Verify the paired shared outer-cache hash, every legacy array, raw truth, masks,
+canonical SVE/grain/VTK IDs and case order. Compare each arm's preserved arrays
+exactly to the common cache, including NaNs. Verify all original point, physical
+shape, mechanical and transformed uncertainty channels are unchanged between arms.
+Report all thirty original raw means (sixteen node and fourteen graph outputs),
+with their raw metrics and valid-truth counts from the cached arrays. Preserve
+all twenty transformed node channels and eighteen transformed graph channels
+exactly, including the old uncertainty channels without assigning them new labels.
+New heads are point predictors; never assign old uncertainty to their outputs.
+Keep/count all finite negative predictions; fail on missing/nonfinite required
+predictions or any dropped SVE. Preserve original source missing-target masks.
+
+Verification and reporting
+Pin source/release/preparation/checkpoint/export/reference/bootstrap hashes.
+Independently verify numerical metrics, scalar and multi-feature corrections via
+normal equations/coefficient reconstruction, primary risk and paired intervals,
+critical diagnostics and all identities. Reference studies remain read-only.
+Write concise FINDINGS.txt and complete REPORT.txt with a specific evidence-based
+manuscript recommendation. State supported positive findings confidently within
+their actual scope, identify precise remaining failures, and do not turn a failed
+recipe into a universal accuracy ceiling. No manuscript or figure edits here.

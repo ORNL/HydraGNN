@@ -1,0 +1,39 @@
+Primary940 predictive-uncertainty evaluation
+Protocol fixed before new stochastic outer-evaluation inference,17 November2026.
+
+Use all ten existing maximum-error-selected best.pt outer-fold checkpoints.
+No neural refitting, interval fitting, coverage-based checkpoint selection,
+test-label-dependent threshold choice or change to deterministic point predictions.
+Evaluate every one of940 physical SVEs once in each of two existing repeats.
+
+Thirty dropout draws per fold, batch size16, fixed input order, seed base2026111700
+plus100*repeat+fold. Network and batch-normalization modules remain in evaluation
+mode; only Dropout-family modules are active. Require unchanged weights/buffers,
+strict checkpoint loading and deterministic replay against verified full-output
+caches. Use each fold's fitted preprocessing and exact case/target assignments.
+
+For grain peaks and direct SVE maxima, each draw supplies Gaussian location and
+log scale in standardized transformed-target space. Apply the training likelihood's
+exact log-scale lower floor−3. The predictive distribution is the equally weighted
+30-component mixture. Compute its CDF, quantiles, NLL, conditional-scale variance
+mean(sigma^2), and population variance of component locations. Do not combine
+deterministic scales with stochastic location variances or approximate the mixture
+by a moment-matched Gaussian for interval quantiles.
+
+Report coverage, width and interval scores at90% and assess coverage over nominal
+levels, with physical-SVE and grain denominators explicit. Report repeat-specific
+and size-specific outcomes, grain-weighted coverage and mean within-SVE coverage.
+Do not treat repeated predictions as independent specimens or average predictions
+into a new ensemble. Exact transformed-space PIT is a useful independent coverage
+calculation, but physical intervals additionally require valid finite inverse maps.
+
+Use the exact fitted inverse, including its internal PowerTransformer standardizer
+and outer scaler. Check mathematical Yeo–Johnson support and finite endpoint order.
+The archived ±7.992 safeguards are diagnostic thresholds, not mathematical support
+boundaries; report their exceedances separately. Do not silently clip or discard
+endpoints/observations. Any truly invalid physical interval must be explicitly
+reported; no support-conditioning correction is part of this fixed primary study.
+
+These distributions belong to the probabilistic grain and direct-maximum heads.
+They are not intervals for the affine bridge, richer readouts or residual point head.
+Archive every raw draw and fitted map, plus hashes and reproducible analysis code.

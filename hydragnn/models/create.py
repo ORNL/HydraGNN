@@ -96,6 +96,7 @@ def create_model_config(
             "graph_attr_conditioning_mode", "concat_node"
         ),
         graph_pooling=config["Architecture"].get("graph_pooling", "mean"),
+        dropout=config["Architecture"].get("dropout", 0.0),
         verbosity=verbosity,
         use_gpu=use_gpu,
     )
@@ -156,6 +157,7 @@ def create_model(
     use_graph_attr_conditioning: bool = False,
     graph_attr_conditioning_mode: str = "fuse_pool",
     graph_pooling: str = "mean",
+    dropout: float = 0.0,
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -361,6 +363,7 @@ def create_model(
             activation_function,
             loss_function_type,
             equivariance,
+            dropout=dropout,
             loss_weights=task_weights,
             freeze_conv=freeze_conv,
             num_conv_layers=num_conv_layers,
