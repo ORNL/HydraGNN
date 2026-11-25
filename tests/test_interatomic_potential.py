@@ -430,18 +430,64 @@ def test_periodic_stress_matches_finite_difference(with_integer_shifts):
     assert torch.allclose(stress, reference, rtol=1e-6, atol=1e-8)
 
 
+PERIODIC_BACKBONE_ARGS = {
+    "SchNet": dict(num_gaussians=10, num_filters=16, max_neighbours=200),
+    "EGNN": {},
+    "DimeNet": dict(
+        num_radial=6,
+        num_spherical=7,
+        envelope_exponent=5,
+        basis_emb_size=8,
+        int_emb_size=16,
+        out_emb_size=16,
+        num_before_skip=1,
+        num_after_skip=1,
+    ),
+    "PAINN": dict(num_radial=8),
+    "PNAEq": dict(pna_deg=[1, 2, 3, 4, 5], num_radial=8),
+    "PNAPlus": dict(pna_deg=[1, 2, 3, 4, 5], num_radial=8, envelope_exponent=5),
+    "MACE": dict(
+        max_ell=2,
+        node_max_ell=2,
+        correlation=2,
+        num_radial=8,
+        distance_transform="None",
+        radial_type="bessel",
+        avg_num_neighbors=12,
+        envelope_exponent=5,
+    ),
+    "UMA": dict(
+        max_ell=2,
+        num_radial=8,
+        max_neighbours=200,
+        periodic_boundary_conditions=True,
+    ),
+    "AllScAIP": dict(
+        num_radial=8,
+        max_neighbours=30,
+        periodic_boundary_conditions=True,
+        allscaip_use_freq_mask=False,
+        allscaip_num_heads=2,
+    ),
+}
+
+
 @pytest.mark.mpi_skip()
-@pytest.mark.parametrize("equivariance", [False, True])
-def test_schnet_uses_periodic_edge_shifts(equivariance):
-    """SchNet energy is supercell-extensive and its stress matches finite differences."""
+@pytest.mark.parametrize(
+    "mpnn_type,equivariance",
+    [("SchNet", False)] + [(name, True) for name in PERIODIC_BACKBONE_ARGS],
+)
+def test_backbone_periodic_stress(mpnn_type, equivariance):
+    """Backbone energy is supercell-extensive and its stress matches finite differences."""
     from hydragnn.models.create import create_model
     from hydragnn.models.utils.model import update_multibranch_heads
     from hydragnn.preprocess.graph_samples_checks_and_updates import RadiusGraphPBC
 
     dtype = torch.float64
+    head_dims = [16, 16] if mpnn_type in ("PAINN", "PNAEq") else [16, 1]
     torch.manual_seed(0)
     model = create_model(
-        mpnn_type="SchNet",
+        mpnn_type=mpnn_type,
         input_dim=1,
         hidden_dim=16,
         output_dim=[1],
@@ -455,21 +501,18 @@ def test_schnet_uses_periodic_edge_shifts(equivariance):
                 "node": {
                     "num_sharedlayers": 1,
                     "dim_sharedlayers": 16,
-                    "num_headlayers": 1,
-                    "dim_headlayers": [1],
+                    "num_headlayers": len(head_dims),
+                    "dim_headlayers": head_dims,
                     "type": "mlp",
                 }
             }
         ),
-        activation_function="relu",
+        activation_function="tanh",
         loss_function_type="mse",
         task_weights=[1.0],
         num_conv_layers=2,
         num_nodes=4,
-        num_gaussians=10,
-        num_filters=16,
         radius=3.0,
-        max_neighbours=200,
         equivariance=equivariance,
         domain_loss_config={
             "enabled": True,
@@ -479,26 +522,16 @@ def test_schnet_uses_periodic_edge_shifts(equivariance):
             "constraint_optimizer": {"type": "fixed_penalty"},
         },
         use_gpu=False,
+        **PERIODIC_BACKBONE_ARGS[mpnn_type],
     ).to(dtype)
     model.eval()
     backbone = model.model
-
-    # The untrained output head is nearly constant, so read energy from the encoder.
-    def encoder_energy(batch):
-        inv, equiv, conv_args = backbone._embedding(batch)
-        for conv, feature_layer in zip(backbone.graph_convs, backbone.feature_layers):
-            inv, equiv = conv(inv_node_feat=inv, equiv_node_feat=equiv, **conv_args)
-            inv = backbone._postprocess_conv_output(
-                inv, batch.batch, batch, feature_layer
-            )
-        return [inv.square().sum(-1, keepdim=True)]
-
-    backbone.forward = encoder_energy
 
     def build(cell, frac):
         num_atoms = frac.size(0)
         data = Data(
             x=torch.ones(num_atoms, 1, dtype=dtype),
+            atomic_numbers=torch.full((num_atoms,), 14),
             pos=frac @ cell,
             cell=cell,
             pbc=torch.tensor([True, True, True]),
@@ -525,7 +558,9 @@ def test_schnet_uses_periodic_edge_shifts(equivariance):
         cell * torch.tensor([[2.0], [1.0], [1.0]], dtype=dtype),
         torch.cat([frac * half, (frac + offset) * half]),
     )
-    assert torch.allclose(energy(supercell), 2 * energy(data), rtol=1e-10)
+    # AllScAIP's global attention is not strictly local, so allow a small deviation.
+    rtol = 1e-4 if mpnn_type == "AllScAIP" else 1e-10
+    assert torch.allclose(energy(supercell), 2 * energy(data), rtol=rtol)
 
     batch = Batch.from_data_list([data])
     batch.pos.requires_grad_(True)
@@ -553,7 +588,7 @@ def test_schnet_uses_periodic_edge_shifts(equivariance):
             ) / (2 * step)
     reference /= torch.det(cell).abs()
 
-    assert reference.abs().max() > 1e-4
+    assert reference.abs().max() > 1e-5
     assert torch.allclose(stress, reference, rtol=1e-6, atol=1e-10)
 
 

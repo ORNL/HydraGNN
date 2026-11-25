@@ -166,7 +166,7 @@ class DIMEStack(Base):
 
         # Calculate triplet indices
         i, j, idx_i, idx_j, idx_k, idx_kj, idx_ji = triplets(
-            data.edge_index, num_nodes=data.x.size(0)
+            data.edge_index, num_nodes=data.x.size(0), edge_shifts=data.edge_shifts
         )
 
         # Calculate edge_vec and edge_dist
@@ -244,6 +244,7 @@ https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/mod
 def triplets(
     edge_index: Tensor,
     num_nodes: int,
+    edge_shifts: Optional[Tensor] = None,
 ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
     src, dst = edge_index  # j -> i
 
@@ -278,8 +279,11 @@ def triplets(
     start_for_all = ptr_in[j_for_all]
     idx_kj_all = perm_in[start_for_all + local_pos]
 
-    # Exclude triplets with k == i.
+    # Exclude k == i unless k is a distinct periodic image of i.
     valid = src[idx_kj_all] != dst[idx_ji_all]
+    if edge_shifts is not None:
+        net_shift = edge_shifts[idx_kj_all] + edge_shifts[idx_ji_all]
+        valid = valid | (net_shift.norm(dim=-1) > 1e-4)
     idx_ji = idx_ji_all[valid]
     idx_kj = idx_kj_all[valid]
 

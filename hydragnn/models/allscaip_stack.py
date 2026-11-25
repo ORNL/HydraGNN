@@ -214,6 +214,7 @@ class _FairChemAdapter:
         self.spin = spin
         self.dataset = dataset
         self.num_nodes = int(pos.shape[0])
+        self.natoms = torch.bincount(batch, minlength=num_graphs)
         # AllScAIP code stamps these in the entry-point forward:
         self.atomic_numbers_full = atomic_numbers
         self.batch_full = batch
