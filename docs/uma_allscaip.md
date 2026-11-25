@@ -76,6 +76,15 @@ Keep `allscaip_knn_soft` enabled for energy-gradient force training. The hard
 neighbor selection is not differentiable at membership changes. The `math`
 attention backend is the safe default when double backward is required.
 
+For periodic systems, the global node-attention path with
+`allscaip_use_sincx_mask` is not exactly supercell-extensive: the sinc mask is
+built from minimum-image pair distances and normalized by the number of atom
+pairs in the cell, so a supercell gives a slightly different energy per atom
+(relative deviation of order 1e-5 in tests). This follows the upstream model
+design. Forces and stress remain exact derivatives of the predicted energy.
+Disable `allscaip_use_sincx_mask` or `allscaip_use_node_path` if exact
+extensivity is required.
+
 ## Dependency and provenance
 
 Vendored source retains its upstream MIT notices; HydraGNN additions remain

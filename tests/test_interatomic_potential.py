@@ -558,7 +558,7 @@ def test_backbone_periodic_stress(mpnn_type, equivariance):
         cell * torch.tensor([[2.0], [1.0], [1.0]], dtype=dtype),
         torch.cat([frac * half, (frac + offset) * half]),
     )
-    # AllScAIP's global attention is not strictly local, so allow a small deviation.
+    # AllScAIP's sincx node-attention mask uses minimum-image distances, so it is not exactly extensive.
     rtol = 1e-4 if mpnn_type == "AllScAIP" else 1e-10
     assert torch.allclose(energy(supercell), 2 * energy(data), rtol=rtol)
 

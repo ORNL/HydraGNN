@@ -72,6 +72,9 @@ Key                                     Purpose
                                         for direct-force GPU inference.
 ``allscaip_use_node_path``              Enable the global node-attention path.
 ``allscaip_use_sincx_mask``             sinc(x) node-attention distance mask.
+                                        Uses minimum-image distances, so
+                                        periodic energies are not exactly
+                                        supercell-extensive.
 ``allscaip_use_freq_mask``              Frequency-vector neighbor mask.
 ``allscaip_max_num_elements``           Z embedding table size.
 ``allscaip_knn_soft``                   Differentiable soft-kNN gate. **Keep
