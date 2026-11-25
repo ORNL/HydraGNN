@@ -361,6 +361,76 @@ def test_stress_strains_periodic_edge_shifts(with_integer_shifts):
 
 
 @pytest.mark.mpi_skip()
+@pytest.mark.parametrize("with_integer_shifts", [True, False])
+def test_periodic_stress_matches_finite_difference(with_integer_shifts):
+    """Autograd stress of a periodic pair potential matches strain finite differences."""
+    from hydragnn.models.utils.operations import get_edge_vectors_and_lengths
+    from hydragnn.preprocess.graph_samples_checks_and_updates import RadiusGraphPBC
+
+    dtype = torch.float64
+    generator = torch.Generator().manual_seed(0)
+    cell = torch.tensor(
+        [[3.1, 0.2, 0.0], [0.3, 2.9, 0.1], [0.0, 0.4, 3.3]], dtype=dtype
+    )
+    num_atoms = 4
+    pos = torch.rand(num_atoms, 3, generator=generator, dtype=dtype) @ cell
+    data = Data(
+        x=torch.ones(num_atoms, 1, dtype=dtype),
+        pos=pos,
+        cell=cell,
+        pbc=torch.tensor([True, True, True]),
+    )
+    data = RadiusGraphPBC(4.0, loop=False, max_num_neighbors=200)(data)
+    assert torch.any(data.integer_edge_shifts != 0)
+    integer_shifts = data.integer_edge_shifts.to(dtype)
+    if not with_integer_shifts:
+        del data.integer_edge_shifts
+    data.pe = torch.zeros(num_atoms, 6, dtype=dtype)
+    data.energy = torch.zeros(1, 1, dtype=dtype)
+    data.stress = torch.zeros(3, 3, dtype=dtype)
+
+    def node_energies(pos, edge_index, shifts):
+        _, lengths = get_edge_vectors_and_lengths(pos, edge_index, shifts)
+        pair = torch.exp(-lengths) * (1.0 + lengths)
+        return torch_scatter.scatter_add(
+            0.5 * pair, edge_index[0], dim=0, dim_size=pos.size(0)
+        )
+
+    model = create_interatomic_model(STRESS_TERM).to(dtype)
+    model.model.forward = lambda batch: [
+        node_energies(batch.pos, batch.edge_index, batch.edge_shifts)
+    ]
+    batch = Batch.from_data_list([data])
+    batch.pos.requires_grad_(True)
+    pred = model(batch)
+    stress = model.prediction_target_pairs(pred, batch, create_graph=False)["stress"][
+        0
+    ].detach()[0]
+
+    def strained_energy(strain):
+        deformation = torch.eye(3, dtype=dtype) + strain
+        strained_cell = cell @ deformation
+        return node_energies(
+            pos @ deformation, data.edge_index, integer_shifts @ strained_cell
+        ).sum()
+
+    step = 1e-6
+    reference = torch.zeros(3, 3, dtype=dtype)
+    for i in range(3):
+        for j in range(3):
+            strain = torch.zeros(3, 3, dtype=dtype)
+            strain[i, j] += 0.5
+            strain[j, i] += 0.5
+            reference[i, j] = (
+                strained_energy(step * strain) - strained_energy(-step * strain)
+            ) / (2 * step)
+    reference /= torch.det(cell).abs()
+
+    assert reference.abs().max() > 1e-3
+    assert torch.allclose(stress, reference, rtol=1e-6, atol=1e-8)
+
+
+@pytest.mark.mpi_skip()
 def test_stress_loss_requires_cell():
     """A clear error is raised instead of silently omitting stress."""
     model = create_interatomic_model(STRESS_TERM)
