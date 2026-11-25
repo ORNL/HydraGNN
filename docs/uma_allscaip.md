@@ -23,6 +23,17 @@ invariant energy with respect to `data.pos`. See
 [Interatomic-potential training loss](interatomic_training_loss.md) for the full
 JSON structure.
 
+To supervise stress, add a `stress` term with
+`prediction.operator: "gradient_per_volume"` to
+`Training.loss.supervised.terms` (see
+[Interatomic-potential training loss](interatomic_training_loss.md)).
+HydraGNN differentiates energy with respect to a symmetric cell strain and
+divides the resulting virial by the undeformed cell volume. Stress training
+requires `data.cell` and `data.stress`; reference stresses must be full `3 x 3`
+tensors in eV/Å³ with tension positive. The total loss is the weighted sum of
+the enabled terms, so omitting the `stress` term preserves the energy/force-only
+behavior.
+
 ## UMA
 
 Select UMA with `"mpnn_type": "UMA"` and set `"equivariance": true`. UMA
@@ -66,6 +77,15 @@ lower-memory kNN implementation.
 Keep `allscaip_knn_soft` enabled for energy-gradient force training. The hard
 neighbor selection is not differentiable at membership changes. The `math`
 attention backend is the safe default when double backward is required.
+
+For periodic systems, the global node-attention path with
+`allscaip_use_sincx_mask` is not exactly supercell-extensive: the sinc mask is
+built from minimum-image pair distances and normalized by the number of atom
+pairs in the cell, so a supercell gives a slightly different energy per atom
+(relative deviation of order 1e-5 in tests). This follows the upstream model
+design. Forces and stress remain exact derivatives of the predicted energy.
+Disable `allscaip_use_sincx_mask` or `allscaip_use_node_path` if exact
+extensivity is required.
 
 ## Dependency and provenance
 

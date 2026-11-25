@@ -72,6 +72,9 @@ Key                                     Purpose
                                         for direct-force GPU inference.
 ``allscaip_use_node_path``              Enable the global node-attention path.
 ``allscaip_use_sincx_mask``             sinc(x) node-attention distance mask.
+                                        Uses minimum-image distances, so
+                                        periodic energies are not exactly
+                                        supercell-extensive.
 ``allscaip_use_freq_mask``              Frequency-vector neighbor mask.
 ``allscaip_max_num_elements``           Z embedding table size.
 ``allscaip_knn_soft``                   Differentiable soft-kNN gate. **Keep
@@ -214,6 +217,7 @@ class _FairChemAdapter:
         self.spin = spin
         self.dataset = dataset
         self.num_nodes = int(pos.shape[0])
+        self.natoms = torch.bincount(batch, minlength=num_graphs)
         # AllScAIP code stamps these in the entry-point forward:
         self.atomic_numbers_full = atomic_numbers
         self.batch_full = batch
@@ -560,6 +564,10 @@ class AllScAIPStack(Base):
 
         adapter = self._build_adapter(data)
         results = self.allscaip_backbone(adapter)
+        # Preserve the autograd strain handle and undeformed cell for the
+        # interatomic domain loss's optional stress term.
+        self._hydragnn_stress_displacement = results.get("displacement")
+        self._hydragnn_stress_cell = results.get("orig_cell")
         # ``node_reps`` is shape [N, hidden_dim] (no padding -- AllScAIP
         # always runs unpadded under HydraGNN).
         inv_node_feat = self.allscaip_output_norm(results["node_reps"])

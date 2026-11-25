@@ -12,6 +12,7 @@
 import os
 import json
 import importlib.util
+import shutil
 
 import pytest
 import torch
@@ -48,6 +49,12 @@ def test_examples_graph_attr(tmp_path, example, graph_attr_mode):
         transform = AddLaplacianEigenvectorPE(
             k=pe_dim, attr_name="pe", is_undirected=True
         )
+        # Reuse raw files cached by CI or earlier runs instead of re-downloading.
+        shared_raw = os.path.join(
+            os.path.dirname(__file__), "..", "dataset", "qm9", "raw"
+        )
+        if os.path.isdir(shared_raw):
+            shutil.copytree(shared_raw, os.path.join(tmp_path, "qm9", "raw"))
         dataset = qm9_module.build_qm9_from_raw(
             root=os.path.join(tmp_path, "qm9"),
             pre_transform=lambda data: qm9_module.qm9_pre_transform(data, transform),

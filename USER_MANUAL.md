@@ -1214,6 +1214,13 @@ data conventions, charge/spin conditioning, auxiliary targets, and HPO.
 Its FSDP2 experiment is a memory diagnostic, not a supported Hessian-training
 mode; see the [FSDP notes](#fsdp-fully-sharded-data-parallel-integration).
 
+A `stress` term with `prediction: {"operator": "gradient_per_volume", "of":
+"energy", "with_respect_to": "strain"}` additionally penalizes the stress
+obtained by differentiating energy with respect to symmetric cell strain and
+dividing by cell volume. Stress training requires full `3 x 3` reference
+tensors in `data.stress` and non-singular cells in `data.cell`; stresses use
+eV/Å³ with tension positive.
+
 Categorical handling is configured on each scalar node input. For example,
 atomic numbers can use a learned embedding:
 
