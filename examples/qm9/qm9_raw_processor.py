@@ -11,6 +11,9 @@
 """Fault-tolerant, report-producing conversion of the official raw QM9 data."""
 
 import json
+import os
+import time
+from http.client import HTTPException
 from pathlib import Path
 
 import rdkit
@@ -19,7 +22,7 @@ import torch_geometric
 from rdkit import Chem
 from rdkit.Chem.rdchem import BondType as BT
 from rdkit.Chem.rdchem import HybridizationType
-from torch_geometric.data import Data
+from torch_geometric.data import Data, download_url, extract_zip
 from torch_geometric.datasets import QM9
 from torch_geometric.datasets.qm9 import conversion
 from torch_geometric.utils import one_hot, scatter
@@ -58,6 +61,31 @@ class RobustQM9(QM9):
             report_directory or Path(root) / "preprocessing_report"
         )
         super().__init__(root, **kwargs)
+
+    download_attempts = 5
+
+    def _download_with_retry(self, url, filename):
+        path = os.path.join(self.raw_dir, filename)
+        for attempt in range(self.download_attempts):
+            try:
+                return download_url(url, self.raw_dir, filename=filename)
+            except (OSError, HTTPException):
+                # download_url would reuse a truncated file on the next attempt.
+                if os.path.exists(path):
+                    os.unlink(path)
+                if attempt == self.download_attempts - 1:
+                    raise
+                time.sleep(2 ** (attempt + 1))
+
+    def download(self):
+        # Upstream hosts intermittently return 5xx; retry each file and keep completed ones.
+        sdf, csv, uncharacterized = self.raw_paths
+        if not (os.path.exists(sdf) and os.path.exists(csv)):
+            path = self._download_with_retry(self.raw_url, "qm9.zip")
+            extract_zip(path, self.raw_dir)
+            os.unlink(path)
+        if not os.path.exists(uncharacterized):
+            self._download_with_retry(self.raw_url2, "uncharacterized.txt")
 
     def _write_reports(self, records, summary):
         self.report_directory.mkdir(parents=True, exist_ok=True)

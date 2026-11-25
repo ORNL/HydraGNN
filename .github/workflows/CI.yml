@@ -114,6 +114,11 @@ jobs:
         run: |
           echo "=== Installed package versions ==="
           pip list | grep -E "(fairchem|numpy|scipy|torch|scikit-learn|matplotlib|ase|tensorboard)"
+      - name: Cache QM9 raw data
+        uses: actions/cache@v4
+        with:
+          path: dataset/qm9/raw
+          key: qm9-raw-v1
       - name: Format black
         run: |
           black .
