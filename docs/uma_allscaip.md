@@ -23,14 +23,16 @@ invariant energy with respect to `data.pos`. See
 [Interatomic-potential training loss](interatomic_training_loss.md) for the full
 JSON structure.
 
-Set `stress_weight` to a positive value to add a stress term to the MLIP loss.
+To supervise stress, add a `stress` term with
+`prediction.operator: "gradient_per_volume"` to
+`Training.loss.supervised.terms` (see
+[Interatomic-potential training loss](interatomic_training_loss.md)).
 HydraGNN differentiates energy with respect to a symmetric cell strain and
 divides the resulting virial by the undeformed cell volume. Stress training
 requires `data.cell` and `data.stress`; reference stresses must be full `3 x 3`
-tensors in eV/Å³ with tension positive. The complete objective is
-`energy_weight * L_energy + energy_peratom_weight * L_energy_per_atom +
-force_weight * L_forces + stress_weight * L_stress`. A zero `stress_weight`
-(the default) preserves the energy/force-only behavior.
+tensors in eV/Å³ with tension positive. The total loss is the weighted sum of
+the enabled terms, so omitting the `stress` term preserves the energy/force-only
+behavior.
 
 ## UMA
 

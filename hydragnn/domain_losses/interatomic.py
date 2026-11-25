@@ -219,10 +219,6 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
             raise ValueError(
                 "Enabled energy terms require an energy target in data.energy."
             )
-        if not data.pos.requires_grad:
-            raise ValueError(
-                "data.pos must require gradients for interatomic training."
-            )
 
         energy_pred = self._graph_energy(pred, data)
         values = {}
@@ -239,6 +235,10 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
 
         needs_derivatives = bool({"forces", "hessian"}.intersection(self.active_terms))
         if needs_derivatives:
+            if not data.pos.requires_grad:
+                raise ValueError(
+                    "data.pos must require gradients for force or Hessian training."
+                )
             if "forces" in self.active_terms and getattr(data, "forces", None) is None:
                 raise ValueError("The enabled forces term requires data.forces.")
             if (

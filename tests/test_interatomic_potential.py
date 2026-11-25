@@ -323,6 +323,18 @@ def test_energy_force_stress_loss():
 
 
 @pytest.mark.mpi_skip()
+def test_stress_only_loss_without_position_gradients():
+    model = create_interatomic_model(STRESS_TERM)
+    data = create_mock_molecular_data(num_atoms=3, num_graphs=2)
+    data.pos = data.pos.detach()
+    loss, task_losses = model.energy_force_loss(model(data), data)
+
+    assert len(task_losses) == 1
+    assert torch.isfinite(loss)
+    loss.backward()
+
+
+@pytest.mark.mpi_skip()
 @pytest.mark.parametrize("with_integer_shifts", [True, False])
 def test_stress_strains_periodic_edge_shifts(with_integer_shifts):
     """Periodic image offsets must deform with the cell under strain."""
