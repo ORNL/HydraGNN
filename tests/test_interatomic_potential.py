@@ -431,6 +431,133 @@ def test_periodic_stress_matches_finite_difference(with_integer_shifts):
 
 
 @pytest.mark.mpi_skip()
+@pytest.mark.parametrize("equivariance", [False, True])
+def test_schnet_uses_periodic_edge_shifts(equivariance):
+    """SchNet energy is supercell-extensive and its stress matches finite differences."""
+    from hydragnn.models.create import create_model
+    from hydragnn.models.utils.model import update_multibranch_heads
+    from hydragnn.preprocess.graph_samples_checks_and_updates import RadiusGraphPBC
+
+    dtype = torch.float64
+    torch.manual_seed(0)
+    model = create_model(
+        mpnn_type="SchNet",
+        input_dim=1,
+        hidden_dim=16,
+        output_dim=[1],
+        pe_dim=6,
+        global_attn_engine="",
+        global_attn_type="",
+        global_attn_heads=1,
+        output_type=["node"],
+        output_heads=update_multibranch_heads(
+            {
+                "node": {
+                    "num_sharedlayers": 1,
+                    "dim_sharedlayers": 16,
+                    "num_headlayers": 1,
+                    "dim_headlayers": [1],
+                    "type": "mlp",
+                }
+            }
+        ),
+        activation_function="relu",
+        loss_function_type="mse",
+        task_weights=[1.0],
+        num_conv_layers=2,
+        num_nodes=4,
+        num_gaussians=10,
+        num_filters=16,
+        radius=3.0,
+        max_neighbours=200,
+        equivariance=equivariance,
+        domain_loss_config={
+            "enabled": True,
+            "provider": "interatomic_potential",
+            "supervised": {"default_metric": "mse", "terms": [STRESS_TERM]},
+            "constraints": [],
+            "constraint_optimizer": {"type": "fixed_penalty"},
+        },
+        use_gpu=False,
+    ).to(dtype)
+    model.eval()
+    backbone = model.model
+
+    # The untrained output head is nearly constant, so read energy from the encoder.
+    def encoder_energy(batch):
+        inv, equiv, conv_args = backbone._embedding(batch)
+        for conv, feature_layer in zip(backbone.graph_convs, backbone.feature_layers):
+            inv, equiv = conv(inv_node_feat=inv, equiv_node_feat=equiv, **conv_args)
+            inv = backbone._postprocess_conv_output(
+                inv, batch.batch, batch, feature_layer
+            )
+        return [inv.square().sum(-1, keepdim=True)]
+
+    backbone.forward = encoder_energy
+
+    def build(cell, frac):
+        num_atoms = frac.size(0)
+        data = Data(
+            x=torch.ones(num_atoms, 1, dtype=dtype),
+            pos=frac @ cell,
+            cell=cell,
+            pbc=torch.tensor([True, True, True]),
+        )
+        data = RadiusGraphPBC(3.0, loop=False, max_num_neighbors=200)(data)
+        data.pe = torch.zeros(num_atoms, 6, dtype=dtype)
+        data.energy = torch.zeros(1, 1, dtype=dtype)
+        data.stress = torch.zeros(3, 3, dtype=dtype)
+        return data
+
+    def energy(data):
+        return backbone(Batch.from_data_list([data]))[0].sum()
+
+    cell = torch.tensor(
+        [[3.1, 0.2, 0.0], [0.3, 2.9, 0.1], [0.0, 0.4, 3.3]], dtype=dtype
+    )
+    frac = torch.rand(4, 3, generator=torch.Generator().manual_seed(1), dtype=dtype)
+    data = build(cell, frac)
+    assert torch.any(data.integer_edge_shifts != 0)
+
+    half = torch.tensor([0.5, 1.0, 1.0], dtype=dtype)
+    offset = torch.tensor([1.0, 0.0, 0.0], dtype=dtype)
+    supercell = build(
+        cell * torch.tensor([[2.0], [1.0], [1.0]], dtype=dtype),
+        torch.cat([frac * half, (frac + offset) * half]),
+    )
+    assert torch.allclose(energy(supercell), 2 * energy(data), rtol=1e-10)
+
+    batch = Batch.from_data_list([data])
+    batch.pos.requires_grad_(True)
+    stress = model.prediction_target_pairs(model(batch), batch, create_graph=False)[
+        "stress"
+    ][0].detach()[0]
+
+    def strained_energy(strain):
+        deformation = torch.eye(3, dtype=dtype) + strain
+        strained = data.clone()
+        strained.pos = data.pos @ deformation
+        strained.cell = cell @ deformation
+        strained.edge_shifts = data.integer_edge_shifts.to(dtype) @ strained.cell
+        return energy(strained)
+
+    step = 1e-6
+    reference = torch.zeros(3, 3, dtype=dtype)
+    for i in range(3):
+        for j in range(3):
+            strain = torch.zeros(3, 3, dtype=dtype)
+            strain[i, j] += 0.5
+            strain[j, i] += 0.5
+            reference[i, j] = (
+                strained_energy(step * strain) - strained_energy(-step * strain)
+            ) / (2 * step)
+    reference /= torch.det(cell).abs()
+
+    assert reference.abs().max() > 1e-4
+    assert torch.allclose(stress, reference, rtol=1e-6, atol=1e-10)
+
+
+@pytest.mark.mpi_skip()
 def test_stress_loss_requires_cell():
     """A clear error is raised instead of silently omitting stress."""
     model = create_interatomic_model(STRESS_TERM)

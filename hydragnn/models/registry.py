@@ -225,7 +225,7 @@ def _build_schnet(p):
     _require(p, "SchNet", "num_gaussians", "num_filters", "radius")
     return SCFStack(
         "",  # Depends on SchNet usage of edge_features
-        "inv_node_feat, equiv_node_feat, edge_index, edge_weight, edge_rbf",
+        "inv_node_feat, equiv_node_feat, edge_index, edge_weight, edge_rbf, edge_shifts",
         p.num_filters,
         p.edge_dim,
         p.num_gaussians,

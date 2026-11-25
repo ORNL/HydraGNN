@@ -36,7 +36,20 @@ class RadiusInteractionGraph(nn.Module):
         self.cutoff = cutoff
         self.max_num_neighbors = max_num_neighbors
 
-    def forward(self, pos: Tensor, batch: Tensor):
+    def forward(
+        self,
+        pos: Tensor,
+        batch: Tensor,
+        edge_index: OptTensor = None,
+        edge_shifts: OptTensor = None,
+    ):
+        # Periodic images cannot be recovered from positions alone.
+        if edge_shifts is not None and torch.any(edge_shifts != 0):
+            _, edge_weight = get_edge_vectors_and_lengths(pos, edge_index, edge_shifts)
+            edge_weight = edge_weight.squeeze(-1)
+            # CFConv's cosine envelope is only zero at the cutoff, not beyond it.
+            keep = edge_weight <= self.cutoff
+            return edge_index[:, keep], edge_weight[keep], edge_shifts[keep]
         # torch_cluster provides CPU and CUDA/ROCm kernels, but not kernels for
         # every accelerator supported by PyTorch (for example XPU). Build the
         # discrete neighbor list on CPU for those devices, then calculate
@@ -54,7 +67,7 @@ class RadiusInteractionGraph(nn.Module):
         edge_index = edge_index.to(pos.device)
         row, col = edge_index
         edge_weight = (pos[row] - pos[col]).norm(dim=-1)
-        return edge_index, edge_weight
+        return edge_index, edge_weight, pos.new_zeros((edge_index.size(1), 3))
 
 
 class SCFStack(Base):
@@ -132,7 +145,7 @@ class SCFStack(Base):
             self.global_attn_engine == "GPS" and self.is_edge_model
         ):
             return PyGSeq(
-                "inv_node_feat, equiv_node_feat, edge_index, edge_weight, edge_rbf, batch, edge_attr",
+                "inv_node_feat, equiv_node_feat, edge_index, edge_weight, edge_rbf, edge_shifts, batch, edge_attr",
                 [
                     (interaction, self.conv_args + " -> inv_node_feat"),
                     (
@@ -146,11 +159,11 @@ class SCFStack(Base):
             )
         elif self.equivariance and not last_layer:
             return PyGSeq(
-                "inv_node_feat, equiv_node_feat, batch",
+                "inv_node_feat, equiv_node_feat, batch, edge_index, edge_shifts",
                 [
                     (
                         self.interaction_graph,
-                        "equiv_node_feat, batch -> edge_index, edge_weight",
+                        "equiv_node_feat, batch, edge_index, edge_shifts -> edge_index, edge_weight, edge_shifts",
                     ),
                     (self.distance_expansion, "edge_weight -> edge_rbf"),
                     (
@@ -161,11 +174,11 @@ class SCFStack(Base):
             )
         else:
             return PyGSeq(
-                "inv_node_feat, equiv_node_feat, batch",
+                "inv_node_feat, equiv_node_feat, batch, edge_index, edge_shifts",
                 [
                     (
                         self.interaction_graph,
-                        "equiv_node_feat, batch -> edge_index, edge_weight",
+                        "equiv_node_feat, batch, edge_index, edge_shifts -> edge_index, edge_weight, edge_shifts",
                     ),
                     (self.distance_expansion, "edge_weight -> edge_rbf"),
                     (interaction, self.conv_args + " -> inv_node_feat"),
@@ -184,9 +197,6 @@ class SCFStack(Base):
         node_features = self._input_node_features(data)
         equivariant_geometry = None
         if self.global_attn_engine == "EquivariantTransformer":
-            # Capture periodic metadata before the legacy coordinate-update
-            # branch replaces local edge shifts. Global explicit-image
-            # attention must follow the user's original PBC declaration.
             equivariant_geometry = self._equivariant_attention_geometry(data)
 
         gps_edge_encodings = self.global_attn_engine == "GPS" and self.is_edge_model
@@ -196,9 +206,6 @@ class SCFStack(Base):
             )
         elif self.use_edge_attr or gps_edge_encodings:
             edge_index = data.edge_index
-            data.edge_shifts = torch.zeros(
-                (data.edge_index.size(1), 3), device=data.edge_index.device
-            )  # Override. pbc edge shifts are currently not supported in positional update models
             edge_vec, edge_dist = get_edge_vectors_and_lengths(
                 data.pos, edge_index, data.edge_shifts, normalize=False
             )
@@ -208,6 +215,7 @@ class SCFStack(Base):
                 "edge_index": edge_index,
                 "edge_weight": edge_weight,
                 "edge_rbf": self.distance_expansion(edge_weight),
+                "edge_shifts": data.edge_shifts,
                 "batch": data.batch,
             }
             if self.use_edge_attr:
@@ -219,6 +227,8 @@ class SCFStack(Base):
         else:
             conv_args = {
                 "batch": data.batch,
+                "edge_index": data.edge_index,
+                "edge_shifts": data.edge_shifts,
             }
 
         if self.global_attn_engine == "EquivariantTransformer":
@@ -307,6 +317,7 @@ class CFConv(MessagePassing):
         edge_index: Tensor,
         edge_weight: Tensor,
         edge_rbf: Tensor,
+        edge_shifts: OptTensor = None,
         edge_attr: OptTensor = None,
     ) -> Tensor:
         C = 0.5 * (torch.cos(edge_weight * PI / self.cutoff) + 1.0)
@@ -318,9 +329,8 @@ class CFConv(MessagePassing):
         x = self.lin1(x)
 
         if self.equivariant:
-            edge_shifts = torch.zeros(
-                (edge_index.size(1), 3), device=edge_index.device
-            )  # pbc edge shifts are currently not supported in positional update models
+            if edge_shifts is None:
+                edge_shifts = pos.new_zeros((edge_index.size(1), 3))
             coord_diff, radial = get_edge_vectors_and_lengths(
                 pos, edge_index, edge_shifts, normalize=True, eps=1.0
             )
