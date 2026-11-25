@@ -323,6 +323,44 @@ def test_energy_force_stress_loss():
 
 
 @pytest.mark.mpi_skip()
+@pytest.mark.parametrize("with_integer_shifts", [True, False])
+def test_stress_strains_periodic_edge_shifts(with_integer_shifts):
+    """Periodic image offsets must deform with the cell under strain."""
+    model = create_interatomic_model(STRESS_TERM)
+    data = create_mock_molecular_data(num_atoms=4, num_graphs=2)
+    num_edges = data.edge_index.size(1)
+    integer_shifts = torch.randint(-1, 2, (num_edges, 3), dtype=torch.int8)
+    edge_graph = data.batch[data.edge_index[0]]
+    original_shifts = torch.bmm(
+        integer_shifts.float().unsqueeze(1), data.cell[edge_graph]
+    ).squeeze(1)
+    data.edge_shifts = original_shifts
+    if with_integer_shifts:
+        data.integer_edge_shifts = integer_shifts
+
+    captured = {}
+    backbone_forward = model.model.forward
+
+    def capture_forward(batch):
+        captured["edge_shifts"] = batch.edge_shifts
+        captured["cell"] = batch.cell
+        return backbone_forward(batch)
+
+    model.model.forward = capture_forward
+    model(data)
+
+    expected = torch.bmm(
+        integer_shifts.float().unsqueeze(1), captured["cell"][edge_graph]
+    ).squeeze(1)
+    assert torch.allclose(captured["edge_shifts"], expected)
+    (gradient,) = torch.autograd.grad(
+        captured["edge_shifts"].square().sum(), model._stress_displacement
+    )
+    assert torch.any(gradient != 0)
+    assert data.edge_shifts is original_shifts
+
+
+@pytest.mark.mpi_skip()
 def test_stress_loss_requires_cell():
     """A clear error is raised instead of silently omitting stress."""
     model = create_interatomic_model(STRESS_TERM)

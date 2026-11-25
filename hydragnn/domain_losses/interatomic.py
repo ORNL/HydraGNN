@@ -145,15 +145,33 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
         strain = 0.5 * (displacement + displacement.transpose(-1, -2))
         original_pos = data.pos
         original_cell = data.cell
+        original_edge_shifts = getattr(data, "edge_shifts", None)
         data.pos = original_pos + torch.bmm(
             original_pos.unsqueeze(1), strain[data.batch]
         ).squeeze(1)
-        data.cell = cell + torch.bmm(cell, strain)
+        strained_cell = cell + torch.bmm(cell, strain)
+        data.cell = strained_cell
+        if original_edge_shifts is not None and original_edge_shifts.numel() > 0:
+            # Periodic-image offsets must deform with the cell, or the strain
+            # derivative misses the cross-boundary contributions to the virial.
+            edge_graph = data.batch[data.edge_index[0]]
+            integer_shifts = getattr(data, "integer_edge_shifts", None)
+            if integer_shifts is not None:
+                data.edge_shifts = torch.bmm(
+                    integer_shifts.to(strained_cell.dtype).unsqueeze(1),
+                    strained_cell[edge_graph],
+                ).squeeze(1)
+            else:
+                data.edge_shifts = original_edge_shifts + torch.bmm(
+                    original_edge_shifts.unsqueeze(1), strain[edge_graph]
+                ).squeeze(1)
         try:
             prediction = self.model(data)
         finally:
             data.pos = original_pos
             data.cell = original_cell
+            if original_edge_shifts is not None:
+                data.edge_shifts = original_edge_shifts
         self._stress_displacement = displacement
         self._stress_cell = cell
         return prediction
