@@ -355,7 +355,7 @@ def run_training(
     hydragnn.models.utils.print_model(model)
     training = config["NeuralNetwork"]["Training"]
     if training.get("continue"):
-        hydragnn.models.utils.load_and_validate(
+        saved_normalizer = hydragnn.models.utils.load_and_validate(
             model,
             training["startfrom"],
             config,
@@ -363,6 +363,12 @@ def run_training(
             normalizer=getattr(train_loader.dataset, "normalizer", None),
             use_deepspeed=use_deepspeed,
         )
+        # The weights were trained on the checkpoint's statistics, so every
+        # split must use them rather than statistics refitted on this run.
+        if saved_normalizer is not None:
+            for loader in (train_loader, val_loader, test_loader):
+                if getattr(loader.dataset, "normalizer", None) is not None:
+                    loader.dataset.normalizer = saved_normalizer
     loaders = (train_loader, val_loader, test_loader)
     if before_train is not None and before_train(model, optimizer, loaders, config):
         if writer is not None:

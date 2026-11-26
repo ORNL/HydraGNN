@@ -80,6 +80,7 @@ class MeshGraphNet(OperatorBase):
         mlp_layers=2,
         spatial_dim=3,
         conservative_faces=True,
+        freeze_conv=False,
     ):
         super().__init__(output_dim, output_type, loss_function_type, loss_weights)
         if mlp_layers < 1:
@@ -109,6 +110,10 @@ class MeshGraphNet(OperatorBase):
             _mlp(in_dims[level], hidden_dim, dim * out_mult, mlp_layers, act, False)
             for level, dim in zip(self.head_type, self.head_dims)
         )
+        if freeze_conv:
+            # Like Base: freeze the message-passing trunk, keep decoders trainable.
+            for module in (self.node_encoder, self.edge_encoder, self.processor):
+                module.requires_grad_(False)
 
     def encode(self, data):
         pos = data.pos[:, : self.spatial_dim]
@@ -151,14 +156,16 @@ class MeshGraphNet(OperatorBase):
     def _query_latent(self, node, data):
         # cell_conn offsets stay aligned with triangles after batching.
         tri = data.cell_conn.view(-1, 3)[data.query_cell]
-        corners = data.pos[tri][..., :2].to(node.dtype)
+        # Geometry stays in coordinate precision; only the weights are cast,
+        # so low-precision latents do not distort the interpolation.
+        corners = data.pos[tri][..., :2]
         a, b, c = corners[:, 0], corners[:, 1], corners[:, 2]
         v0, v1 = b - a, c - a
-        rel = data.query_pos[:, :2].to(node.dtype) - a
+        rel = data.query_pos[:, :2].to(a.dtype) - a
         det = v0[:, 0] * v1[:, 1] - v0[:, 1] * v1[:, 0]
         l1 = (rel[:, 0] * v1[:, 1] - rel[:, 1] * v1[:, 0]) / det
         l2 = (v0[:, 0] * rel[:, 1] - v0[:, 1] * rel[:, 0]) / det
-        weights = torch.stack([1 - l1 - l2, l1, l2], dim=1)
+        weights = torch.stack([1 - l1 - l2, l1, l2], dim=1).to(node.dtype)
         return (weights.unsqueeze(-1) * node[tri]).sum(dim=1)
 
     def _decode_face(self, decoder, dim, node, data):

@@ -105,3 +105,44 @@ def test_load_and_validate(tmp_path):
         )
     with pytest.warns(UserWarning, match="hidden_dim"):
         load_and_validate(restored, "m", _config(hidden_dim=16), path=str(tmp_path))
+    with pytest.raises(ValueError, match="normalizer: checkpoint has one"):
+        load_and_validate(restored, "m", _config(), path=str(tmp_path), strict=True)
+
+
+def test_metadata_path_is_branch_aware(tmp_path, monkeypatch):
+    import hydragnn.models
+
+    class FakeMultiTask(torch.nn.Module):
+        branch_id = 3
+
+    monkeypatch.setattr(hydragnn.models, "MultiTaskModelMP", FakeMultiTask)
+    config = {"Variables": {}}
+    _save(tmp_path, "m", checkpoint_metadata(config))
+    os.rename(tmp_path / "m" / "m.pk", tmp_path / "m" / "m_branch3.pk")
+    loaded, _, _ = load_checkpoint_metadata(
+        "m", path=str(tmp_path), model=FakeMultiTask()
+    )
+    assert loaded == config
+
+
+def test_normalized_outputs_rejected_with_interatomic_loss():
+    from hydragnn.config.config_utils import reject_normalized_derivative_outputs
+    from hydragnn.config import parse_variable_schema
+
+    schema = parse_variable_schema(
+        {
+            "graph_type": "homogeneous",
+            "inputs": [{"name": "z", "level": "node", "dim": 1}],
+            "outputs": [
+                {"name": "e", "level": "graph", "dim": 1, "normalize": "standard"}
+            ],
+        }
+    )
+    config = {
+        "NeuralNetwork": {
+            "Training": {"loss": {"enabled": True, "provider": "interatomic_potential"}}
+        }
+    }
+    with pytest.raises(ValueError, match="interatomic_potential"):
+        reject_normalized_derivative_outputs(config, schema)
+    reject_normalized_derivative_outputs({"NeuralNetwork": {}}, schema)

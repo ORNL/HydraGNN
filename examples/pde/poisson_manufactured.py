@@ -26,6 +26,7 @@ import argparse
 import json
 import math
 import os
+import random
 
 import torch
 import torch.distributed as dist
@@ -100,6 +101,8 @@ def main(num_samples=240, num_epoch=None, config_name="poisson_mgn.json"):
     hydragnn.utils.print.print_utils.setup_log(log_name)
 
     dataset = make_dataset(num_samples, TRAIN_RESOLUTIONS, seed=1)
+    # split_dataset shuffles with Python's random; every rank needs the same split.
+    random.seed(0)
     train, val, test = hydragnn.preprocess.split_dataset(
         dataset, config["NeuralNetwork"]["Training"]["perc_train"], False
     )
@@ -107,7 +110,12 @@ def main(num_samples=240, num_epoch=None, config_name="poisson_mgn.json"):
     # the optimizer steps per epoch by the world size and stall convergence.
     world_size, _ = hydragnn.distributed.get_comm_size_and_rank()
     training = config["NeuralNetwork"]["Training"]
-    training["batch_size"] = max(1, training["batch_size"] // world_size)
+    if training["batch_size"] % world_size != 0:
+        raise ValueError(
+            f"Global batch_size {training['batch_size']} is not divisible by "
+            f"the number of ranks {world_size}"
+        )
+    training["batch_size"] //= world_size
     train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
         train,
         val,

@@ -38,20 +38,33 @@ class FieldNormalizer:
 
     @staticmethod
     def specs(schema: VariableSchema):
-        specs = [
-            spec
-            for spec in (*schema.inputs, *schema.outputs)
-            if spec.normalize != "none"
-        ]
-        for spec in specs:
+        # transform() is keyed by name, so a field listed as both input and
+        # output must use a single policy (including "none").
+        policies = {}
+        specs = []
+        for spec in (*schema.inputs, *schema.outputs):
+            previous = policies.setdefault(spec.name, spec.normalize)
+            if previous != spec.normalize:
+                raise ValueError(
+                    f"Variable '{spec.name}' has conflicting normalize policies "
+                    f"'{previous}' and '{spec.normalize}'"
+                )
+            if spec.normalize == "none" or any(s.name == spec.name for s in specs):
+                continue
             if spec.node_type is not None:
                 raise ValueError(
                     f"normalize is not supported for heterogeneous variable '{spec.name}'"
                 )
+            specs.append(spec)
         return specs
 
     @classmethod
-    def fit(cls, dataset, schema: VariableSchema):
+    def fit(cls, dataset, schema: VariableSchema, group=None):
+        """Fit statistics on ``dataset``, reduced over ``group``.
+
+        ``group`` is a torch ``ProcessGroup`` or an ``MPI.Comm``; ``None``
+        means the whole world when torch.distributed is initialized.
+        """
         specs = cls.specs(schema)
         acc = {
             spec.name: [0, 0.0, 0.0, math.inf, -math.inf] for spec in specs
@@ -60,18 +73,15 @@ class FieldNormalizer:
             for data in dataset:
                 for spec in specs:
                     value = data[spec.name].detach().to(torch.float64)
+                    if value.numel() == 0:
+                        continue
                     a = acc[spec.name]
                     a[0] += value.numel()
                     a[1] += float(value.sum())
                     a[2] += float((value * value).sum())
                     a[3] = min(a[3], float(value.min()))
                     a[4] = max(a[4], float(value.max()))
-        if dist.is_initialized():
-            comm = MPI.COMM_WORLD
-            for a in acc.values():
-                a[:3] = [comm.allreduce(v, op=MPI.SUM) for v in a[:3]]
-                a[3] = comm.allreduce(a[3], op=MPI.MIN)
-                a[4] = comm.allreduce(a[4], op=MPI.MAX)
+        acc = _reduce(acc, group)
 
         stats = {}
         for spec in specs:
@@ -111,3 +121,25 @@ class FieldNormalizer:
     @classmethod
     def from_state_dict(cls, state):
         return cls(state)
+
+
+def _reduce(acc, group):
+    if group is None:
+        if not dist.is_initialized():
+            return acc
+        group = MPI.COMM_WORLD
+    if isinstance(group, MPI.Comm):
+        gathered = group.allgather(acc)
+    else:
+        gathered = [None] * dist.get_world_size(group=group)
+        dist.all_gather_object(gathered, acc, group=group)
+    return {
+        name: [
+            sum(g[name][0] for g in gathered),
+            sum(g[name][1] for g in gathered),
+            sum(g[name][2] for g in gathered),
+            min(g[name][3] for g in gathered),
+            max(g[name][4] for g in gathered),
+        ]
+        for name in acc
+    }

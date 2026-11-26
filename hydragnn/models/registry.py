@@ -454,6 +454,7 @@ def _build_meshgraphnet(p):
         mlp_layers=p.mgn.mlp_layers,
         spatial_dim=p.mgn.spatial_dim,
         conservative_faces=p.mgn.conservative_faces,
+        freeze_conv=p.freeze_conv,
     )
 
 

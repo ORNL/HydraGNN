@@ -190,6 +190,23 @@ def test_query_head_batched_equals_single():
         torch.testing.assert_close(batched[head], expected, rtol=0, atol=1e-12)
 
 
+def test_query_head_low_precision_latent_keeps_fp64_geometry():
+    model = _query_model()
+    mesh = _query_mesh(3, 3, 5, 3)
+    node = torch.randn(mesh.num_nodes, 16, dtype=torch.float64)
+    expected = model._query_latent(node, mesh).to(torch.bfloat16)
+    latent = model._query_latent(node.to(torch.bfloat16), mesh)
+    assert latent.dtype == torch.bfloat16
+    torch.testing.assert_close(latent, expected, rtol=2e-2, atol=2e-2)
+
+
+def test_freeze_conv_freezes_trunk_only():
+    model = create_model(**_args(freeze_conv=True))
+    for module in (model.node_encoder, model.edge_encoder, model.processor):
+        assert not any(p.requires_grad for p in module.parameters())
+    assert all(p.requires_grad for p in model.decoders.parameters())
+
+
 def test_query_head_requires_2d():
     with pytest.raises(ValueError, match="mgn_spatial_dim=2"):
         _query_model(mgn_spatial_dim=3)

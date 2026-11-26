@@ -329,7 +329,7 @@ def create_dataloaders(
         )
         # Statistics come from the training split only.
         normalizer = (
-            FieldNormalizer.fit(trainset, schema)
+            FieldNormalizer.fit(trainset, schema, group=group)
             if FieldNormalizer.specs(schema)
             else None
         )

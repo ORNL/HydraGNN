@@ -123,16 +123,27 @@ def checkpoint_metadata(config, train_loader=None):
     }
 
 
-def load_checkpoint_metadata(model_name, path="./logs/"):
+def _checkpoint_file(model, model_name, path):
+    from hydragnn.models import MultiTaskModelMP
+
+    fname = model_name
+    if isinstance(model, MultiTaskModelMP):
+        fname += f"_branch{model.branch_id}"
+    return os.path.join(path, model_name, fname + ".pk")
+
+
+def load_checkpoint_metadata(model_name, path="./logs/", model=None):
     """Return (config, schema_version, normalizer) from a checkpoint.
 
-    Checkpoints written before these entries existed yield ``None`` values.
+    Pass ``model`` so multi-branch checkpoints resolve to this rank's
+    ``<name>_branch<id>.pk`` file, as in ``load_existing_model``. Checkpoints
+    written before these entries existed yield ``None`` values.
     """
     import json
 
     from hydragnn.preprocess.field_normalizer import FieldNormalizer
 
-    path_name = os.path.join(path, model_name, model_name + ".pk")
+    path_name = _checkpoint_file(model, model_name, path)
     checkpoint = torch.load(path_name, map_location="cpu", weights_only=True)
     config = checkpoint.get("config")
     state = checkpoint.get("normalizer")
@@ -179,12 +190,21 @@ def checkpoint_mismatches(
                 )
         else:
             problems.append(f"{section}: checkpoint {old!r}, current {new!r}")
-    if (
+    if (normalizer is None) != (saved_normalizer is None):
+        problems.append(
+            "normalizer: checkpoint "
+            + ("has none" if saved_normalizer is None else "has one")
+            + ", current run "
+            + ("has none" if normalizer is None else "has one")
+        )
+    elif (
         normalizer is not None
-        and saved_normalizer is not None
         and normalizer.state_dict() != saved_normalizer.state_dict()
     ):
-        problems.append("normalizer: statistics differ from the checkpoint")
+        problems.append(
+            "normalizer: statistics differ from the checkpoint; "
+            "the checkpoint's statistics should be used"
+        )
     return problems
 
 
@@ -209,7 +229,7 @@ def load_and_validate(
     saved_normalizer = None
     if not use_deepspeed:
         saved_config, saved_version, saved_normalizer = load_checkpoint_metadata(
-            model_name, path
+            model_name, path, model
         )
         if saved_config is None:
             print_master(f"Checkpoint {model_name} has no metadata; not validated")

@@ -56,6 +56,24 @@ def sanitize_filename_component(value, max_length=48):
     return sanitized
 
 
+def reject_normalized_derivative_outputs(config, schema):
+    """Normalized outputs are incompatible with the interatomic-potential loss.
+
+    That loss differentiates the predicted energy against physical positions
+    and compares with physical forces, so a normalized energy would mix units.
+    """
+    from hydragnn.domain_losses import uses_interatomic_potential
+
+    if schema is None or not uses_interatomic_potential(config):
+        return
+    normalized = [spec.name for spec in schema.outputs if spec.normalize != "none"]
+    if normalized:
+        raise ValueError(
+            "normalize must be 'none' for outputs used with the "
+            f"interatomic_potential loss; got normalized outputs {normalized}"
+        )
+
+
 def update_config(config, train_loader, val_loader, test_loader):
     # Imported lazily: hydragnn.models imports hydragnn.config.
     from hydragnn.models.utils.model import (
@@ -74,6 +92,7 @@ def update_config(config, train_loader, val_loader, test_loader):
         graph_size_variable = bool(int(graph_size_variable))
 
     named_schema = get_variable_schema(config)
+    reject_normalized_derivative_outputs(config, named_schema)
 
     # Always sync node_input_dims from heterogeneous data.
     arch_cfg = config["NeuralNetwork"].setdefault("Architecture", {})

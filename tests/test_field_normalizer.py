@@ -9,8 +9,11 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
+from types import SimpleNamespace
+
 import pytest
 import torch
+from mpi4py import MPI
 from torch_geometric.data import Data
 
 from hydragnn.config import parse_variable_schema
@@ -127,6 +130,31 @@ def test_dataloaders_fit_on_training_split_only():
     )
     # Source data is not mutated.
     assert train[0].f.mean().abs() < 10
+
+
+def _spec(name, normalize):
+    return SimpleNamespace(name=name, normalize=normalize, node_type=None)
+
+
+def test_shared_name_policies():
+    schema = SimpleNamespace(
+        inputs=(_spec("f", "standard"),), outputs=(_spec("f", "none"),)
+    )
+    with pytest.raises(ValueError, match="conflicting normalize policies"):
+        FieldNormalizer.specs(schema)
+    schema = SimpleNamespace(
+        inputs=(_spec("f", "standard"),), outputs=(_spec("f", "standard"),)
+    )
+    assert [s.name for s in FieldNormalizer.specs(schema)] == ["f"]
+
+
+def test_empty_tensors_and_mpi_group():
+    data = [_sample(i) for i in range(3)]
+    empty = _sample(9)
+    empty.f = empty.f[:0]
+    schema = _schema(f_policy="minmax")
+    norm = FieldNormalizer.fit([*data, empty], schema, group=MPI.COMM_SELF)
+    assert norm.state_dict() == FieldNormalizer.fit(data, schema).state_dict()
 
 
 def test_no_normalizer_without_policies():
