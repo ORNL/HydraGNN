@@ -17,11 +17,12 @@ from typing import Dict, List, Union
 from hydragnn.model_settings import (
     AllScAIPSettings,
     EquivariantAttentionSettings,
+    MeshGraphNetSettings,
     UMASettings,
 )
 from hydragnn.domain_losses import create_domain_loss
 from hydragnn.config.variable_schema import edge_type_dims
-from hydragnn.models.registry import get_model_builder
+from hydragnn.models.registry import get_capabilities, get_model_builder
 
 from hydragnn.distributed import get_device
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
@@ -112,6 +113,7 @@ def create_model_config(
         ),
         allscaip=AllScAIPSettings.from_mapping(config["Architecture"]),
         uma=UMASettings.from_mapping(config["Architecture"]),
+        mgn=MeshGraphNetSettings.from_mapping(config["Architecture"]),
         hetero_pooling_mode=config["Architecture"].get("hetero_pooling_mode", "sum"),
         node_target_type=config["Architecture"].get("node_target_type", None),
         share_relation_weights=config["Architecture"].get(
@@ -145,6 +147,7 @@ _SETTINGS_CLASSES = {
     "equivariant_attn": EquivariantAttentionSettings,
     "allscaip": AllScAIPSettings,
     "uma": UMASettings,
+    "mgn": MeshGraphNetSettings,
 }
 
 
@@ -222,6 +225,7 @@ def create_model(
     equivariant_attn: EquivariantAttentionSettings | None = None,
     allscaip: AllScAIPSettings | None = None,
     uma: UMASettings | None = None,
+    mgn: MeshGraphNetSettings | None = None,
     **flat_settings,
 ):
     params = dict(locals())
@@ -244,6 +248,13 @@ def create_model(
     torch.manual_seed(0)
 
     device = get_device(use_gpu, verbosity_level=verbosity)
+
+    unsupported = set(output_type) - get_capabilities(mpnn_type).output_levels
+    if unsupported:
+        raise ValueError(
+            f"{mpnn_type} cannot predict {sorted(unsupported)} outputs; supported "
+            f"levels: {sorted(get_capabilities(mpnn_type).output_levels)}"
+        )
 
     model = get_model_builder(mpnn_type)(params)
 

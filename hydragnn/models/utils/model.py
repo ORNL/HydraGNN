@@ -106,7 +106,163 @@ def multitask_optim_state_dict(model, optimizer):
     return optimizer_state_dict
 
 
-def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
+def checkpoint_metadata(config, train_loader=None):
+    """Extra checkpoint entries: resolved config, schema version, normalizer."""
+    import json
+
+    from hydragnn.config.variable_schema import SCHEMA_VERSION
+
+    normalizer = getattr(getattr(train_loader, "dataset", None), "normalizer", None)
+    return {
+        # Stored as JSON text so torch.load(weights_only=True) can read it.
+        "config": json.dumps(
+            config, default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o)
+        ),
+        "schema_version": SCHEMA_VERSION,
+        "normalizer": None if normalizer is None else normalizer.state_dict(),
+    }
+
+
+def _checkpoint_file(model, model_name, path):
+    from hydragnn.models import MultiTaskModelMP
+
+    fname = model_name
+    if isinstance(model, MultiTaskModelMP):
+        fname += f"_branch{model.branch_id}"
+    return os.path.join(path, model_name, fname + ".pk")
+
+
+def load_checkpoint_metadata(model_name, path="./logs/", model=None):
+    """Return (config, schema_version, normalizer) from a checkpoint.
+
+    Pass ``model`` so multi-branch checkpoints resolve to this rank's
+    ``<name>_branch<id>.pk`` file, as in ``load_existing_model``. Checkpoints
+    written before these entries existed yield ``None`` values.
+    """
+    path_name = _checkpoint_file(model, model_name, path)
+    return _parse_metadata(torch.load(path_name, map_location="cpu", weights_only=True))
+
+
+def _parse_metadata(checkpoint):
+    import json
+
+    from hydragnn.preprocess.field_normalizer import FieldNormalizer
+
+    config = checkpoint.get("config")
+    state = checkpoint.get("normalizer")
+    return (
+        None if config is None else json.loads(config),
+        checkpoint.get("schema_version"),
+        None if state is None else FieldNormalizer.from_state_dict(state),
+    )
+
+
+def checkpoint_mismatches(
+    config, saved_config, saved_version, saved_normalizer, normalizer=None
+):
+    """List human-readable differences between a run and a checkpoint's metadata."""
+    import json
+
+    from hydragnn.config.variable_schema import SCHEMA_VERSION
+
+    if saved_config is None:
+        return []
+    current = json.loads(checkpoint_metadata(config)["config"])
+    problems = []
+    if saved_version != SCHEMA_VERSION:
+        problems.append(
+            f"schema_version: checkpoint {saved_version}, current {SCHEMA_VERSION}"
+        )
+    for section, getter in (
+        ("Variables", lambda c: c.get("Variables")),
+        (
+            "NeuralNetwork.Architecture",
+            lambda c: c.get("NeuralNetwork", {}).get("Architecture"),
+        ),
+    ):
+        old, new = getter(saved_config), getter(current)
+        if old == new:
+            continue
+        if isinstance(old, dict) and isinstance(new, dict):
+            keys = sorted(
+                k for k in old.keys() | new.keys() if old.get(k) != new.get(k)
+            )
+            for k in keys:
+                problems.append(
+                    f"{section}.{k}: checkpoint {old.get(k)!r}, current {new.get(k)!r}"
+                )
+        else:
+            problems.append(f"{section}: checkpoint {old!r}, current {new!r}")
+    if (normalizer is None) != (saved_normalizer is None):
+        problems.append(
+            "normalizer: checkpoint "
+            + ("has none" if saved_normalizer is None else "has one")
+            + ", current run "
+            + ("has none" if normalizer is None else "has one")
+        )
+    elif (
+        normalizer is not None
+        and normalizer.state_dict() != saved_normalizer.state_dict()
+    ):
+        problems.append(
+            "normalizer: statistics differ from the checkpoint; "
+            "the checkpoint's statistics should be used"
+        )
+    return problems
+
+
+def load_and_validate(
+    model,
+    model_name,
+    config,
+    path="./logs/",
+    optimizer=None,
+    normalizer=None,
+    strict=False,
+    use_deepspeed=False,
+):
+    """Check a checkpoint's metadata against ``config``, then load its weights.
+
+    Mismatches warn, or raise ``ValueError`` when ``strict``. Returns the
+    checkpoint's normalizer (``None`` for old checkpoints) so inference can
+    reuse the training statistics.
+    """
+    import warnings
+
+    if use_deepspeed:
+        # DeepSpeed keeps metadata in client_state, readable only by loading,
+        # so validation happens after the weights are restored.
+        _, client_state = model.load_checkpoint(
+            os.path.join(path, model_name), model_name
+        )
+        saved_config, saved_version, saved_normalizer = _parse_metadata(
+            client_state or {}
+        )
+    else:
+        saved_config, saved_version, saved_normalizer = load_checkpoint_metadata(
+            model_name, path, model
+        )
+    if saved_config is None:
+        print_master(f"Checkpoint {model_name} has no metadata; not validated")
+    problems = checkpoint_mismatches(
+        config, saved_config, saved_version, saved_normalizer, normalizer
+    )
+    if problems:
+        message = (
+            f"Checkpoint {model_name} does not match the current run:\n  "
+            + "\n  ".join(problems)
+        )
+        if strict:
+            raise ValueError(message)
+        warnings.warn(message)
+    if not use_deepspeed:
+        load_existing_model(model, model_name, path, optimizer)
+    return saved_normalizer
+
+
+def save_model(
+    model, optimizer, name, path="./logs/", use_deepspeed=False, metadata=None
+):
     """Save both model and optimizer state in a single checkpoint file"""
     if not use_deepspeed:
         _, world_rank = get_comm_size_and_rank()
@@ -178,6 +334,7 @@ def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
                 {
                     "model_state_dict": model_state_dict,
                     "optimizer_state_dict": optimizer_state_dict,
+                    **(metadata or {}),
                 },
                 path_name,
             )
@@ -192,7 +349,9 @@ def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
                 os.symlink(fname, link)
         dist.barrier()
     else:
-        model.save_checkpoint(os.path.join(path, name), name)
+        model.save_checkpoint(
+            os.path.join(path, name), name, client_state=dict(metadata or {})
+        )
 
 
 def get_summary_writer(name, path="./logs/"):
@@ -576,7 +735,9 @@ class Checkpoint:
         warmup: int = 0,
         path: str = "./logs/",
         use_deepspeed: bool = False,
+        metadata=None,
     ):
+        self.metadata = metadata
         self.count = 1
         self.warmup = warmup
         self.path = path
@@ -599,5 +760,6 @@ class Checkpoint:
                 name=self.name,
                 path=self.path,
                 use_deepspeed=self.use_deepspeed,
+                metadata=self.metadata,
             )
             return True

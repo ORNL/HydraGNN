@@ -353,12 +353,22 @@ def run_training(
         config=config,
     )
     hydragnn.models.utils.print_model(model)
-    hydragnn.models.utils.load_existing_model_config(
-        model,
-        config["NeuralNetwork"]["Training"],
-        optimizer=optimizer,
-        use_deepspeed=use_deepspeed,
-    )
+    training = config["NeuralNetwork"]["Training"]
+    if training.get("continue"):
+        saved_normalizer = hydragnn.models.utils.load_and_validate(
+            model,
+            training["startfrom"],
+            config,
+            optimizer=optimizer,
+            normalizer=getattr(train_loader.dataset, "normalizer", None),
+            use_deepspeed=use_deepspeed,
+        )
+        # The weights were trained on the checkpoint's statistics, so every
+        # split must use them rather than statistics refitted on this run.
+        if saved_normalizer is not None:
+            for loader in (train_loader, val_loader, test_loader):
+                if getattr(loader.dataset, "normalizer", None) is not None:
+                    loader.dataset.normalizer = saved_normalizer
     loaders = (train_loader, val_loader, test_loader)
     if before_train is not None and before_train(model, optimizer, loaders, config):
         if writer is not None:
@@ -385,7 +395,11 @@ def run_training(
     if after_train is not None:
         after_train(model)
     hydragnn.models.utils.save_model(
-        model, optimizer, log_name, use_deepspeed=use_deepspeed
+        model,
+        optimizer,
+        log_name,
+        use_deepspeed=use_deepspeed,
+        metadata=hydragnn.models.utils.checkpoint_metadata(config, train_loader),
     )
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
     if writer is not None:

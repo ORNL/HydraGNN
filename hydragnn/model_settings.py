@@ -105,3 +105,15 @@ class UMASettings(_PrefixedSettings):
     use_composition_embedding: bool = False
     equivariant_vector_head: bool = False
     vector_head_index: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class MeshGraphNetSettings(_PrefixedSettings):
+    """MeshGraphNet options; latent width and processor steps come from
+    ``hidden_dim`` and ``num_conv_layers``."""
+
+    prefix: ClassVar[str] = "mgn_"
+
+    mlp_layers: int = 2
+    spatial_dim: int = 3
+    conservative_faces: bool = True

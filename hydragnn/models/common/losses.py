@@ -60,7 +60,10 @@ class MultiHeadLossMixin:
             if head_pre.shape != head_val.shape:
                 head_val = torch.reshape(head_val, head_pre.shape)
             head_val = head_val.to(head_pre.device)
-            if var is None:
+            if head_pre.numel() == 0:
+                # Mean-reduced losses of empty tensors are NaN; keep the graph.
+                head_loss = head_pre.sum() * 0.0
+            elif var is None:
                 head_loss = self.loss_function(head_pre, head_val)
             else:
                 head_loss = self.loss_function(head_pre, head_val, var[ihead])

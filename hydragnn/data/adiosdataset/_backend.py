@@ -36,8 +36,26 @@ DTYPE_MAP = {
     "int32_t": np.int32,
     "int64_t": np.int64,
     "int8_t": np.int8,
+    "char": np.int8,
     "uint8_t": np.uint8,
 }
+
+
+# Data subclasses whose name is stored so readers rebuild them (custom __inc__).
+DATA_CLASSES = frozenset({"MeshData"})
+
+
+def data_class(name):
+    """Return the PyG ``Data`` subclass stored under ``name`` (``None``: ``Data``)."""
+    import torch_geometric.data
+
+    if name is None:
+        return torch_geometric.data.Data
+    if name == "MeshData":
+        from hydragnn.data.meshes import MeshData
+
+        return MeshData
+    raise ValueError(f"Unknown data class {name!r} in ADIOS file")
 
 
 def adios_dtype(type_name):

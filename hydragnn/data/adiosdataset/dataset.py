@@ -23,7 +23,7 @@ from hydragnn.data.abstractbasedataset import AbstractBaseDataset
 from hydragnn.distributed import nsplit
 from hydragnn.utils.print.print_utils import iterate_tqdm, log, log0
 
-from ._backend import adios2_open, adios_dtype, dds, parse_shape
+from ._backend import adios2_open, adios_dtype, data_class, dds, parse_shape
 
 
 class AdiosDataset(AbstractBaseDataset):
@@ -150,6 +150,13 @@ class AdiosDataset(AbstractBaseDataset):
                 self.setkeys(keys, optional_keys=optional_keys)
 
             self.ndata = self.read_attribute0(f, "%s/ndata" % label).item()
+            name = "%s/data_class" % label
+            cls = self.read_attribute_string0(f, name) if name in self.attrs else None
+            self.data_class = data_class(cls[0] if isinstance(cls, list) else cls)
+            name = "%s/bool_keys" % label
+            self.bool_keys = frozenset(
+                self.read_attribute_string0(f, name) if name in self.attrs else ()
+            )
 
             if "minmax_graph_feature" in self.attrs:
                 self.minmax_graph_feature = self.read_attribute0(
@@ -527,7 +534,7 @@ class AdiosDataset(AbstractBaseDataset):
             ## Load data from cached buffer
             data_object = self.cache[idx]
         elif self.use_ddstore and self.ddstore_store_per_sample:
-            data_object = torch_geometric.data.Data()
+            data_object = self.data_class()
             dtype_list = list()
             for k in self.keys:
                 shape = self.vars["%s/%s" % (self.label, k)]["Shape"]
@@ -553,10 +560,9 @@ class AdiosDataset(AbstractBaseDataset):
             self.ddstore.get("record_array", val, offset)
             val = val.view(dtype)[0]
             for k in val.dtype.names:
-                v = torch.tensor(val[k])
-                setattr(data_object, k, v)
+                setattr(data_object, k, self._tensor(k, val[k]))
         else:
-            data_object = torch_geometric.data.Data()
+            data_object = self.data_class()
             for k in self.keys:
                 shape = self.vars["%s/%s" % (self.label, k)]["Shape"]
                 ishape = parse_shape(shape)
@@ -601,12 +607,16 @@ class AdiosDataset(AbstractBaseDataset):
                     ## Tensors do not support strings. We use strings as they are. No converting to tensors.
                     v = val.tobytes().decode("utf-8")
                 else:
-                    v = torch.tensor(val)
+                    v = self._tensor(k, val)
                 setattr(data_object, k, v)
             if self.enable_cache:
                 self.cache[idx] = data_object
 
         return data_object
+
+    def _tensor(self, key, val):
+        v = torch.tensor(val)
+        return v.bool() if key in self.bool_keys else v
 
     def _get_from_cache_or_file(self, cache_search_key, f, vname):
         """
@@ -678,7 +688,7 @@ class AdiosDataset(AbstractBaseDataset):
 
             filtered = filter(lambda x: x >= i and x < i + dn, self.preflight_list)
             for idx in iterate_tqdm(sorted(filtered), 2, desc="AdiosWriter populate"):
-                data_object = torch_geometric.data.Data()
+                data_object = self.data_class()
                 for k in self.keys:
                     shape = self.vars["%s/%s" % (self.label, k)]["Shape"]
                     ishape = parse_shape(shape)
@@ -695,9 +705,7 @@ class AdiosDataset(AbstractBaseDataset):
                     for n0, n1 in zip(start, count):
                         slice_list.append(slice(n0, n0 + n1))
                     val = self._data[k][tuple(slice_list)]
-
-                    v = torch.tensor(val)
-                    setattr(data_object, k, v)
+                    setattr(data_object, k, self._tensor(k, val))
                 self.cache[idx] = data_object
 
         for k in self.keys:

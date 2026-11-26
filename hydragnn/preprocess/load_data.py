@@ -47,6 +47,7 @@ from hydragnn.config.variable_schema import (
     parse_variable_schema,
     prepare_data_from_schema,
 )
+from hydragnn.preprocess.field_normalizer import FieldNormalizer
 
 from concurrent.futures import ThreadPoolExecutor
 import multiprocessing as mp
@@ -109,9 +110,10 @@ class SchemaPreparedDataset(Dataset):
     metadata used by PNA and cost-aware batching.
     """
 
-    def __init__(self, dataset, schema: VariableSchema):
+    def __init__(self, dataset, schema: VariableSchema, normalizer=None):
         self.dataset = dataset
         self.schema = schema
+        self.normalizer = normalizer
 
     def __len__(self):
         return len(self.dataset)
@@ -120,14 +122,17 @@ class SchemaPreparedDataset(Dataset):
         data = self.dataset[index]
         if not hasattr(data, "clone"):
             raise TypeError("Named-variable datasets must return PyG Data objects")
-        return prepare_data_from_schema(data.clone(), self.schema)
+        data = data.clone()
+        if self.normalizer is not None:
+            data = self.normalizer.transform(data)
+        return prepare_data_from_schema(data, self.schema)
 
     def __iter__(self):
         for index in range(len(self)):
             yield self[index]
 
     def __getattr__(self, name):
-        if name in {"dataset", "schema"}:
+        if name in {"dataset", "schema", "normalizer"}:
             raise AttributeError(name)
         return getattr(self.dataset, name)
 
@@ -322,9 +327,15 @@ def create_dataloaders(
             if isinstance(variables, VariableSchema)
             else parse_variable_schema(variables)
         )
-        trainset = SchemaPreparedDataset(trainset, schema)
-        valset = SchemaPreparedDataset(valset, schema)
-        testset = SchemaPreparedDataset(testset, schema)
+        # Statistics come from the training split only.
+        normalizer = (
+            FieldNormalizer.fit(trainset, schema, group=group)
+            if FieldNormalizer.specs(schema)
+            else None
+        )
+        trainset = SchemaPreparedDataset(trainset, schema, normalizer)
+        valset = SchemaPreparedDataset(valset, schema, normalizer)
+        testset = SchemaPreparedDataset(testset, schema, normalizer)
 
     if batching and batching.get("mode", "fixed") != "fixed":
         if oversampling:

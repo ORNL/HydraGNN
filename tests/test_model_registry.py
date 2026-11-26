@@ -58,6 +58,8 @@ HETEROGENEOUS_MODELS = [
     "HeteroRGAT",
     "HeteroSAGE",
 ]
+# Node-output operator models; contracts live in tests/test_meshgraphnet.py.
+PDE_MODELS = ["MeshGraphNet"]
 
 HIDDEN_DIM = 8
 NODE_DIM = 2
@@ -69,7 +71,9 @@ NODE_DIM = 2
 
 
 def test_registry_lists_every_supported_model():
-    assert available_models() == sorted(HOMOGENEOUS_MODELS + HETEROGENEOUS_MODELS)
+    assert available_models() == sorted(
+        HOMOGENEOUS_MODELS + HETEROGENEOUS_MODELS + PDE_MODELS
+    )
 
 
 def test_unknown_model_name_raises_value_error():

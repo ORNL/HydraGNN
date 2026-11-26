@@ -24,7 +24,11 @@ from hydragnn.distributed import (
     synchronize_local_sgd_parameters,
 )
 from hydragnn.loss_reporting import configure_supervised_components, format_loss_report
-from hydragnn.models.utils.model import Checkpoint, EarlyStopping
+from hydragnn.models.utils.model import (
+    Checkpoint,
+    EarlyStopping,
+    checkpoint_metadata,
+)
 from hydragnn.postprocess.visualizer import Visualizer
 from hydragnn.train.loops import test, train, validate
 from hydragnn.train.precision import resolve_precision
@@ -104,6 +108,7 @@ def train_validate_test(
     precision="fp32",
 ):
     variable_schema = parse_variable_schema(config["Variables"])
+    metadata = checkpoint_metadata(config, train_loader)
     config = config["NeuralNetwork"]
     num_epoch = config["Training"]["num_epoch"]
     EarlyStop = (
@@ -204,12 +209,14 @@ def train_validate_test(
         checkpoint = Checkpoint(
             name=model_with_config_name,
             use_deepspeed=use_deepspeed,
+            metadata=metadata,
         )
         if "checkpoint_warmup" in config["Training"]:
             checkpoint = Checkpoint(
                 name=model_with_config_name,
                 warmup=config["Training"]["checkpoint_warmup"],
                 use_deepspeed=use_deepspeed,
+                metadata=metadata,
             )
 
     ## inference only

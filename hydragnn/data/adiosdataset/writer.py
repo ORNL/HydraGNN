@@ -18,7 +18,7 @@ from mpi4py import MPI
 from hydragnn.data.abstractbasedataset import AbstractBaseDataset
 from hydragnn.utils.print.print_utils import log0
 
-from ._backend import _comm_args, ad2
+from ._backend import DATA_CLASSES, _comm_args, ad2
 
 
 class AdiosWriter:
@@ -131,6 +131,17 @@ class AdiosWriter:
                     keys.remove("dataset_name")
 
                 self.io.DefineAttribute("%s/keys" % label, keys)
+                if type(data).__name__ in DATA_CLASSES:
+                    self.io.DefineAttribute(
+                        "%s/data_class" % label, type(data).__name__
+                    )
+                bool_keys = [
+                    k
+                    for k in keys
+                    if isinstance(data[k], torch.Tensor) and data[k].dtype == torch.bool
+                ]
+                if bool_keys:
+                    self.io.DefineAttribute("%s/bool_keys" % label, bool_keys)
                 keys = sorted(keys)
                 self.comm.allgather(keys)
 
@@ -145,7 +156,11 @@ class AdiosWriter:
                 arr_list = list()
                 for data in self.dataset[label]:
                     if isinstance(data[k], torch.Tensor):
-                        arr_list.append(data[k].cpu().numpy())
+                        arr = data[k].cpu()
+                        # No bool in ADIOS, uint8 means string, DDStore lacks int8.
+                        if arr.dtype == torch.bool:
+                            arr = arr.to(torch.int32)
+                        arr_list.append(arr.numpy())
                     elif isinstance(data[k], np.ndarray):
                         arr_list.append(data[k])
                     elif isinstance(data[k], (np.floating, np.integer)):
