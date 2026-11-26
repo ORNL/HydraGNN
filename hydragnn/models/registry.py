@@ -49,6 +49,7 @@ from hydragnn.models.heterogeneous import (
 from hydragnn.models.fluxgnn import FluxGNN
 from hydragnn.models.meshgraphnet import MeshGraphNet
 from hydragnn.models.multiscale_meshgraphnet import MultiscaleMeshGraphNet
+from hydragnn.models.rigno import RIGNO
 
 ModelBuilder = Callable[[SimpleNamespace], object]
 
@@ -500,6 +501,51 @@ def _build_multiscale_meshgraphnet(p):
         spatial_dim=p.mgn.spatial_dim,
         conservative_faces=p.mgn.conservative_faces,
         schedule=p.msmgn.schedule,
+        freeze_conv=p.freeze_conv,
+    )
+
+
+@register_model(
+    "RIGNO",
+    Capabilities(
+        output_levels=frozenset({"node", "query"}),
+        requires=frozenset(
+            {
+                "rigno_x",
+                "rigno_rpos",
+                "rigno_rradius",
+                "rigno_p2r_index",
+                "rigno_r2r_index",
+                "rigno_r2p_index",
+            }
+        ),
+        reference=(
+            "Mousavi et al. 2025, arXiv:2501.19205, "
+            "camlab-ethz/rigno (non-periodic port)"
+        ),
+    ),
+)
+def _build_rigno(p):
+    if p.global_attn_engine or p.pe_dim:
+        raise ValueError("RIGNO does not support global attention or pe_dim")
+    if p.use_graph_attr_conditioning:
+        raise ValueError("RIGNO does not support graph_attr conditioning")
+    return RIGNO(
+        p.input_dim,
+        p.hidden_dim,
+        p.output_dim,
+        p.output_type,
+        p.num_conv_layers,
+        activation_function=p.activation_function,
+        loss_function_type=p.loss_function_type,
+        loss_weights=p.task_weights,
+        mlp_layers=p.rigno.mlp_layers,
+        edge_masking=p.rigno.edge_masking,
+        overlap_p2r=p.rigno.overlap_p2r,
+        overlap_r2p=p.rigno.overlap_r2p,
+        concat_time=p.rigno.concat_time,
+        time_conditioning=p.rigno.time_conditioning,
+        spatial_dim=p.rigno.spatial_dim,
         freeze_conv=p.freeze_conv,
     )
 

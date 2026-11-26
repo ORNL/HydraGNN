@@ -18,4 +18,5 @@ from .mesh_data import (
     unit_square_mesh,
     validate_mesh,
 )
+from .region_graph import RegionGraph, build_rigno_graph
 from .trajectory import Trajectory

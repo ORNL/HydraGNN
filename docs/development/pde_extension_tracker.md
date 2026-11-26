@@ -10,7 +10,7 @@ measured values and environments are in the linked design documents.
 | WP01 | Registry, configuration, compatibility baseline | – | verified | #581 / `e1564c39` | `pde_wp01_wp02_design.md` |
 | WP02 | Mesh, fields, trajectory, hierarchy contracts | WP01 | verified | #581 / `e1564c39`, #583 | `pde_wp01_wp02_design.md` |
 | WP03 | MeshGraphNets and FluxGNN | WP02 | verified | #582 | `pde_wp03_design.md` |
-| WP04 | Multiscale MGN and RIGNO | WP02 | not started | | |
+| WP04 | Multiscale MGN and RIGNO | WP02 | implemented | | `pde_wp04_design.md` |
 | WP05 | Transolver, ++, -3 and GAOT | WP02, WP11 | not started | | |
 | WP06 | FNO, GINO, GSNO | WP02 | not started | | |
 | WP07 | DeepONet and composite architecture | WP01, WP02 | not started | | |
@@ -54,3 +54,16 @@ measured values and environments are in the linked design documents.
   Frontier MI250X with 1 and 8 GCDs (DDP); property checks pass on GPU. Details in `pde_wp03_design.md` §4.
 * Limitations: no positivity or CFL enforcement; 2D triangles only; boundary-condition values are not
   inputs; MGN not compared with the TF1 DeepMind reference (blocked: no TF1 environment).
+
+## WP04
+
+* Sources: `models/multiscale_meshgraphnet.py`, node transfer in `data/meshes/hierarchy.py`,
+  `data/meshes/region_graph.py`, `models/rigno.py`, `MultiscaleMGNSettings`/`RIGNOSettings` in
+  `model_settings.py`, `examples/pde/poisson_manufactured.py`, `poisson_msmgn.json`, `poisson_rigno.json`.
+* Tests: `test_multiscale_meshgraphnet.py`, `test_rigno.py`, `test_poisson_mgn_train.py`,
+  `test_model_registry.py`. 303 targeted regression tests pass.
+* Results: Poisson (CPU, 1 rank) held-out (n = 14) relative L2: MGN 0.188, MS-MGN 0.198, RIGNO 0.262.
+  RIGNO reaches 0.215 on a held-out L-shaped irregular domain at a finer resolution than training.
+  Details in `pde_wp04_design.md` §4.
+* Limitations: MS-MGN supports two nested triangle levels only; RIGNO is 2D non-periodic, and has no numeric
+  parity check against the JAX upstream (blocked: no JAX environment).

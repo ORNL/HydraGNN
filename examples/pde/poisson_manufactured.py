@@ -21,7 +21,9 @@ training, the relative L2 error of each output, in physical units, is reported
 on held-out samples at a finer, unseen resolution. ``batch_size`` in the config
 is the global batch, split evenly across MPI ranks. With
 ``poisson_msmgn.json`` (MultiscaleMeshGraphNet) every sample is a two-level
-mesh hierarchy whose coarse level has half the resolution.
+mesh hierarchy whose coarse level has half the resolution. With
+``poisson_rigno.json`` (RIGNO) every sample carries its regional graphs, with
+regional nodes drawn from a seeded generator.
 """
 
 import argparse
@@ -35,15 +37,18 @@ import torch.distributed as dist
 from torch_geometric.loader import DataLoader
 
 import hydragnn
-from hydragnn.data.meshes import build_hierarchy, unit_square_mesh
+from hydragnn.data.meshes import build_hierarchy, build_rigno_graph, unit_square_mesh
 from hydragnn.preprocess.load_data import SchemaPreparedDataset
 
 TRAIN_RESOLUTIONS = (6, 8, 10)
 HELDOUT_RESOLUTION = 14
 
 
-def _mesh(n, hierarchy):
-    if not hierarchy:
+GRAPH_MODES = {"MultiscaleMeshGraphNet": "hierarchy", "RIGNO": "rigno"}
+
+
+def _mesh(n, graph):
+    if graph != "hierarchy":
         return unit_square_mesh(n, n, dtype=torch.float32)
     # Build in float64 so the nested-volume check is exact, then cast.
     mesh = build_hierarchy(
@@ -55,10 +60,10 @@ def _mesh(n, hierarchy):
     return mesh
 
 
-def manufactured_sample(n, generator, max_mode=2, hierarchy=False):
+def manufactured_sample(n, generator, max_mode=2, graph=None):
     k, l = torch.randint(1, max_mode + 1, (2,), generator=generator).tolist()
     amplitude = float(torch.empty(1).uniform_(0.5, 1.5, generator=generator))
-    mesh = _mesh(n, hierarchy)
+    mesh = _mesh(n, graph)
     x, y = mesh.pos[:, 0], mesh.pos[:, 1]
     u = amplitude * torch.sin(k * math.pi * x) * torch.sin(l * math.pi * y)
     f = (k * k + l * l) * math.pi**2 * u
@@ -73,13 +78,15 @@ def manufactured_sample(n, generator, max_mode=2, hierarchy=False):
     q = -(grad * mesh.face_normal).sum(dim=1, keepdim=True) * mesh.face_area
     # A_f ~ 1/n, so q * n has the same magnitude across resolutions.
     mesh.q = q * n
+    if graph == "rigno":
+        mesh = build_rigno_graph(mesh, generator=generator)
     return mesh
 
 
-def make_dataset(num_samples, resolutions, seed, hierarchy=False):
+def make_dataset(num_samples, resolutions, seed, graph=None):
     g = torch.Generator().manual_seed(seed)
     return [
-        manufactured_sample(resolutions[i % len(resolutions)], g, hierarchy=hierarchy)
+        manufactured_sample(resolutions[i % len(resolutions)], g, graph=graph)
         for i in range(num_samples)
     ]
 
@@ -115,10 +122,8 @@ def main(num_samples=240, num_epoch=None, config_name="poisson_mgn.json"):
     log_name = os.path.splitext(config_name)[0]
     hydragnn.utils.print.print_utils.setup_log(log_name)
 
-    hierarchy = (
-        config["NeuralNetwork"]["Architecture"]["mpnn_type"] == "MultiscaleMeshGraphNet"
-    )
-    dataset = make_dataset(num_samples, TRAIN_RESOLUTIONS, seed=1, hierarchy=hierarchy)
+    graph = GRAPH_MODES.get(config["NeuralNetwork"]["Architecture"]["mpnn_type"])
+    dataset = make_dataset(num_samples, TRAIN_RESOLUTIONS, seed=1, graph=graph)
     # split_dataset shuffles with Python's random; every rank needs the same split.
     random.seed(0)
     train, val, test = hydragnn.preprocess.split_dataset(
@@ -181,7 +186,7 @@ def main(num_samples=240, num_epoch=None, config_name="poisson_mgn.json"):
     test_set = test_loader.dataset
     normalizer = test_set.normalizer
     heldout = SchemaPreparedDataset(
-        make_dataset(16, (HELDOUT_RESOLUTION,), seed=2, hierarchy=hierarchy),
+        make_dataset(16, (HELDOUT_RESOLUTION,), seed=2, graph=graph),
         schema,
         normalizer,
     )
