@@ -50,6 +50,19 @@ def _sample(seed, offset=0.0):
     )
 
 
+def test_standard_variance_is_numerically_stable():
+    schema = _schema(f_policy="standard")
+    data = []
+    for k in range(4):
+        sample = _sample(k)
+        sample.f = torch.tensor([[1e8 - 0.25], [1e8 + 0.25]] * 2, dtype=torch.float64)
+        sample.num_nodes = 4
+        data.append(sample)
+    stats = FieldNormalizer.fit(data, schema).stats["f"]
+    assert stats["shift"] == pytest.approx(1e8)
+    assert stats["scale"] == pytest.approx(0.25, rel=1e-9)
+
+
 def test_normalize_policy_validation():
     with pytest.raises(ValueError, match="normalize must be one of"):
         _schema(f_policy="log")

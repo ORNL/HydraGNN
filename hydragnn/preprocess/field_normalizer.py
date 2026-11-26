@@ -66,33 +66,37 @@ class FieldNormalizer:
         means the whole world when torch.distributed is initialized.
         """
         specs = cls.specs(schema)
-        acc = {
-            spec.name: [0, 0.0, 0.0, math.inf, -math.inf] for spec in specs
-        }  # count, sum, sum of squares, min, max
+        # count, mean, centered sum of squares (M2), sum of squares, min, max.
+        # Centered moments are merged with Chan's update to avoid the
+        # cancellation of E[x^2] - E[x]^2.
+        acc = {spec.name: _empty() for spec in specs}
         if specs:
             for data in dataset:
                 for spec in specs:
                     value = data[spec.name].detach().to(torch.float64)
                     if value.numel() == 0:
                         continue
-                    a = acc[spec.name]
-                    a[0] += value.numel()
-                    a[1] += float(value.sum())
-                    a[2] += float((value * value).sum())
-                    a[3] = min(a[3], float(value.min()))
-                    a[4] = max(a[4], float(value.max()))
+                    mean = float(value.mean())
+                    local = [
+                        value.numel(),
+                        mean,
+                        float(((value - mean) ** 2).sum()),
+                        float((value * value).sum()),
+                        float(value.min()),
+                        float(value.max()),
+                    ]
+                    acc[spec.name] = _merge(acc[spec.name], local)
         acc = _reduce(acc, group)
 
         stats = {}
         for spec in specs:
-            count, total, total_sq, vmin, vmax = acc[spec.name]
+            count, mean, m2, total_sq, vmin, vmax = acc[spec.name]
             if count == 0:
                 raise ValueError(f"No training values found for '{spec.name}'")
-            mean = total / count
             if spec.normalize == "minmax":
                 shift, scale = vmin, vmax - vmin
             elif spec.normalize == "standard":
-                shift, scale = mean, math.sqrt(max(total_sq / count - mean**2, 0.0))
+                shift, scale = mean, math.sqrt(max(m2 / count, 0.0))
             else:
                 shift, scale = 0.0, math.sqrt(total_sq / count)
             stats[spec.name] = {
@@ -123,6 +127,27 @@ class FieldNormalizer:
         return cls(state)
 
 
+def _empty():
+    return [0, 0.0, 0.0, 0.0, math.inf, -math.inf]
+
+
+def _merge(a, b):
+    if a[0] == 0:
+        return list(b)
+    if b[0] == 0:
+        return list(a)
+    count = a[0] + b[0]
+    delta = b[1] - a[1]
+    return [
+        count,
+        a[1] + delta * b[0] / count,
+        a[2] + b[2] + delta * delta * a[0] * b[0] / count,
+        a[3] + b[3],
+        min(a[4], b[4]),
+        max(a[5], b[5]),
+    ]
+
+
 def _reduce(acc, group):
     if group is None:
         if not dist.is_initialized():
@@ -133,13 +158,10 @@ def _reduce(acc, group):
     else:
         gathered = [None] * dist.get_world_size(group=group)
         dist.all_gather_object(gathered, acc, group=group)
-    return {
-        name: [
-            sum(g[name][0] for g in gathered),
-            sum(g[name][1] for g in gathered),
-            sum(g[name][2] for g in gathered),
-            min(g[name][3] for g in gathered),
-            max(g[name][4] for g in gathered),
-        ]
-        for name in acc
-    }
+    merged = {}
+    for name in acc:
+        total = _empty()
+        for g in gathered:
+            total = _merge(total, g[name])
+        merged[name] = total
+    return merged

@@ -74,6 +74,29 @@ def reject_normalized_derivative_outputs(config, schema):
         )
 
 
+def reject_shifted_conservative_faces(config, schema):
+    """Conservative MeshGraphNet face outputs must not be shifted.
+
+    Opposite normalized fluxes map back to physical values that sum to
+    ``2 * shift``, so ``minmax`` and ``standard`` break antisymmetry.
+    """
+    arch = config["NeuralNetwork"]["Architecture"]
+    if schema is None or arch.get("mpnn_type") != "MeshGraphNet":
+        return
+    if not arch.get("mgn_conservative_faces", True):
+        return
+    shifted = [
+        spec.name
+        for spec in schema.outputs
+        if spec.level == "face" and spec.normalize in {"minmax", "standard"}
+    ]
+    if shifted:
+        raise ValueError(
+            "Conservative MeshGraphNet face outputs require normalize 'none' "
+            f"or 'scale_only'; got {shifted}"
+        )
+
+
 def update_config(config, train_loader, val_loader, test_loader):
     # Imported lazily: hydragnn.models imports hydragnn.config.
     from hydragnn.models.utils.model import (
@@ -93,6 +116,7 @@ def update_config(config, train_loader, val_loader, test_loader):
 
     named_schema = get_variable_schema(config)
     reject_normalized_derivative_outputs(config, named_schema)
+    reject_shifted_conservative_faces(config, named_schema)
 
     # Always sync node_input_dims from heterogeneous data.
     arch_cfg = config["NeuralNetwork"].setdefault("Architecture", {})

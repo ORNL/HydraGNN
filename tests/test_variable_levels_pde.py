@@ -72,12 +72,43 @@ def test_spatial_dim_relaxes_position_dim(spatial_dim):
         )
 
 
-@pytest.mark.parametrize("value", [0, 4, True, "2"])
+@pytest.mark.parametrize("value", [0, 4, True, "2", 2.0])
 def test_invalid_spatial_dim(value):
     variables = _variables([])
     variables["spatial_dim"] = value
     with pytest.raises(ValueError, match="spatial_dim must be one of"):
         parse_variable_schema(variables)
+
+
+@pytest.mark.parametrize(
+    "policy, conservative, ok",
+    [
+        ("none", True, True),
+        ("scale_only", True, True),
+        ("minmax", True, False),
+        ("standard", True, False),
+        ("standard", False, True),
+    ],
+)
+def test_conservative_faces_reject_shifted_normalization(policy, conservative, ok):
+    from hydragnn.config.config_utils import reject_shifted_conservative_faces
+
+    schema = parse_variable_schema(
+        _variables([{"name": "q", "level": "face", "dim": 2, "normalize": policy}])
+    )
+    config = {
+        "NeuralNetwork": {
+            "Architecture": {
+                "mpnn_type": "MeshGraphNet",
+                "mgn_conservative_faces": conservative,
+            }
+        }
+    }
+    if ok:
+        reject_shifted_conservative_faces(config, schema)
+    else:
+        with pytest.raises(ValueError, match="'none' or 'scale_only'"):
+            reject_shifted_conservative_faces(config, schema)
 
 
 @pytest.mark.parametrize("level", ["face", "cell", "query"])

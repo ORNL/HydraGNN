@@ -176,13 +176,13 @@ class MeshGraphNet(OperatorBase):
 
     def _decode_face(self, decoder, dim, node, data):
         cell = self._cell_latent(node, data)
-        centroid = self._cell_latent(
-            data.pos[:, : self.spatial_dim].to(node.dtype), data
-        )
+        # Centroids and distances stay in coordinate precision so that
+        # low-precision latents cannot collapse nearby geometry.
+        centroid = self._cell_latent(data.pos[:, : self.spatial_dim], data)
         o, n = data.face_index
         normal = data.face_normal[:, : self.spatial_dim].to(node.dtype)
         area = data.face_area.to(node.dtype)
-        dist = (centroid[n] - centroid[o]).norm(dim=-1, keepdim=True)
+        dist = (centroid[n] - centroid[o]).norm(dim=-1, keepdim=True).to(node.dtype)
         out = decoder(torch.cat([cell[o], cell[n], normal, area, dist], dim=-1))
         if not self.conservative_faces:
             return out

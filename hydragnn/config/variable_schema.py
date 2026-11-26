@@ -252,7 +252,11 @@ def parse_variable_schema(raw_variables: dict) -> VariableSchema:
     if extra:
         raise ValueError("Variables has unknown keys: " + ", ".join(sorted(extra)))
     spatial_dim = raw_variables.get("spatial_dim", 3)
-    if isinstance(spatial_dim, bool) or spatial_dim not in _SPATIAL_DIMS:
+    if (
+        isinstance(spatial_dim, bool)
+        or not isinstance(spatial_dim, int)
+        or spatial_dim not in _SPATIAL_DIMS
+    ):
         raise ValueError(
             f"Variables.spatial_dim must be one of {sorted(_SPATIAL_DIMS)}"
         )

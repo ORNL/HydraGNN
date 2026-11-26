@@ -44,7 +44,9 @@ def supervised_loss_report(model, pred, value, head_index, head_losses, var=None
         if len(names) <= 1 or head_pred.ndim == 1 or head_pred.shape[-1] != len(names):
             continue
         for component_index, name in enumerate(names):
-            if var is None:
+            if head_pred.numel() == 0:
+                raw = head_pred.sum() * 0.0
+            elif var is None:
                 raw = model.loss_function(
                     head_pred[..., component_index], head_target[..., component_index]
                 )

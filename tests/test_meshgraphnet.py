@@ -4,7 +4,7 @@ import pytest
 import torch
 from torch_geometric.data import Batch
 
-from hydragnn.data.meshes import locate_queries, unit_square_mesh
+from hydragnn.data.meshes import from_triangles, locate_queries, unit_square_mesh
 from hydragnn.models.create import create_model
 from hydragnn.models.registry import Capabilities, get_capabilities
 
@@ -224,6 +224,55 @@ def test_query_head_rejects_non_triangle_cells():
     mesh.cell_size = torch.full((9,), 4, dtype=torch.long)
     with pytest.raises(ValueError, match="triangle meshes only"):
         model._query_latent(torch.zeros(mesh.num_nodes, 16), mesh)
+
+
+def test_face_head_distance_uses_coordinate_precision():
+    model = _mesh_model()
+    mesh = unit_square_mesh(2, 1, dtype=torch.float64)
+    # Shift far from the origin: BF16 cannot resolve the centroid spacing.
+    mesh.pos = mesh.pos * 1e-2 + 256.0
+    mesh.x = torch.randn(mesh.num_nodes, 3, dtype=torch.float64)
+    captured = []
+    first = model.decoders[1][0]
+    hook = first.register_forward_hook(lambda m, i, o: captured.append(i[0]))
+    node = torch.randn(mesh.num_nodes, 16, dtype=torch.bfloat16)
+    model.decoders.to(torch.bfloat16)
+    with torch.no_grad():
+        model._decode_face(model.decoders[1], 2, node, mesh)
+    hook.remove()
+    dist = captured[0][:, -1].double()
+    assert (dist > 0).all()
+
+
+def test_empty_face_head_gives_finite_loss():
+    model = create_model(
+        **_args(
+            output_dim=[1, 1],
+            output_type=["node", "face"],
+            mgn_conservative_faces=True,
+        )
+    )
+    # One triangle per sample: no interior faces anywhere in the batch.
+    pos = torch.tensor([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+    meshes = []
+    for _ in range(2):
+        tri = from_triangles(pos, torch.tensor([[0, 1, 2]]))
+        tri.x = torch.randn(3, 3)
+        meshes.append(tri)
+    batch = Batch.from_data_list(meshes)
+    assert batch.face_index.shape[1] == 0
+    node, face = model(batch)
+    assert face.shape == (0, 1)
+    y = torch.randn(batch.num_nodes, 1)
+    head_index = [torch.arange(batch.num_nodes), torch.arange(0)]
+    model.loss_component_names = [["u"], ["q"]]
+    total, per_head = model.loss([node, face], y, head_index)
+    assert torch.isfinite(total) and per_head[1].item() == 0.0
+    assert all(torch.isfinite(v["raw"]) for v in model.last_loss_components.values())
+    total.backward()
+    assert all(
+        torch.isfinite(p.grad).all() for p in model.parameters() if p.grad is not None
+    )
 
 
 def test_query_head_requires_2d():
