@@ -276,7 +276,8 @@ def validate_mesh(data, atol=1e-10):
 
     Raises ``ValueError`` on the first violation and returns ``data``.
     Closure (sum of outward ``normal * area`` over each cell is zero) detects
-    flipped interior normals and missing faces.
+    missing faces and partially flipped normals; the direction of each normal
+    is checked against centroid displacements, which assumes convex cells.
     """
 
     def fail(msg):
@@ -291,9 +292,13 @@ def validate_mesh(data, atol=1e-10):
             0 <= int(data.cell_conn.min()) and int(data.cell_conn.max()) < n
         ):
             fail("cell_conn index out of range")
-    for name in ("cell_volume", "cell_centroid", "material_id"):
-        if name in data and data[name].shape[0] != c:
-            fail(f"{name} has {data[name].shape[0]} rows, expected {c}")
+    for name, shape in (
+        ("cell_volume", (c, 1)),
+        ("cell_centroid", (c, d)),
+        ("material_id", (c,)),
+    ):
+        if name in data and tuple(data[name].shape) != shape:
+            fail(f"{name} has shape {tuple(data[name].shape)}, expected {shape}")
     if "cell_volume" in data and not bool((data.cell_volume > 0).all()):
         fail("non-positive cell_volume")
     if "material_id" in data and (
@@ -301,10 +306,15 @@ def validate_mesh(data, atol=1e-10):
     ):
         fail("material_id must be a 1D long tensor")
 
-    for prefix, index in (("face", "face_index"), ("bface", "bface_owner")):
+    for prefix, index, lead in (
+        ("face", "face_index", (2,)),
+        ("bface", "bface_owner", ()),
+    ):
         if index not in data:
             continue
         idx = data[index]
+        if idx.dtype != torch.long or tuple(idx.shape[:-1]) != lead or idx.dim() == 0:
+            fail(f"{index} must be a long tensor of shape {lead + ('n',)}")
         rows = idx.shape[-1]
         if idx.numel() and not (0 <= int(idx.min()) and int(idx.max()) < c):
             fail(f"{index} cell id out of range")
@@ -328,6 +338,16 @@ def validate_mesh(data, atol=1e-10):
         fail("face_index connects a cell to itself")
     if "bface_tag" in data and data.bface_tag.shape != data.bface_owner.shape:
         fail("bface_tag must have one entry per boundary face")
+    if "query_cell" in data or "query_pos" in data:
+        qc, qp = data.get("query_cell"), data.get("query_pos")
+        if qc is None or qp is None:
+            fail("query_pos and query_cell must be given together")
+        if qc.dtype != torch.long or qc.dim() != 1:
+            fail("query_cell must be a 1D long tensor")
+        if tuple(qp.shape) != (qc.numel(), d):
+            fail(f"query_pos must have shape {(qc.numel(), d)}")
+        if qc.numel() and not (0 <= int(qc.min()) and int(qc.max()) < c):
+            fail("query_cell cell id out of range")
 
     if "face_index" in data and "bface_owner" in data:
         dtype = data.face_normal.dtype
@@ -341,6 +361,19 @@ def validate_mesh(data, atol=1e-10):
             float(areas.max()), 1.0
         ):
             fail("cells are not closed (check normal orientation)")
+
+    if "cell_centroid" in data:
+        cen = data.cell_centroid
+        if "face_index" in data:
+            o, nb = data.face_index
+            dots = ((cen[nb] - cen[o]) * data.face_normal).sum(dim=1)
+            if not bool((dots > 0).all()):
+                fail("face_normal does not point from owner to neighbour")
+        if "bface_nodes" in data and data.bface_owner.numel():
+            mid = data.pos[data.bface_nodes].mean(dim=0)
+            dots = ((mid - cen[data.bface_owner]) * data.bface_normal).sum(dim=1)
+            if not bool((dots > 0).all()):
+                fail("bface_normal does not point out of the owner cell")
 
     for name in _GRAPH_SCALARS:
         if name in data and tuple(data[name].shape) != (1, 1):

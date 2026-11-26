@@ -59,11 +59,13 @@ class MeshHierarchy(MeshData):
         return super().__cat_dim__(key, value, *args, **kwargs)
 
 
-def build_hierarchy(fine, coarse, fine_to_coarse=None):
-    """Combine two :class:`MeshData` levels into one :class:`MeshHierarchy`.
+def build_hierarchy(fine, coarse, fine_to_coarse=None, volume_rtol=1e-8):
+    """Combine two nested :class:`MeshData` levels into one :class:`MeshHierarchy`.
 
     ``fine_to_coarse`` defaults to the coarse cell containing each fine
-    centroid (triangle meshes only, via :func:`locate_queries`).
+    centroid (triangle meshes only, via :func:`locate_queries`). The fine
+    volumes mapped to each coarse cell must sum to its volume (within
+    ``volume_rtol``), so :func:`restrict` preserves integrals.
     """
     if fine_to_coarse is None:
         probe = MeshData(
@@ -79,6 +81,15 @@ def build_hierarchy(fine, coarse, fine_to_coarse=None):
         raise ValueError("fine_to_coarse coarse cell id out of range")
     if torch.unique(fine_to_coarse).numel() != coarse.num_cells:
         raise ValueError("every coarse cell must contain at least one fine cell")
+    # restrict() preserves integrals only if the fine cells tile each coarse cell.
+    child = torch.zeros_like(coarse.cell_volume).index_add_(
+        0, fine_to_coarse, fine.cell_volume.to(coarse.cell_volume.dtype)
+    )
+    if not torch.allclose(child, coarse.cell_volume, rtol=volume_rtol, atol=0):
+        raise ValueError(
+            "fine cell volumes do not sum to their coarse cell volume; "
+            "non-nested meshes are not supported"
+        )
 
     data = MeshHierarchy()
     for key, value in fine.items():

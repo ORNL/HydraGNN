@@ -96,6 +96,36 @@ def test_tet_batching_offsets():
         (lambda m: setattr(m, "dt", torch.zeros(1, 1)), "dt"),
         (lambda m: setattr(m, "time", torch.zeros(2)), "time"),
         (lambda m: m.cell_conn.__setitem__(0, -1), "cell_conn"),
+        (lambda m: setattr(m, "cell_volume", m.cell_volume[:, 0]), "cell_volume"),
+        (lambda m: setattr(m, "cell_centroid", m.cell_centroid[:, :1]), "centroid"),
+        (
+            lambda m: setattr(
+                m, "face_index", torch.cat([m.face_index, m.face_index[:1]])
+            ),
+            "face_index",
+        ),
+        (lambda m: setattr(m, "bface_owner", m.bface_owner[None]), "bface_owner"),
+        (lambda m: setattr(m, "face_index", m.face_index.int()), "face_index"),
+        (
+            lambda m: (m.face_normal.neg_(), m.bface_normal.neg_()),
+            "owner to neighbour",
+        ),
+        (lambda m: m.bface_normal.neg_(), "not closed"),
+        (
+            lambda m: (
+                setattr(m, "query_pos", torch.zeros(2, 2, dtype=m.pos.dtype)),
+                setattr(m, "query_cell", torch.tensor([0, -1])),
+            ),
+            "query_cell",
+        ),
+        (
+            lambda m: (
+                setattr(m, "query_pos", torch.zeros(3, 2, dtype=m.pos.dtype)),
+                setattr(m, "query_cell", torch.tensor([0, 1])),
+            ),
+            "query_pos",
+        ),
+        (lambda m: setattr(m, "query_cell", torch.tensor([0])), "together"),
     ],
 )
 def test_validate_mesh_rejects(corrupt, match):
@@ -104,6 +134,28 @@ def test_validate_mesh_rejects(corrupt, match):
     corrupt(mesh)
     with pytest.raises(ValueError, match=match):
         validate_mesh(mesh)
+
+
+def test_validate_mesh_rejects_inward_3d_boundary_normals():
+    mesh = unit_cube_mesh(1, 1, 1)
+    mesh.face_normal.neg_()
+    mesh.bface_normal.neg_()
+    with pytest.raises(ValueError, match="owner to neighbour"):
+        validate_mesh(mesh)
+    mesh = from_tetrahedra(
+        torch.tensor([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]).double(),
+        [[0, 1, 2, 3]],
+    )
+    mesh.bface_normal.neg_()
+    with pytest.raises(ValueError, match="out of the owner"):
+        validate_mesh(mesh)
+
+
+def test_validate_mesh_accepts_located_queries():
+    from hydragnn.data.meshes.mesh_data import locate_queries
+
+    mesh = locate_queries(unit_square_mesh(2, 2), [[0.1, 0.2], [0.9, 0.6]])
+    validate_mesh(mesh)
 
 
 def test_metadata_batches_per_graph():
@@ -159,6 +211,20 @@ def test_trajectory_rejects():
         Trajectory(mesh, [0.0, 0.5, 1.0], {"pos": u})
     with pytest.raises(ValueError, match="horizon"):
         Trajectory(mesh, [0.0, 0.5, 1.0], {"u": u}).pairs(horizon=0)
+    times = [0.0, 0.5, 1.0]
+    for static in ({"u": u[0]}, {"pos": u[0]}, {"dt": u[0]}):
+        with pytest.raises(ValueError, match="static name"):
+            Trajectory(mesh, times, {"u": u}, static=static)
+    with pytest.raises(ValueError, match="target names"):
+        Trajectory(mesh, times, {"u": u, "u_next": u})
+    with pytest.raises(ValueError, match="target names"):
+        Trajectory(mesh, times, {"u": u}, static={"u_next": u[0]})
+    traj = Trajectory(mesh, times, {"u": u})
+    with pytest.raises(ValueError, match="non-empty"):
+        traj.pairs(target_suffix="")
+    with pytest.raises(ValueError, match="target names"):
+        Trajectory(mesh, times, {"p": u}).pairs(target_suffix="os")  # -> "pos"
+    assert "u_tgt" in traj.pairs(target_suffix="_tgt")[0]
 
 
 # -- MeshHierarchy ------------------------------------------------------------
@@ -215,6 +281,11 @@ def test_hierarchy_rejects():
         build_hierarchy(fine, coarse, torch.zeros(3, dtype=torch.long))
     with pytest.raises(ValueError, match="at least one"):
         build_hierarchy(fine, coarse, torch.zeros(fine.num_cells, dtype=torch.long))
+    # Covers both coarse cells, but child volumes do not tile them.
+    bad = torch.zeros(fine.num_cells, dtype=torch.long)
+    bad[0] = 1
+    with pytest.raises(ValueError, match="non-nested"):
+        build_hierarchy(fine, coarse, bad)
 
 
 # -- units in the variable schema --------------------------------------------

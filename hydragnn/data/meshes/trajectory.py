@@ -23,7 +23,7 @@ class Trajectory:
     to every sample unchanged.
     """
 
-    def __init__(self, mesh, times, fields, static=None):
+    def __init__(self, mesh, times, fields, static=None, target_suffix="_next"):
         times = torch.as_tensor(times, dtype=torch.float64)
         if times.dim() != 1 or times.numel() < 2:
             raise ValueError("times must be a 1D tensor with at least 2 entries")
@@ -39,10 +39,28 @@ class Trajectory:
                     f"field {name!r} must have shape [T={times.numel()}, rows, dim]; "
                     f"got {tuple(value.shape)}"
                 )
+        static = dict(static or {})
+        for name in static:
+            if name in _RESERVED or name in mesh or name in fields:
+                raise ValueError(
+                    f"static name {name!r} clashes with a field or mesh/time key"
+                )
         self.mesh = mesh
         self.times = times
         self.fields = dict(fields)
-        self.static = dict(static or {})
+        self.static = static
+        self.target_suffix = target_suffix
+        self._target_names(target_suffix)
+
+    def _target_names(self, suffix):
+        if not isinstance(suffix, str) or not suffix:
+            raise ValueError("target_suffix must be a non-empty string")
+        taken = set(self.fields) | set(self.static) | _RESERVED | set(self.mesh.keys())
+        targets = [name + suffix for name in self.fields]
+        clash = sorted(set(targets) & taken)
+        if clash:
+            raise ValueError(f"target names {clash} clash with existing keys")
+        return targets
 
     def __len__(self):
         return self.times.numel()
@@ -57,19 +75,22 @@ class Trajectory:
         data.time = self.times[t].view(1, 1)
         return data
 
-    def pairs(self, horizon=1, stride=1, target_suffix="_next"):
+    def pairs(self, horizon=1, stride=1, target_suffix=None):
         """One sample per step ``t``: fields at ``t``, targets at ``t + horizon``.
 
-        Targets are stored as ``<name><target_suffix>``; ``time`` is the input
-        time and ``dt = times[t + horizon] - times[t]``.
+        Targets are stored as ``<name><target_suffix>`` (default: the suffix
+        given at construction); ``time`` is the input time and
+        ``dt = times[t + horizon] - times[t]``.
         """
         if horizon < 1 or stride < 1:
             raise ValueError("horizon and stride must be positive")
+        suffix = self.target_suffix if target_suffix is None else target_suffix
+        targets = self._target_names(suffix)
         samples = []
         for t in range(0, len(self) - horizon, stride):
             data = self.snapshot(t)
-            for name, value in self.fields.items():
-                data[name + target_suffix] = value[t + horizon]
+            for target, value in zip(targets, self.fields.values()):
+                data[target] = value[t + horizon]
             data.dt = (self.times[t + horizon] - self.times[t]).view(1, 1)
             samples.append(data)
         return samples
