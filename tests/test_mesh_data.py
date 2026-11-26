@@ -118,13 +118,32 @@ def test_clockwise_input_is_reoriented():
 
 
 def test_rejects_degenerate_and_non_manifold():
-    from hydragnn.data.meshes import from_triangles
+    from hydragnn.data.meshes import from_tetrahedra, from_triangles
 
     pos = torch.tensor(
         [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [0.0, 1.0], [0.0, -1.0], [1.0, 1.0]]
     )
     with pytest.raises(ValueError, match="degenerate"):
         from_triangles(pos, torch.tensor([[0, 1, 2]]))
+    # Nonzero but round-off-level signed areas/volumes are rejected too ...
+    sliver = torch.tensor([[0.0, 0.0], [1.0, 0.0], [0.5, 1e-15]], dtype=torch.float64)
+    with pytest.raises(ValueError, match="degenerate"):
+        from_triangles(sliver, torch.tensor([[0, 1, 2]]))
+    flat = torch.tensor(
+        [[0.0, 0, 0], [1, 0, 0], [0, 1, 0], [0.3, 0.3, 1e-15]], dtype=torch.float64
+    )
+    with pytest.raises(ValueError, match="degenerate"):
+        from_tetrahedra(flat, torch.tensor([[0, 1, 2, 3]]))
+    # ... while the tolerance is relative, so tiny but well-shaped cells pass.
+    tiny = from_triangles(
+        1e-6 * sliver.new_tensor([[0, 0], [1, 0], [0, 1]]), torch.tensor([[0, 1, 2]])
+    )
+    assert tiny.cell_volume.item() == pytest.approx(0.5e-12)
+    tiny = from_tetrahedra(
+        1e-6 * flat.new_tensor([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]),
+        torch.tensor([[0, 1, 2, 3]]),
+    )
+    assert tiny.cell_volume.item() == pytest.approx(1e-18 / 6)
     with pytest.raises(ValueError, match="non-manifold"):
         from_triangles(pos, torch.tensor([[0, 1, 3], [0, 1, 4], [0, 1, 5]]))
 

@@ -129,8 +129,10 @@ def _parse_group(
         raw_components = raw.get("components")
         normalize = raw.get("normalize", "none")
         units = raw.get("units")
-        if units is not None and (not isinstance(units, str) or not units.strip()):
-            raise ValueError(f"{path}.units must be a non-empty string")
+        if units is not None:
+            if not isinstance(units, str) or not units.strip():
+                raise ValueError(f"{path}.units must be a non-empty string")
+            units = units.strip()
         if not isinstance(name, str) or not name.strip():
             raise ValueError(f"{path}.name must be a non-empty string")
         if level not in _LEVELS:

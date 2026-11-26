@@ -18,7 +18,8 @@ Entity tensors (all optional except ``pos``):
 * interior faces, stored once and oriented ``face_index[0] -> face_index[1]``
   (cell ids): ``face_index [2, F]``, ``face_normal [F, d]`` (unit, pointing
   from owner to neighbour), ``face_area [F, 1]``, ``face_nodes [k, F]``
-  (node ids of each face; k = 2 for triangles, 3 for tetrahedra)
+  (node ids of each face; k = 2 for 2D meshes with edge faces, k = 3 for
+  3D tetrahedral meshes with triangular faces)
 * boundary faces: ``bface_owner [Fb]`` (cell id), ``bface_normal [Fb, d]``
   (outward unit), ``bface_area [Fb, 1]``, ``bface_tag [Fb]``,
   ``bface_nodes [k, Fb]``
@@ -116,12 +117,20 @@ def cell_of_conn(data):
     return cells.repeat_interleave(data.cell_size)
 
 
-def from_triangles(pos, triangles, **fields):
+def _reject_degenerate(signed, corners, kind, rtol):
+    # Measure relative to (longest edge)^dim, so the check is scale invariant.
+    span = (corners[:, :, None] - corners[:, None, :]).norm(dim=-1).amax(dim=(1, 2))
+    if bool((signed.abs() <= rtol * span ** corners.shape[-1]).any()):
+        raise ValueError(f"degenerate {kind}")
+
+
+def from_triangles(pos, triangles, degenerate_rtol=1e-12, **fields):
     """Build a :class:`MeshData` from a 2D triangulation.
 
     ``pos`` is ``[N, 2]`` float, ``triangles`` is ``[C, 3]`` long. Extra
     keyword tensors (e.g. ``x``, ``y``) are attached unchanged. Boundary
-    faces get tag 0; callers may overwrite ``bface_tag``.
+    faces get tag 0; callers may overwrite ``bface_tag``. Triangles with
+    ``|area| <= degenerate_rtol * longest_edge**2`` are rejected.
     """
     pos = torch.as_tensor(pos)
     tri = torch.as_tensor(triangles, dtype=torch.long)
@@ -136,15 +145,14 @@ def from_triangles(pos, triangles, **fields):
     # Counter-clockwise orientation gives positive signed area.
     a, b, c = pos[tri[:, 0]], pos[tri[:, 1]], pos[tri[:, 2]]
     signed = 0.5 * ((b - a)[:, 0] * (c - a)[:, 1] - (b - a)[:, 1] * (c - a)[:, 0])
-    if (signed == 0).any():
-        raise ValueError("degenerate triangle with zero area")
+    _reject_degenerate(signed, pos[tri], "triangle with zero area", degenerate_rtol)
     flip = signed < 0
     tri = tri.clone()
     tri[flip] = tri[flip][:, [0, 2, 1]]
     area = signed.abs()
 
     # Each triangle contributes edges (v0,v1), (v1,v2), (v2,v0).
-    half = tri[:, torch.tensor([[0, 1], [1, 2], [2, 0]])].reshape(-1, 2)
+    half = tri[:, [[0, 1], [1, 2], [2, 0]]].reshape(-1, 2)
     # Outward normal for a CCW half-edge (p -> q) is (dy, -dx) / length.
     d = pos[half[:, 1]] - pos[half[:, 0]]
     length = d.norm(dim=1, keepdim=True)
@@ -153,15 +161,17 @@ def from_triangles(pos, triangles, **fields):
 
 
 # Outward-oriented faces of a positively oriented tetrahedron (v0, v1, v2, v3).
-_TET_FACES = torch.tensor([[1, 2, 3], [0, 3, 2], [0, 1, 3], [0, 2, 1]])
-_TET_EDGES = torch.tensor([[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]])
+_TET_FACES = [[1, 2, 3], [0, 3, 2], [0, 1, 3], [0, 2, 1]]
+_TET_EDGES = [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]]
 
 
-def from_tetrahedra(pos, tetrahedra, **fields):
+def from_tetrahedra(pos, tetrahedra, degenerate_rtol=1e-12, **fields):
     """Build a :class:`MeshData` from a 3D tetrahedral mesh.
 
     ``pos`` is ``[N, 3]`` float, ``tetrahedra`` is ``[C, 4]`` long; cells are
     reordered to positive volume. Faces are triangles (``face_nodes [3, F]``).
+    Tetrahedra with ``|volume| <= degenerate_rtol * longest_edge**3`` are
+    rejected.
     """
     pos = torch.as_tensor(pos)
     tet = torch.as_tensor(tetrahedra, dtype=torch.long)
@@ -174,8 +184,9 @@ def from_tetrahedra(pos, tetrahedra, **fields):
 
     a, b, c, e = (pos[tet[:, k]] for k in range(4))
     signed = torch.linalg.det(torch.stack([b - a, c - a, e - a], dim=1)) / 6.0
-    if (signed == 0).any():
-        raise ValueError("degenerate tetrahedron with zero volume")
+    _reject_degenerate(
+        signed, pos[tet], "tetrahedron with zero volume", degenerate_rtol
+    )
     flip = signed < 0
     tet = tet.clone()
     tet[flip] = tet[flip][:, [0, 2, 1, 3]]
@@ -197,7 +208,10 @@ def _assemble(pos, cells, volume, faces, normal, area, edges, fields):
     ``normal`` and ``area``; ``edges [*, 2]`` gives the node message graph.
     """
     num_cells, per_cell = cells.shape
-    owner = torch.arange(num_cells).repeat_interleave(faces.shape[0] // num_cells)
+    device = cells.device
+    owner = torch.arange(num_cells, device=device).repeat_interleave(
+        faces.shape[0] // num_cells
+    )
     key = torch.sort(faces, dim=1).values
     _, inverse, counts = torch.unique(
         key, dim=0, return_inverse=True, return_counts=True
@@ -220,7 +234,7 @@ def _assemble(pos, cells, volume, faces, normal, area, edges, fields):
         pos=pos,
         edge_index=torch.cat([node_edges, node_edges.flip(0)], dim=1),
         cell_conn=cells.reshape(-1),
-        cell_size=torch.full((num_cells,), per_cell, dtype=torch.long),
+        cell_size=torch.full((num_cells,), per_cell, dtype=torch.long, device=device),
         cell_volume=volume.unsqueeze(1),
         cell_centroid=pos[cells].mean(dim=1),
         face_index=torch.stack([owner[owner_half], owner[neigh_half]]),
@@ -230,11 +244,11 @@ def _assemble(pos, cells, volume, faces, normal, area, edges, fields):
         bface_owner=owner[boundary_half],
         bface_normal=normal[boundary_half],
         bface_area=area[boundary_half],
-        bface_tag=torch.zeros(boundary_half.numel(), dtype=torch.long),
+        bface_tag=torch.zeros(boundary_half.numel(), dtype=torch.long, device=device),
         bface_nodes=faces[boundary_half].t().contiguous(),
         **fields,
     )
-    mask = torch.zeros(pos.shape[0], dtype=torch.bool)
+    mask = torch.zeros(pos.shape[0], dtype=torch.bool, device=device)
     mask[faces[boundary_half].reshape(-1)] = True
     data.boundary_node_mask = mask
     return data
@@ -319,6 +333,8 @@ def validate_mesh(data, atol=1e-10):
         if idx.numel() and not (0 <= int(idx.min()) and int(idx.max()) < c):
             fail(f"{index} cell id out of range")
         for suffix, cols in (("normal", d), ("area", 1)):
+            if f"{prefix}_{suffix}" not in data:
+                fail(f"{index} is given without {prefix}_{suffix}")
             value = data[f"{prefix}_{suffix}"]
             if tuple(value.shape) != (rows, cols):
                 fail(f"{prefix}_{suffix} must have shape {(rows, cols)}")

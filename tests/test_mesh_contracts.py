@@ -126,6 +126,8 @@ def test_tet_batching_offsets():
             "query_pos",
         ),
         (lambda m: setattr(m, "query_cell", torch.tensor([0])), "together"),
+        (lambda m: delattr(m, "face_normal"), "without face_normal"),
+        (lambda m: delattr(m, "bface_area"), "without bface_area"),
         (lambda m: setattr(m, "bface_nodes", m.bface_nodes.float()), "bface_nodes"),
         (lambda m: setattr(m, "bface_nodes", m.bface_nodes[0]), "bface_nodes"),
         (lambda m: setattr(m, "face_nodes", m.face_nodes.float()), "face_nodes"),
@@ -302,6 +304,8 @@ def test_variable_units():
     schema = parse_variable_schema(raw)
     assert schema.inputs[0].units == "1/s"
     assert schema.outputs[0].units is None
+    raw["inputs"][0]["units"] = " m/s "
+    assert parse_variable_schema(raw).inputs[0].units == "m/s"
     raw["inputs"][0]["units"] = ""
     with pytest.raises(ValueError, match="units"):
         parse_variable_schema(raw)
