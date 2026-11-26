@@ -42,7 +42,7 @@ DTYPE_MAP = {
 
 
 # Data subclasses whose name is stored so readers rebuild them (custom __inc__).
-DATA_CLASSES = frozenset({"MeshData"})
+DATA_CLASSES = frozenset({"MeshData", "MeshHierarchy"})
 
 
 def data_class(name):
@@ -51,10 +51,10 @@ def data_class(name):
 
     if name is None:
         return torch_geometric.data.Data
-    if name == "MeshData":
-        from hydragnn.data.meshes import MeshData
+    if name in DATA_CLASSES:
+        import hydragnn.data.meshes
 
-        return MeshData
+        return getattr(hydragnn.data.meshes, name)
     raise ValueError(f"Unknown data class {name!r} in ADIOS file")
 
 

@@ -73,6 +73,8 @@ class VariableSpec:
     components: tuple[str, ...] = ()
     # Policy applied by hydragnn.preprocess.FieldNormalizer.
     normalize: str = "none"
+    # Free-form physical units (e.g. "m/s"); recorded, not converted.
+    units: str | None = None
 
 
 @dataclass(frozen=True)
@@ -108,6 +110,7 @@ def _parse_group(
             "node_type",
             "components",
             "normalize",
+            "units",
         }
         missing = {"name", "level", "dim"} - set(raw)
         if missing:
@@ -123,6 +126,9 @@ def _parse_group(
         node_type = raw.get("node_type")
         raw_components = raw.get("components")
         normalize = raw.get("normalize", "none")
+        units = raw.get("units")
+        if units is not None and (not isinstance(units, str) or not units.strip()):
+            raise ValueError(f"{path}.units must be a non-empty string")
         if not isinstance(name, str) or not name.strip():
             raise ValueError(f"{path}.name must be a non-empty string")
         if level not in _LEVELS:
@@ -232,6 +238,7 @@ def _parse_group(
                 node_type=node_type,
                 components=components,
                 normalize=normalize,
+                units=units,
             )
         )
     return tuple(parsed)
