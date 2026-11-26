@@ -52,6 +52,38 @@ def test_fv_transport_train(tmp_path, monkeypatch, config_name):
         }
 
 
+def test_fv_transport_fp32_evaluation(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    module = _module()
+    with open(os.path.join(HERE, "fv_transport_fluxgnn.json")) as f:
+        config = json.load(f)
+    config["NeuralNetwork"]["Training"]["precision"] = "fp32"
+    path = tmp_path / "fv_transport_fp32.json"
+    path.write_text(json.dumps(config))
+    results = module.main(num_samples=36, num_epoch=1, config_name=str(path))
+    for value in [results["test_rel_l2"], *results["rollout_rel_l2"]]:
+        assert 0.0 <= value < 10.0
+    assert results["max_rel_balance_residual"] < 1e-4
+
+
+def test_balance_maxima_treat_nan_as_failure():
+    import math
+
+    import torch
+
+    assert _module().finite_or_inf(math.nan) == math.inf
+    spec = importlib.util.spec_from_file_location(
+        "verify_fluxgnn", os.path.join(HERE, "verify_fluxgnn.py")
+    )
+    verify = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(verify)
+    mesh = verify.make_mesh(4, 0)
+    mesh.cell_x[0, 0] = math.nan
+    model = verify.make_model("learned", True, 0)
+    with torch.no_grad():
+        assert verify.worst_balance(model, mesh) == math.inf
+
+
 def _update_config_error(module, mutate, match):
     config, loaders = _config_and_loaders(module, mutate)
     hydragnn.distributed.setup_ddp()

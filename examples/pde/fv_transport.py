@@ -144,12 +144,27 @@ def relative_l2(pred, true):
     return math.sqrt(float(((pred - true) ** 2).sum()) / float((true**2).sum()))
 
 
+def finite_or_inf(value):
+    return value if math.isfinite(value) else math.inf
+
+
+def to_model(data, device, dtype):
+    """Move to ``device`` and cast floating tensors to the model dtype."""
+    data = data.to(device)
+    for store in data.stores:
+        for key, value in store.items():
+            if torch.is_tensor(value) and value.is_floating_point():
+                store[key] = value.to(dtype)
+    return data
+
+
 def evaluate(model, schema, test_set, device, dual=False):
     model.eval()
+    dtype = next(model.parameters()).dtype
     num = den = 0.0
     with torch.no_grad():
         for data in DataLoader(test_set, batch_size=16):
-            data = data.to(device)
+            data = to_model(data, device, dtype)
             pred = model(data)[0]
             num += float(((pred - data.u_next) ** 2).sum())
             den += float((data.u_next**2).sum())
@@ -161,10 +176,11 @@ def evaluate(model, schema, test_set, device, dual=False):
     normalizer = getattr(test_set, "normalizer", None)
     if dual:
         first = SchemaPreparedDataset([to_dual(traj[0])], schema, normalizer)[0]
-        first = first.to(device)
+        first = to_model(first, device, dtype)
         states = rollout(model, first, ROLLOUT_STEPS, [0], level="node")
     else:
-        first = SchemaPreparedDataset(traj[:1], schema, normalizer)[0].to(device)
+        first = SchemaPreparedDataset(traj[:1], schema, normalizer)[0]
+        first = to_model(first, device, dtype)
         states = rollout(model, first, ROLLOUT_STEPS, model.state_cols, level="cell")
     errors = [
         relative_l2(state, step.u_next.to(device)) for state, step in zip(states, traj)
@@ -191,7 +207,8 @@ def evaluate(model, schema, test_set, device, dual=False):
             residual, scale = balance_residual(
                 data, u_old, terms["u_new"], terms["bface_flux"], terms["source"], DT
             )
-            balance = max(balance, float((residual.abs() / scale).max()))
+            worst = float((residual.abs() / scale).max())
+            balance = max(balance, finite_or_inf(worst))
             x = data.cell_x.clone()
             x[:, model.state_cols] = state
             data.cell_x = x
@@ -213,7 +230,7 @@ def main(num_samples=360, num_epoch=None, config_name="fv_transport_fluxgnn.json
     verbosity = config["Verbosity"]["level"]
 
     hydragnn.distributed.setup_ddp()
-    log_name = os.path.splitext(config_name)[0]
+    log_name = os.path.splitext(os.path.basename(config_name))[0]
     hydragnn.utils.print.print_utils.setup_log(log_name)
 
     dual = config["NeuralNetwork"]["Architecture"]["mpnn_type"] != "FluxGNN"

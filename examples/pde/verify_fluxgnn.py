@@ -111,7 +111,9 @@ def worst_balance(model, data):
         terms["source"],
         model.dt,
     )
-    return float((residual.abs() / scale).max())
+    worst = float((residual.abs() / scale).max())
+    # max(previous, nan) would keep previous and hide an unstable rollout.
+    return worst if math.isfinite(worst) else math.inf
 
 
 @torch.no_grad()
