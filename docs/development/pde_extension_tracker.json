@@ -132,8 +132,8 @@
       "dependencies": [
         "WP02"
       ],
-      "status": "implemented",
-      "pr": null,
+      "status": "in_review",
+      "pr": 584,
       "commit": null,
       "design_doc": "docs/development/pde_wp04_design.md",
       "source_files": [
