@@ -46,6 +46,20 @@ def test_face_normals_point_owner_to_neighbour():
     assert (((out - mid) * mesh.bface_normal).sum(dim=1) > 0).all()
 
 
+def test_face_nodes_match_face_geometry():
+    mesh = unit_square_mesh(3, 2)
+    for nodes, normal, area in (
+        (mesh.face_nodes, mesh.face_normal, mesh.face_area),
+        (mesh.bface_nodes, mesh.bface_normal, mesh.bface_area),
+    ):
+        d = mesh.pos[nodes[1]] - mesh.pos[nodes[0]]
+        torch.testing.assert_close(d.norm(dim=1, keepdim=True), area)
+        torch.testing.assert_close(
+            (d * normal).sum(dim=1), torch.zeros(d.shape[0], dtype=d.dtype)
+        )
+    assert mesh.boundary_node_mask[mesh.bface_nodes].all()
+
+
 def test_closed_cells_have_zero_net_normal():
     mesh = unit_square_mesh(5, 4)
     torch.testing.assert_close(
@@ -82,7 +96,14 @@ def test_batching_preserves_entity_indices():
     )
     for i, mesh in enumerate(meshes):
         again = batch.get_example(i)
-        for key in ("face_index", "bface_owner", "cell_conn", "edge_index"):
+        for key in (
+            "face_index",
+            "face_nodes",
+            "bface_owner",
+            "bface_nodes",
+            "cell_conn",
+            "edge_index",
+        ):
             assert torch.equal(again[key], mesh[key]), key
 
 

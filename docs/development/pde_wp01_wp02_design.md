@@ -1,6 +1,7 @@
 # PDE extension: WP01/WP02 design
 
-Status: proposed design, not implemented. Base commit `d751d688` (ORNL/HydraGNN `main`, 2026-11-25).
+Status: partially implemented. Slice 1 (MeshData, OperatorBase, MeshGraphNet, Poisson example) and slice 2
+(face/cell outputs, `Variables.spatial_dim`) are done; `query` level, normalizers and storage are not. Base commit `d751d688` (ORNL/HydraGNN `main`, 2026-11-25).
 Scope: WP01 (registry, configuration, compatibility baseline) and WP02 (mesh/field data contracts),
 plus the minimum needed for the first vertical slice (MeshGraphNets on a manufactured Poisson problem).
 
@@ -93,9 +94,7 @@ Before implementation, confirm every attribute the trainer reads from `model.mod
 ### 2.4 Compatibility baseline
 
 1. Run the existing test suite on the clean checkout and record the pass/skip/fail lists (`tests/` on CPU; MPI-tagged tests separately).
-2. Freeze fixed-seed predictions for every `HOMOGENEOUS_MODELS` and `HETEROGENEOUS_MODELS` entry using `tests/test_model_registry.py` tiny configs; store as an FP64 `.pt` fixture.
-3. Add a regression test comparing post-change predictions to the fixture (FP64 `rtol=1e-12`, FP32 `rtol=1e-5`).
-4. Round-trip a checkpoint written by the base commit through the new loader.
+2. Round-trip a checkpoint written by the base commit through the new loader.
 
 ## 3. WP02: mesh and field data contracts
 
@@ -141,8 +140,11 @@ Extend `VariableLevel` to `node | edge | face | cell | query | graph`. `_expecte
 `num_cells` and `query_pos.shape[0]`. `prepare_data_from_schema` already flattens each output into `y`/`y_loc`,
 so target indexing works without changes. Add `face_output`, `cell_output` and `query_output` to `_DERIVED_TENSOR_NAMES`.
 
-Relax `role == "position"` validation from "dim 3" to "dim in {1,2,3}" **only** when the config has a `PDE` section.
-Atomistic configs keep the current check.
+Implemented: `face` and `cell` levels exist and are accepted **for outputs only** (inputs raise). `query` is not
+implemented yet. The `pos` dimension is controlled by `Variables.spatial_dim` (default 3, allowed 1/2/3): the
+position input must have dim `spatial_dim`, so atomistic configs keep the dim-3 check unchanged. For MeshGraphNet,
+`update_config` copies `spatial_dim` into `Architecture.mgn_spatial_dim` unless it is already set. `create_model`
+rejects output levels outside the model's registered `Capabilities.output_levels` (legacy models: node/graph).
 
 ### 3.4 Output heads for new levels
 
@@ -154,6 +156,15 @@ Remove the edge-output rejection in `config_utils.py` once the head exists. Head
 | face | `concat(h_i, h_j, face_geom)` for oriented faces, antisymmetrized: `f(h_i,h_j) - f(h_j,h_i)` when `conservative=true` | `FaceHead` | F |
 | cell | cell latent (gathered from nodes or native) | MLP | C |
 | query | latent sampled at `query_pos` (decoder-specific) | MLP | Q |
+
+Implemented in MeshGraphNet: the face head reads the owner/neighbour cell latents from `face_index`
+(cell latent = mean node latent of the cell), the face normal and area, and the centroid distance:
+$g(c_o, c_n, n_f, A_f, d_{on})$. With `mgn_conservative_faces=true` (default) the mean is
+$g(c_o, c_n, n_f) - g(c_n, c_o, -n_f)$, which is exactly antisymmetric under face orientation flip; Gaussian
+variance columns use the sum before the softplus so they stay orientation-invariant. A first version used the
+two nodes *on* the face (`face_nodes`) with endpoint-symmetric features; it could not learn a normal flux
+(loss stayed at the target variance) because those nodes carry no information across the face. The cell head is an MLP on the mean node
+latent over the cell's vertices.
 
 The antisymmetric face head is what WP03 FluxGNN uses. The conservative update
 $u_i^{n+1} = u_i^n - \frac{\Delta t}{V_i}\left(\sum_{f \in \partial i} \pm A_f F_f + \sum_{b \in \partial i} A_b F_b\right) + \Delta t\, s_i$
@@ -198,7 +209,6 @@ Goal: `mpnn_type="MeshGraphNet"` trains on a 2D manufactured Poisson problem usi
 | `test_meshgraphnet_permutation` | node relabelling equivariance | FP64 1e-10 |
 | `test_batched_vs_single` | batched vs per-sample predictions | FP64 1e-12 |
 | `test_poisson_mgn_train` | loss decreases; relative L2 on held-out resolution reported (no fixed threshold until baseline measured) | report |
-| `test_legacy_predictions` | frozen fixture for all existing models | FP64 1e-12 |
 
 ## 5. Open decisions
 

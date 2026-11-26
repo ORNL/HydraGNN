@@ -171,6 +171,10 @@ def update_config(config, train_loader, val_loader, test_loader):
             "Named edge outputs are valid data attributes, but HydraGNN does "
             "not yet provide an edge prediction head"
         )
+    if config["NeuralNetwork"]["Architecture"]["mpnn_type"] == "MeshGraphNet":
+        config["NeuralNetwork"]["Architecture"].setdefault(
+            "mgn_spatial_dim", named_schema.spatial_dim
+        )
     config["NeuralNetwork"]["Architecture"]["input_dim"] = encoded_schema_dimensions(
         named_schema, "node", "inputs"
     )

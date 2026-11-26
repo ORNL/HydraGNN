@@ -17,9 +17,11 @@ Entity tensors (all optional except ``pos``):
   ``cell_volume [C, 1]``, ``cell_centroid [C, d]``
 * interior faces, stored once and oriented ``face_index[0] -> face_index[1]``
   (cell ids): ``face_index [2, F]``, ``face_normal [F, d]`` (unit, pointing
-  from owner to neighbour), ``face_area [F, 1]``
+  from owner to neighbour), ``face_area [F, 1]``, ``face_nodes [k, F]``
+  (node ids of each face; k = 2 in 2D)
 * boundary faces: ``bface_owner [Fb]`` (cell id), ``bface_normal [Fb, d]``
-  (outward unit), ``bface_area [Fb, 1]``, ``bface_tag [Fb]``
+  (outward unit), ``bface_area [Fb, 1]``, ``bface_tag [Fb]``,
+  ``bface_nodes [k, Fb]``
 
 Cell connectivity is stored as sizes rather than CSR pointers so PyG can
 concatenate it without offset bookkeeping; use :func:`cell_offsets`.
@@ -29,6 +31,8 @@ import torch
 from torch_geometric.data import Data
 
 _CELL_INDEXED = frozenset({"face_index", "bface_owner"})
+_NODE_INDEXED = frozenset({"cell_conn", "face_nodes", "bface_nodes"})
+_FACE_COLUMNS = frozenset({"face_index", "face_nodes", "bface_nodes"})
 
 
 class MeshData(Data):
@@ -47,12 +51,12 @@ class MeshData(Data):
     def __inc__(self, key, value, *args, **kwargs):
         if key in _CELL_INDEXED:
             return self.num_cells
-        if key == "cell_conn":
+        if key in _NODE_INDEXED:
             return self.num_nodes
         return super().__inc__(key, value, *args, **kwargs)
 
     def __cat_dim__(self, key, value, *args, **kwargs):
-        if key == "face_index":
+        if key in _FACE_COLUMNS:
             return -1
         return super().__cat_dim__(key, value, *args, **kwargs)
 
@@ -68,6 +72,12 @@ def cell_batch(data):
     if batch is None:
         return torch.zeros(data.num_cells, dtype=torch.long, device=data.pos.device)
     return batch[data.cell_conn[cell_offsets(data)]]
+
+
+def cell_of_conn(data):
+    """Cell id of every entry in ``cell_conn``."""
+    cells = torch.arange(data.cell_size.numel(), device=data.cell_size.device)
+    return cells.repeat_interleave(data.cell_size)
 
 
 def from_triangles(pos, triangles, **fields):
@@ -137,10 +147,12 @@ def from_triangles(pos, triangles, **fields):
         face_index=face_index,
         face_normal=normal[owner_half],
         face_area=length[owner_half],
+        face_nodes=half[owner_half].t().contiguous(),
         bface_owner=owner[boundary_half],
         bface_normal=normal[boundary_half],
         bface_area=length[boundary_half],
         bface_tag=torch.zeros(boundary_half.numel(), dtype=torch.long),
+        bface_nodes=half[boundary_half].t().contiguous(),
         **fields,
     )
     boundary_nodes = torch.unique(half[boundary_half].reshape(-1))

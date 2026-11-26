@@ -432,7 +432,7 @@ def _build_uma(p):
 @register_model(
     "MeshGraphNet",
     Capabilities(
-        output_levels=frozenset({"node"}),
+        output_levels=frozenset({"node", "face", "cell"}),
         requires=frozenset({"pos", "edge_index"}),
         reference="Pfaff et al. 2021, arXiv:2010.03409 (single-mesh variant)",
     ),
@@ -453,6 +453,7 @@ def _build_meshgraphnet(p):
         loss_weights=p.task_weights,
         mlp_layers=p.mgn.mlp_layers,
         spatial_dim=p.mgn.spatial_dim,
+        conservative_faces=p.mgn.conservative_faces,
     )
 
 

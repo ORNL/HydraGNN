@@ -116,3 +116,4 @@ class MeshGraphNetSettings(_PrefixedSettings):
 
     mlp_layers: int = 2
     spatial_dim: int = 3
+    conservative_faces: bool = True

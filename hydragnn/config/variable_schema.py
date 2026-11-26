@@ -15,10 +15,13 @@ from typing import Literal
 
 import torch
 
-VariableLevel = Literal["node", "edge", "graph"]
+VariableLevel = Literal["node", "edge", "graph", "face", "cell"]
 VariableRole = Literal["feature", "position"]
 GraphType = Literal["homogeneous", "heterogeneous"]
-_LEVELS = frozenset(("node", "edge", "graph"))
+_LEVELS = frozenset(("node", "edge", "graph", "face", "cell"))
+# Mesh levels need MeshData entity tensors; they are supported as outputs only.
+_MESH_LEVELS = frozenset(("face", "cell"))
+_SPATIAL_DIMS = frozenset((1, 2, 3))
 _ROLES = frozenset(("feature", "position"))
 _GRAPH_TYPES = frozenset(("homogeneous", "heterogeneous"))
 _ENCODING_TYPES = frozenset(("embedding", "one_hot"))
@@ -34,6 +37,8 @@ _DERIVED_TENSOR_NAMES = frozenset(
         "node_output",
         "edge_output",
         "graph_output",
+        "face_output",
+        "cell_output",
     )
 )
 
@@ -73,9 +78,12 @@ class VariableSchema:
     inputs: tuple[VariableSpec, ...]
     outputs: tuple[VariableSpec, ...]
     edge_attributes: dict[str, tuple[str, ...]]
+    spatial_dim: int = 3
 
 
-def _parse_group(raw_variables, group: str) -> tuple[VariableSpec, ...]:
+def _parse_group(
+    raw_variables, group: str, spatial_dim: int = 3
+) -> tuple[VariableSpec, ...]:
     raw_specs = raw_variables.get(group)
     if not isinstance(raw_specs, list):
         raise TypeError(f"Variables.{group} must be a JSON array")
@@ -111,6 +119,8 @@ def _parse_group(raw_variables, group: str) -> tuple[VariableSpec, ...]:
             raise ValueError(f"{path}.name must be a non-empty string")
         if level not in _LEVELS:
             raise ValueError(f"{path}.level must be one of {sorted(_LEVELS)}")
+        if level in _MESH_LEVELS and group != "outputs":
+            raise ValueError(f"{path}.level '{level}' is supported only for outputs")
         if isinstance(dim, bool) or not isinstance(dim, int) or dim <= 0:
             raise ValueError(f"{path}.dim must be a positive integer")
         if role not in _ROLES:
@@ -137,10 +147,10 @@ def _parse_group(raw_variables, group: str) -> tuple[VariableSpec, ...]:
         if role == "position":
             if group != "inputs":
                 raise ValueError(f"{path}.role 'position' is valid only for inputs")
-            if name != "pos" or level != "node" or dim != 3:
+            if name != "pos" or level != "node" or dim != spatial_dim:
                 raise ValueError(
                     f"{path} with role 'position' must have name 'pos', "
-                    "level 'node', and dim 3"
+                    f"level 'node', and dim {spatial_dim}"
                 )
         encoding = None
         if raw_encoding is not None:
@@ -220,9 +230,15 @@ def parse_variable_schema(raw_variables: dict) -> VariableSchema:
         "inputs",
         "outputs",
         "edge_attributes",
+        "spatial_dim",
     }
     if extra:
         raise ValueError("Variables has unknown keys: " + ", ".join(sorted(extra)))
+    spatial_dim = raw_variables.get("spatial_dim", 3)
+    if isinstance(spatial_dim, bool) or spatial_dim not in _SPATIAL_DIMS:
+        raise ValueError(
+            f"Variables.spatial_dim must be one of {sorted(_SPATIAL_DIMS)}"
+        )
     graph_type = raw_variables.get("graph_type")
     if graph_type not in _GRAPH_TYPES:
         raise ValueError(f"Variables.graph_type must be one of {sorted(_GRAPH_TYPES)}")
@@ -269,9 +285,10 @@ def parse_variable_schema(raw_variables: dict) -> VariableSchema:
     schema = VariableSchema(
         graph_type=graph_type,
         node_types=node_types,
-        inputs=_parse_group(raw_variables, "inputs"),
-        outputs=_parse_group(raw_variables, "outputs"),
+        inputs=_parse_group(raw_variables, "inputs", spatial_dim),
+        outputs=_parse_group(raw_variables, "outputs", spatial_dim),
         edge_attributes=edge_attributes,
+        spatial_dim=spatial_dim,
     )
     for group, specs in (("inputs", schema.inputs), ("outputs", schema.outputs)):
         names = [spec.name for spec in specs]
@@ -365,6 +382,22 @@ def _expected_rows(data, level: VariableLevel) -> int:
                 f"edge_index must have shape (2, E); got {tuple(data.edge_index.shape)}"
             )
         return int(data.edge_index.shape[1])
+    if level == "face":
+        face_index = getattr(data, "face_index", None)
+        if face_index is None:
+            raise ValueError(
+                "Cannot validate face variables because face_index is missing; "
+                "use hydragnn.data.meshes.MeshData"
+            )
+        return int(face_index.shape[1])
+    if level == "cell":
+        cell_size = getattr(data, "cell_size", None)
+        if cell_size is None:
+            raise ValueError(
+                "Cannot validate cell variables because cell_size is missing; "
+                "use hydragnn.data.meshes.MeshData"
+            )
+        return int(cell_size.numel())
     return 1
 
 

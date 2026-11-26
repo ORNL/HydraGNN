@@ -13,14 +13,24 @@
 Encoder: node MLP on ``x``; edge MLP on ``(pos_s - pos_r, |pos_s - pos_r|)``.
 Processor: ``num_steps`` residual blocks
 ``e' = e + f_e([e, v_s, v_r])``, ``v' = v + f_v([v, sum_{e' -> v} e'])``.
-Decoder: one MLP per node head. Encoder and processor MLPs end in LayerNorm.
+Decoder: one MLP per head. Encoder and processor MLPs end in LayerNorm.
 This is the single-mesh variant (no world edges).
+
+Mesh-level heads (HydraGNN extension, not in the paper) need ``MeshData``:
+
+* ``face``: MLP ``g(c_o, c_n, n_f, A_f, d_on)`` on the owner/neighbour cell
+  latents (``face_index``), the face normal and area, and the centroid
+  distance. With ``conservative_faces`` the output is
+  ``g(c_o, c_n, n_f) - g(c_n, c_o, -n_f)``, so it changes sign with the face
+  orientation and a flux shared by two cells cancels exactly.
+* ``cell``: MLP on the mean node latent of each cell.
 """
 
 import torch
 from torch import nn
 from torch.utils.checkpoint import checkpoint
 
+from hydragnn.data.meshes.mesh_data import cell_of_conn
 from hydragnn.models.operator_base import OperatorBase
 from hydragnn.models.utils import activation_function_selection
 
@@ -52,6 +62,8 @@ class _ProcessorStep(nn.Module):
 
 
 class MeshGraphNet(OperatorBase):
+    supported_output_levels = frozenset({"node", "face", "cell"})
+
     def __init__(
         self,
         input_dim,
@@ -64,11 +76,13 @@ class MeshGraphNet(OperatorBase):
         loss_weights=None,
         mlp_layers=2,
         spatial_dim=3,
+        conservative_faces=True,
     ):
         super().__init__(output_dim, output_type, loss_function_type, loss_weights)
         if mlp_layers < 1:
             raise ValueError("mgn_mlp_layers must be >= 1")
         self.spatial_dim = spatial_dim
+        self.conservative_faces = conservative_faces
         act = activation_function_selection(activation_function)
         self.node_encoder = _mlp(input_dim, hidden_dim, hidden_dim, mlp_layers, act, True)
         self.edge_encoder = _mlp(
@@ -78,9 +92,14 @@ class MeshGraphNet(OperatorBase):
             _ProcessorStep(hidden_dim, mlp_layers, act) for _ in range(num_steps)
         )
         out_mult = 1 + self.var_output
+        in_dims = {
+            "node": hidden_dim,
+            "cell": hidden_dim,
+            "face": 2 * hidden_dim + spatial_dim + 2,
+        }
         self.decoders = nn.ModuleList(
-            _mlp(hidden_dim, hidden_dim, dim * out_mult, mlp_layers, act, False)
-            for dim in self.head_dims
+            _mlp(in_dims[level], hidden_dim, dim * out_mult, mlp_layers, act, False)
+            for level, dim in zip(self.head_type, self.head_dims)
         )
 
     def encode(self, data):
@@ -102,4 +121,34 @@ class MeshGraphNet(OperatorBase):
         return {"node": node, "edge": edge}
 
     def decode(self, state, data):
-        return [decoder(state["node"]) for decoder in self.decoders]
+        node = state["node"]
+        outputs = []
+        for level, dim, decoder in zip(self.head_type, self.head_dims, self.decoders):
+            if level == "node":
+                outputs.append(decoder(node))
+            elif level == "cell":
+                outputs.append(decoder(self._cell_latent(node, data)))
+            else:
+                outputs.append(self._decode_face(decoder, dim, node, data))
+        return outputs
+
+    def _cell_latent(self, node, data):
+        cells = cell_of_conn(data)
+        total = node.new_zeros(data.cell_size.numel(), node.shape[1])
+        total.index_add_(0, cells, node[data.cell_conn])
+        return total / data.cell_size.unsqueeze(1).to(node.dtype)
+
+    def _decode_face(self, decoder, dim, node, data):
+        cell = self._cell_latent(node, data)
+        centroid = self._cell_latent(data.pos[:, : self.spatial_dim].to(node.dtype), data)
+        o, n = data.face_index
+        normal = data.face_normal[:, : self.spatial_dim].to(node.dtype)
+        area = data.face_area.to(node.dtype)
+        dist = (centroid[n] - centroid[o]).norm(dim=-1, keepdim=True)
+        out = decoder(torch.cat([cell[o], cell[n], normal, area, dist], dim=-1))
+        if not self.conservative_faces:
+            return out
+        flipped = decoder(torch.cat([cell[n], cell[o], -normal, area, dist], dim=-1))
+        mean = out[:, :dim] - flipped[:, :dim]
+        # Variance columns (GaussianNLL) must not flip sign with orientation.
+        return torch.cat([mean, out[:, dim:] + flipped[:, dim:]], dim=-1)

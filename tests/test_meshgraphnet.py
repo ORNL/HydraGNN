@@ -34,10 +34,10 @@ def _args(**overrides):
     return args
 
 
-def _mesh(nx, ny, seed):
+def _mesh(nx, ny, seed, dtype=torch.float32):
     g = torch.Generator().manual_seed(seed)
-    mesh = unit_square_mesh(nx, ny, dtype=torch.float32)
-    mesh.x = torch.randn(mesh.num_nodes, 3, generator=g)
+    mesh = unit_square_mesh(nx, ny, dtype=dtype)
+    mesh.x = torch.randn(mesh.num_nodes, 3, generator=g, dtype=dtype)
     return mesh
 
 
@@ -48,7 +48,7 @@ def model():
 
 def test_capabilities():
     caps = get_capabilities("MeshGraphNet")
-    assert caps.output_levels == frozenset({"node"})
+    assert caps.output_levels == frozenset({"node", "face", "cell"})
     assert "pos" in caps.requires
     assert get_capabilities("GIN") == Capabilities()
 
@@ -75,8 +75,87 @@ def test_trainer_contract(model):
 
 
 def test_rejects_graph_heads():
-    with pytest.raises(ValueError, match="supports output levels"):
+    with pytest.raises(ValueError, match=r"cannot predict \['graph'\]"):
         create_model(**_args(output_dim=[1], output_type=["graph"], task_weights=[1.0]))
+
+
+def test_create_model_rejects_mesh_levels_for_legacy_models():
+    with pytest.raises(ValueError, match=r"GIN cannot predict \['face'\]"):
+        create_model(
+            **_args(
+                mpnn_type="GIN", output_dim=[1], output_type=["face"], task_weights=[1.0]
+            )
+        )
+
+
+def _mesh_model(conservative=True, **overrides):
+    args = _args(
+        output_dim=[1, 2, 1],
+        output_type=["node", "face", "cell"],
+        task_weights=[1.0, 1.0, 1.0],
+        mgn_conservative_faces=conservative,
+    )
+    args.update(overrides)
+    return create_model(**args).double().eval()
+
+
+def _flip_faces(mesh):
+    flipped = copy.copy(mesh)
+    flipped.face_index = mesh.face_index.flip(0)
+    flipped.face_nodes = mesh.face_nodes.flip(0)
+    flipped.face_normal = -mesh.face_normal
+    return flipped
+
+
+def test_face_and_cell_heads_shapes():
+    model = _mesh_model()
+    mesh = _mesh(3, 2, 0, torch.float64)
+    node, face, cell = model(mesh)
+    assert node.shape == (mesh.num_nodes, 1)
+    assert face.shape == (mesh.num_faces, 2)
+    assert cell.shape == (mesh.num_cells, 1)
+
+
+def test_conservative_face_head_is_antisymmetric():
+    model = _mesh_model()
+    mesh = _mesh(3, 3, 1, torch.float64)
+    face = model(mesh)[1]
+    face_flipped = model(_flip_faces(mesh))[1]
+    torch.testing.assert_close(face_flipped, -face, rtol=0, atol=1e-12)
+    # Each interior flux leaves one cell and enters the other, so the net
+    # contribution of interior faces to the total balance is exactly zero.
+    net = torch.zeros(mesh.num_cells, 2, dtype=torch.float64)
+    net.index_add_(0, mesh.face_index[0], face)
+    net.index_add_(0, mesh.face_index[1], -face)
+    torch.testing.assert_close(net.sum(0), torch.zeros(2, dtype=torch.float64), rtol=0, atol=1e-12)
+
+
+def test_non_conservative_face_head_is_not_antisymmetric():
+    model = _mesh_model(conservative=False)
+    mesh = _mesh(3, 3, 1, torch.float64)
+    face = model(mesh)[1]
+    face_flipped = model(_flip_faces(mesh))[1]
+    assert not torch.allclose(face_flipped, -face)
+
+
+def test_mesh_heads_batched_equals_single():
+    model = _mesh_model()
+    meshes = [_mesh(2, 3, 2, torch.float64), _mesh(3, 1, 3, torch.float64)]
+    batched = model(Batch.from_data_list(meshes))
+    singles = [model(m) for m in meshes]
+    for head in range(3):
+        expected = torch.cat([out[head] for out in singles])
+        torch.testing.assert_close(batched[head], expected, rtol=0, atol=1e-12)
+
+
+def test_conservative_face_head_gaussian_variance_positive():
+    model = _mesh_model(loss_function_type="GaussianNLLLoss")
+    mesh = _mesh(2, 2, 4, torch.float64)
+    means, variances = model(mesh)
+    assert means[1].shape == variances[1].shape == (mesh.num_faces, 2)
+    assert (variances[1] > 0).all()
+    _, flipped_var = model(_flip_faces(mesh))
+    torch.testing.assert_close(flipped_var[1], variances[1], rtol=0, atol=1e-12)
 
 
 def test_node_permutation_equivariance(model):

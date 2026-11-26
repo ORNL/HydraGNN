@@ -22,7 +22,7 @@ from hydragnn.model_settings import (
 )
 from hydragnn.domain_losses import create_domain_loss
 from hydragnn.config.variable_schema import edge_type_dims
-from hydragnn.models.registry import get_model_builder
+from hydragnn.models.registry import get_capabilities, get_model_builder
 
 from hydragnn.distributed import get_device
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
@@ -248,6 +248,13 @@ def create_model(
     torch.manual_seed(0)
 
     device = get_device(use_gpu, verbosity_level=verbosity)
+
+    unsupported = set(output_type) - get_capabilities(mpnn_type).output_levels
+    if unsupported:
+        raise ValueError(
+            f"{mpnn_type} cannot predict {sorted(unsupported)} outputs; supported "
+            f"levels: {sorted(get_capabilities(mpnn_type).output_levels)}"
+        )
 
     model = get_model_builder(mpnn_type)(params)
 
