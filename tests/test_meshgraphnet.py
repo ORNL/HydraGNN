@@ -381,3 +381,21 @@ def test_conv_checkpointing_matches(model):
     mesh = _mesh(2, 2, 9)
     for a, b in zip(model(mesh), ckpt(mesh)):
         torch.testing.assert_close(a, b)
+
+
+def test_rollout_unpacks_gaussian_nll_means():
+    from hydragnn.models.rollout import rollout
+
+    model = create_model(
+        **_args(
+            output_dim=[1],
+            output_type=["node"],
+            task_weights=[1.0],
+            loss_function_type="GaussianNLLLoss",
+        )
+    ).eval()
+    mesh = _mesh(3, 2, 11)
+    states = rollout(model, mesh, 2, [1], level="node")
+    with torch.no_grad():
+        means, _ = model(mesh)
+    torch.testing.assert_close(states[0], means[0])

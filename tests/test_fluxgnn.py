@@ -386,3 +386,14 @@ def test_rollout_errors():
         rollout(model, mesh, 1, [0, 1], level="face")
     with pytest.raises(ValueError, match="shape"):
         rollout(model, mesh, 1, [0], level="cell")
+
+
+def test_fp32_state_with_offset_fp64_geometry_is_finite():
+    mesh = _mesh(4, 1)
+    mesh.cell_centroid = mesh.cell_centroid + 1e8
+    mesh.pos = mesh.pos + 1e8
+    mesh.cell_x = mesh.cell_x.float()
+    model = _model().float()
+    with torch.no_grad():
+        u, face = model(mesh)
+    assert torch.isfinite(u).all() and torch.isfinite(face).all()

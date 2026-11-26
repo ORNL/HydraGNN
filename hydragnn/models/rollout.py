@@ -31,7 +31,10 @@ def rollout(model, data, num_steps, columns, level="node", head=0, residual=Fals
     data = data.clone()
     states = []
     for _ in range(num_steps):
-        out = model(data)[head]
+        out = model(data)
+        if getattr(model, "var_output", False):
+            out = out[0]
+        out = out[head]
         x = getattr(data, attr).clone()
         if out.shape != x[:, columns].shape:
             raise ValueError(

@@ -189,10 +189,11 @@ class FluxGNN(OperatorBase):
         dtype = u.dtype
         o, n = data.face_index
         normal = data.face_normal[:, : self.spatial_dim].to(dtype)
-        centroid = data.cell_centroid[:, : self.spatial_dim].to(dtype)
+        centroid = data.cell_centroid[:, : self.spatial_dim]
         vn_o, vt_o = self._project(vectors[o], normal)
         vn_n, vt_n = self._project(vectors[n], normal)
-        dist = (centroid[n] - centroid[o]).norm(dim=-1, keepdim=True)
+        # Subtract in coordinate precision; large offsets collapse in FP32.
+        dist = (centroid[n] - centroid[o]).norm(dim=-1, keepdim=True).to(dtype)
         geometry = {
             "s_o": scalars[o],
             "s_n": scalars[n],
