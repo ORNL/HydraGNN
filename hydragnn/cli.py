@@ -353,12 +353,16 @@ def run_training(
         config=config,
     )
     hydragnn.models.utils.print_model(model)
-    hydragnn.models.utils.load_existing_model_config(
-        model,
-        config["NeuralNetwork"]["Training"],
-        optimizer=optimizer,
-        use_deepspeed=use_deepspeed,
-    )
+    training = config["NeuralNetwork"]["Training"]
+    if training.get("continue"):
+        hydragnn.models.utils.load_and_validate(
+            model,
+            training["startfrom"],
+            config,
+            optimizer=optimizer,
+            normalizer=getattr(train_loader.dataset, "normalizer", None),
+            use_deepspeed=use_deepspeed,
+        )
     loaders = (train_loader, val_loader, test_loader)
     if before_train is not None and before_train(model, optimizer, loaders, config):
         if writer is not None:

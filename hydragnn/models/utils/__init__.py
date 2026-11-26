@@ -13,6 +13,7 @@ from .model import (
     save_model,
     checkpoint_metadata,
     load_checkpoint_metadata,
+    load_and_validate,
     get_summary_writer,
     unsorted_segment_mean,
     load_existing_model,

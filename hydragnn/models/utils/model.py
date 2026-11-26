@@ -143,6 +143,91 @@ def load_checkpoint_metadata(model_name, path="./logs/"):
     )
 
 
+def checkpoint_mismatches(
+    config, saved_config, saved_version, saved_normalizer, normalizer=None
+):
+    """List human-readable differences between a run and a checkpoint's metadata."""
+    import json
+
+    from hydragnn.config.variable_schema import SCHEMA_VERSION
+
+    if saved_config is None:
+        return []
+    current = json.loads(checkpoint_metadata(config)["config"])
+    problems = []
+    if saved_version != SCHEMA_VERSION:
+        problems.append(
+            f"schema_version: checkpoint {saved_version}, current {SCHEMA_VERSION}"
+        )
+    for section, getter in (
+        ("Variables", lambda c: c.get("Variables")),
+        (
+            "NeuralNetwork.Architecture",
+            lambda c: c.get("NeuralNetwork", {}).get("Architecture"),
+        ),
+    ):
+        old, new = getter(saved_config), getter(current)
+        if old == new:
+            continue
+        if isinstance(old, dict) and isinstance(new, dict):
+            keys = sorted(
+                k for k in old.keys() | new.keys() if old.get(k) != new.get(k)
+            )
+            for k in keys:
+                problems.append(
+                    f"{section}.{k}: checkpoint {old.get(k)!r}, current {new.get(k)!r}"
+                )
+        else:
+            problems.append(f"{section}: checkpoint {old!r}, current {new!r}")
+    if (
+        normalizer is not None
+        and saved_normalizer is not None
+        and normalizer.state_dict() != saved_normalizer.state_dict()
+    ):
+        problems.append("normalizer: statistics differ from the checkpoint")
+    return problems
+
+
+def load_and_validate(
+    model,
+    model_name,
+    config,
+    path="./logs/",
+    optimizer=None,
+    normalizer=None,
+    strict=False,
+    use_deepspeed=False,
+):
+    """Check a checkpoint's metadata against ``config``, then load its weights.
+
+    Mismatches warn, or raise ``ValueError`` when ``strict``. Returns the
+    checkpoint's normalizer (``None`` for old checkpoints) so inference can
+    reuse the training statistics.
+    """
+    import warnings
+
+    saved_normalizer = None
+    if not use_deepspeed:
+        saved_config, saved_version, saved_normalizer = load_checkpoint_metadata(
+            model_name, path
+        )
+        if saved_config is None:
+            print_master(f"Checkpoint {model_name} has no metadata; not validated")
+        problems = checkpoint_mismatches(
+            config, saved_config, saved_version, saved_normalizer, normalizer
+        )
+        if problems:
+            message = (
+                f"Checkpoint {model_name} does not match the current run:\n  "
+                + "\n  ".join(problems)
+            )
+            if strict:
+                raise ValueError(message)
+            warnings.warn(message)
+    load_existing_model(model, model_name, path, optimizer, use_deepspeed=use_deepspeed)
+    return saved_normalizer
+
+
 def save_model(
     model, optimizer, name, path="./logs/", use_deepspeed=False, metadata=None
 ):
