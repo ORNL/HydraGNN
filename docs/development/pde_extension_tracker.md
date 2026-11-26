@@ -8,7 +8,7 @@ measured values and environments are in the linked design documents.
 | ID | Deliverable | Depends on | Status | PR / commit | Design doc |
 |---|---|---|---|---|---|
 | WP01 | Registry, configuration, compatibility baseline | – | verified | #581 / `e1564c39` | `pde_wp01_wp02_design.md` |
-| WP02 | Mesh, fields, trajectory, hierarchy contracts | WP01 | partial | #581 / `e1564c39` | `pde_wp01_wp02_design.md` |
+| WP02 | Mesh, fields, trajectory, hierarchy contracts | WP01 | verified | #581 / `e1564c39`, #583 | `pde_wp01_wp02_design.md` |
 | WP03 | MeshGraphNets and FluxGNN | WP02 | verified | #582 | `pde_wp03_design.md` |
 | WP04 | Multiscale MGN and RIGNO | WP02 | not started | | |
 | WP05 | Transolver, ++, -3 and GAOT | WP02, WP11 | not started | | |
@@ -31,13 +31,15 @@ measured values and environments are in the linked design documents.
 
 ## WP02
 
-* Sources: `data/meshes/mesh_data.py`, `config/variable_schema.py` (face/cell/query levels, `spatial_dim`),
+* Sources: `data/meshes/mesh_data.py`, `data/meshes/trajectory.py`, `data/meshes/hierarchy.py`,
+  `config/variable_schema.py` (face/cell/query levels, `spatial_dim`),
   `preprocess/field_normalizer.py`, ADIOS2/DDStore `MeshData` storage, `models/meshgraphnet.py`,
   `examples/pde/poisson_manufactured.py`.
-* Tests: `test_mesh_data.py`, `test_named_variable_schema.py`, `test_variable_levels_pde.py`,
+* Tests: `test_mesh_data.py`, `test_mesh_contracts.py`, `test_named_variable_schema.py`, `test_variable_levels_pde.py`,
   `test_field_normalizer.py`, `test_mesh_adios.py`, `test_meshgraphnet.py`, `test_poisson_mgn_train.py`.
 * Results: Poisson MGN on Frontier (1 and 8 GCDs, FP64), held-out relative L2 0.19–0.23.
-* Missing: trajectory and hierarchy containers (needed by WP04 and WP09). Only 2D triangle meshes tested.
+* Limitations: hierarchy supports nested meshes only (conservative non-nested transfer deferred); the normal
+  orientation check assumes convex cells.
 
 ## WP03
 

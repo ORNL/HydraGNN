@@ -18,13 +18,16 @@ Entity tensors (all optional except ``pos``):
 * interior faces, stored once and oriented ``face_index[0] -> face_index[1]``
   (cell ids): ``face_index [2, F]``, ``face_normal [F, d]`` (unit, pointing
   from owner to neighbour), ``face_area [F, 1]``, ``face_nodes [k, F]``
-  (node ids of each face; k = 2 in 2D)
+  (node ids of each face; k = 2 for 2D meshes with edge faces, k = 3 for
+  3D tetrahedral meshes with triangular faces)
 * boundary faces: ``bface_owner [Fb]`` (cell id), ``bface_normal [Fb, d]``
   (outward unit), ``bface_area [Fb, 1]``, ``bface_tag [Fb]``,
   ``bface_nodes [k, Fb]``
 * query points (off-mesh outputs): ``query_pos [Q, d]`` and
   ``query_cell [Q]``, the id of the cell containing each point; see
   :func:`locate_queries`
+* optional metadata: ``material_id [C]`` (long), graph-level ``time``,
+  ``dt`` and ``fidelity`` of shape ``[1, 1]``; see :func:`validate_mesh`
 
 Cell connectivity is stored as sizes rather than CSR pointers so PyG can
 concatenate it without offset bookkeeping; use :func:`cell_offsets`.
@@ -114,12 +117,20 @@ def cell_of_conn(data):
     return cells.repeat_interleave(data.cell_size)
 
 
-def from_triangles(pos, triangles, **fields):
+def _reject_degenerate(signed, corners, kind, rtol):
+    # Measure relative to (longest edge)^dim, so the check is scale invariant.
+    span = (corners[:, :, None] - corners[:, None, :]).norm(dim=-1).amax(dim=(1, 2))
+    if bool((signed.abs() <= rtol * span ** corners.shape[-1]).any()):
+        raise ValueError(f"degenerate {kind}")
+
+
+def from_triangles(pos, triangles, degenerate_rtol=1e-12, **fields):
     """Build a :class:`MeshData` from a 2D triangulation.
 
     ``pos`` is ``[N, 2]`` float, ``triangles`` is ``[C, 3]`` long. Extra
     keyword tensors (e.g. ``x``, ``y``) are attached unchanged. Boundary
-    faces get tag 0; callers may overwrite ``bface_tag``.
+    faces get tag 0; callers may overwrite ``bface_tag``. Triangles with
+    ``|area| <= degenerate_rtol * longest_edge**2`` are rejected.
     """
     pos = torch.as_tensor(pos)
     tri = torch.as_tensor(triangles, dtype=torch.long)
@@ -134,31 +145,79 @@ def from_triangles(pos, triangles, **fields):
     # Counter-clockwise orientation gives positive signed area.
     a, b, c = pos[tri[:, 0]], pos[tri[:, 1]], pos[tri[:, 2]]
     signed = 0.5 * ((b - a)[:, 0] * (c - a)[:, 1] - (b - a)[:, 1] * (c - a)[:, 0])
-    if (signed == 0).any():
-        raise ValueError("degenerate triangle with zero area")
+    _reject_degenerate(signed, pos[tri], "triangle with zero area", degenerate_rtol)
     flip = signed < 0
     tri = tri.clone()
     tri[flip] = tri[flip][:, [0, 2, 1]]
     area = signed.abs()
-    centroid = pos[tri].mean(dim=1)
 
     # Each triangle contributes edges (v0,v1), (v1,v2), (v2,v0).
-    num_cells = tri.shape[0]
-    local = torch.tensor([[0, 1], [1, 2], [2, 0]])
-    half = tri[:, local].reshape(-1, 2)
-    owner = torch.arange(num_cells).repeat_interleave(3)
-    key = torch.sort(half, dim=1).values
-    uniq, inverse, counts = torch.unique(
+    half = tri[:, [[0, 1], [1, 2], [2, 0]]].reshape(-1, 2)
+    # Outward normal for a CCW half-edge (p -> q) is (dy, -dx) / length.
+    d = pos[half[:, 1]] - pos[half[:, 0]]
+    length = d.norm(dim=1, keepdim=True)
+    normal = torch.stack([d[:, 1], -d[:, 0]], dim=1) / length
+    return _assemble(pos, tri, area, half, normal, length, half, fields)
+
+
+# Outward-oriented faces of a positively oriented tetrahedron (v0, v1, v2, v3).
+_TET_FACES = [[1, 2, 3], [0, 3, 2], [0, 1, 3], [0, 2, 1]]
+_TET_EDGES = [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]]
+
+
+def from_tetrahedra(pos, tetrahedra, degenerate_rtol=1e-12, **fields):
+    """Build a :class:`MeshData` from a 3D tetrahedral mesh.
+
+    ``pos`` is ``[N, 3]`` float, ``tetrahedra`` is ``[C, 4]`` long; cells are
+    reordered to positive volume. Faces are triangles (``face_nodes [3, F]``).
+    Tetrahedra with ``|volume| <= degenerate_rtol * longest_edge**3`` are
+    rejected.
+    """
+    pos = torch.as_tensor(pos)
+    tet = torch.as_tensor(tetrahedra, dtype=torch.long)
+    if pos.dim() != 2 or pos.shape[1] != 3:
+        raise ValueError("from_tetrahedra expects pos of shape [N, 3]")
+    if tet.dim() != 2 or tet.shape[1] != 4:
+        raise ValueError("from_tetrahedra expects tetrahedra of shape [C, 4]")
+    if tet.numel() and (tet.min() < 0 or tet.max() >= pos.shape[0]):
+        raise ValueError(f"tetrahedron indices must lie in [0, {pos.shape[0]})")
+
+    a, b, c, e = (pos[tet[:, k]] for k in range(4))
+    signed = torch.linalg.det(torch.stack([b - a, c - a, e - a], dim=1)) / 6.0
+    _reject_degenerate(
+        signed, pos[tet], "tetrahedron with zero volume", degenerate_rtol
+    )
+    flip = signed < 0
+    tet = tet.clone()
+    tet[flip] = tet[flip][:, [0, 2, 1, 3]]
+
+    tri = tet[:, _TET_FACES].reshape(-1, 3)
+    p0, p1, p2 = pos[tri[:, 0]], pos[tri[:, 1]], pos[tri[:, 2]]
+    cross = torch.linalg.cross(p1 - p0, p2 - p0)
+    norm = cross.norm(dim=1, keepdim=True)
+    edges = tet[:, _TET_EDGES].reshape(-1, 2)
+    return _assemble(
+        pos, tet, signed.abs(), tri, cross / norm, 0.5 * norm, edges, fields
+    )
+
+
+def _assemble(pos, cells, volume, faces, normal, area, edges, fields):
+    """Pair matching per-cell faces into interior/boundary faces.
+
+    ``faces [C * k, m]`` lists the m nodes of each cell's k faces with outward
+    ``normal`` and ``area``; ``edges [*, 2]`` gives the node message graph.
+    """
+    num_cells, per_cell = cells.shape
+    device = cells.device
+    owner = torch.arange(num_cells, device=device).repeat_interleave(
+        faces.shape[0] // num_cells
+    )
+    key = torch.sort(faces, dim=1).values
+    _, inverse, counts = torch.unique(
         key, dim=0, return_inverse=True, return_counts=True
     )
     if (counts > 2).any():
-        raise ValueError("non-manifold mesh: an edge is shared by >2 triangles")
-
-    # Outward normal for a CCW half-edge (p -> q) is (dy, -dx) / length.
-    p, q = pos[half[:, 0]], pos[half[:, 1]]
-    d = q - p
-    length = d.norm(dim=1, keepdim=True)
-    normal = torch.stack([d[:, 1], -d[:, 0]], dim=1) / length
+        raise ValueError("non-manifold mesh: a face is shared by more than 2 cells")
 
     order = torch.argsort(inverse, stable=True)
     sorted_inv = inverse[order]
@@ -167,35 +226,178 @@ def from_triangles(pos, triangles, **fields):
     first_idx = order[first]
     shared = counts[sorted_inv[first]] == 2
     owner_half = first_idx[shared]
-    pos_in_order = torch.nonzero(first).flatten()[shared]
-    neigh_half = order[pos_in_order + 1]
+    neigh_half = order[torch.nonzero(first).flatten()[shared] + 1]
     boundary_half = first_idx[~shared]
 
-    face_index = torch.stack([owner[owner_half], owner[neigh_half]])
-    node_edges = uniq.t()
-
+    node_edges = torch.unique(torch.sort(edges, dim=1).values, dim=0).t()
     data = MeshData(
         pos=pos,
         edge_index=torch.cat([node_edges, node_edges.flip(0)], dim=1),
-        cell_conn=tri.reshape(-1),
-        cell_size=torch.full((num_cells,), 3, dtype=torch.long),
-        cell_volume=area.unsqueeze(1),
-        cell_centroid=centroid,
-        face_index=face_index,
+        cell_conn=cells.reshape(-1),
+        cell_size=torch.full((num_cells,), per_cell, dtype=torch.long, device=device),
+        cell_volume=volume.unsqueeze(1),
+        cell_centroid=pos[cells].mean(dim=1),
+        face_index=torch.stack([owner[owner_half], owner[neigh_half]]),
         face_normal=normal[owner_half],
-        face_area=length[owner_half],
-        face_nodes=half[owner_half].t().contiguous(),
+        face_area=area[owner_half],
+        face_nodes=faces[owner_half].t().contiguous(),
         bface_owner=owner[boundary_half],
         bface_normal=normal[boundary_half],
-        bface_area=length[boundary_half],
-        bface_tag=torch.zeros(boundary_half.numel(), dtype=torch.long),
-        bface_nodes=half[boundary_half].t().contiguous(),
+        bface_area=area[boundary_half],
+        bface_tag=torch.zeros(boundary_half.numel(), dtype=torch.long, device=device),
+        bface_nodes=faces[boundary_half].t().contiguous(),
         **fields,
     )
-    boundary_nodes = torch.unique(half[boundary_half].reshape(-1))
-    mask = torch.zeros(pos.shape[0], dtype=torch.bool)
-    mask[boundary_nodes] = True
+    mask = torch.zeros(pos.shape[0], dtype=torch.bool, device=device)
+    mask[faces[boundary_half].reshape(-1)] = True
     data.boundary_node_mask = mask
+    return data
+
+
+def unit_cube_mesh(nx, ny, nz, dtype=torch.float64, **fields):
+    """Structured tetrahedralization of ``[0, 1]^3`` with ``6 * nx * ny * nz`` cells."""
+    axes = [torch.linspace(0.0, 1.0, n + 1, dtype=dtype) for n in (nx, ny, nz)]
+    grid = torch.meshgrid(*axes, indexing="ij")
+    pos = torch.stack([g.reshape(-1) for g in grid], dim=1)
+    i, j, k = (
+        g.reshape(-1)
+        for g in torch.meshgrid(
+            torch.arange(nx), torch.arange(ny), torch.arange(nz), indexing="ij"
+        )
+    )
+
+    def vid(di, dj, dk):
+        return ((i + di) * (ny + 1) + (j + dj)) * (nz + 1) + (k + dk)
+
+    # Kuhn split of each hexahedron along its main diagonal v000 -> v111.
+    paths = [(0, 1, 2), (0, 2, 1), (1, 0, 2), (1, 2, 0), (2, 0, 1), (2, 1, 0)]
+    tets = []
+    for path in paths:
+        step = [0, 0, 0]
+        verts = [vid(*step)]
+        for axis in path:
+            step[axis] = 1
+            verts.append(vid(*step))
+        tets.append(torch.stack(verts, dim=1))
+    return from_tetrahedra(pos, torch.cat(tets), **fields)
+
+
+_GRAPH_SCALARS = ("time", "dt", "fidelity")
+
+
+def validate_mesh(data, atol=1e-10):
+    """Check shapes, index ranges, orientation and closure of a :class:`MeshData`.
+
+    Raises ``ValueError`` on the first violation and returns ``data``.
+    Closure (sum of outward ``normal * area`` over each cell is zero) detects
+    missing faces and partially flipped normals; the direction of each normal
+    is checked against centroid displacements, which assumes convex cells.
+    """
+
+    def fail(msg):
+        raise ValueError(f"invalid mesh: {msg}")
+
+    n, d = data.pos.shape
+    c = data.num_cells
+    if "cell_size" in data:
+        if int(data.cell_size.sum()) != data.cell_conn.numel():
+            fail("sum(cell_size) != len(cell_conn)")
+        if data.cell_conn.numel() and not (
+            0 <= int(data.cell_conn.min()) and int(data.cell_conn.max()) < n
+        ):
+            fail("cell_conn index out of range")
+    for name, shape in (
+        ("cell_volume", (c, 1)),
+        ("cell_centroid", (c, d)),
+        ("material_id", (c,)),
+    ):
+        if name in data and tuple(data[name].shape) != shape:
+            fail(f"{name} has shape {tuple(data[name].shape)}, expected {shape}")
+    if "cell_volume" in data and not bool((data.cell_volume > 0).all()):
+        fail("non-positive cell_volume")
+    if "material_id" in data and (
+        data.material_id.dtype != torch.long or data.material_id.dim() != 1
+    ):
+        fail("material_id must be a 1D long tensor")
+
+    for prefix, index, lead in (
+        ("face", "face_index", (2,)),
+        ("bface", "bface_owner", ()),
+    ):
+        if index not in data:
+            continue
+        idx = data[index]
+        if idx.dtype != torch.long or tuple(idx.shape[:-1]) != lead or idx.dim() == 0:
+            fail(f"{index} must be a long tensor of shape {lead + ('n',)}")
+        rows = idx.shape[-1]
+        if idx.numel() and not (0 <= int(idx.min()) and int(idx.max()) < c):
+            fail(f"{index} cell id out of range")
+        for suffix, cols in (("normal", d), ("area", 1)):
+            if f"{prefix}_{suffix}" not in data:
+                fail(f"{index} is given without {prefix}_{suffix}")
+            value = data[f"{prefix}_{suffix}"]
+            if tuple(value.shape) != (rows, cols):
+                fail(f"{prefix}_{suffix} must have shape {(rows, cols)}")
+        if not bool((data[f"{prefix}_area"] > 0).all()):
+            fail(f"non-positive {prefix}_area")
+        unit = data[f"{prefix}_normal"].norm(dim=1)
+        if not torch.allclose(unit, torch.ones_like(unit), atol=atol, rtol=0):
+            fail(f"{prefix}_normal is not unit length")
+        nodes = data.get(f"{prefix}_nodes")
+        if nodes is not None and (
+            nodes.dtype != torch.long
+            or nodes.dim() != 2
+            or nodes.shape[1] != rows
+            or nodes.numel()
+            and (int(nodes.min()) < 0 or int(nodes.max()) >= n)
+        ):
+            fail(f"{prefix}_nodes must be a 2D long tensor of in-range node ids")
+    if "face_index" in data and bool((data.face_index[0] == data.face_index[1]).any()):
+        fail("face_index connects a cell to itself")
+    if "bface_tag" in data and data.bface_tag.shape != data.bface_owner.shape:
+        fail("bface_tag must have one entry per boundary face")
+    if "query_cell" in data or "query_pos" in data:
+        qc, qp = data.get("query_cell"), data.get("query_pos")
+        if qc is None or qp is None:
+            fail("query_pos and query_cell must be given together")
+        if qc.dtype != torch.long or qc.dim() != 1:
+            fail("query_cell must be a 1D long tensor")
+        if tuple(qp.shape) != (qc.numel(), d):
+            fail(f"query_pos must have shape {(qc.numel(), d)}")
+        if qc.numel() and not (0 <= int(qc.min()) and int(qc.max()) < c):
+            fail("query_cell cell id out of range")
+
+    if "face_index" in data and "bface_owner" in data:
+        dtype = data.face_normal.dtype
+        total = torch.zeros(c, d, dtype=dtype, device=data.pos.device)
+        flux = data.face_normal * data.face_area
+        total.index_add_(0, data.face_index[0], flux)
+        total.index_add_(0, data.face_index[1], -flux)
+        total.index_add_(0, data.bface_owner, data.bface_normal * data.bface_area)
+        areas = torch.cat([data.face_area, data.bface_area])
+        if areas.numel() and float(total.abs().max()) > atol * max(
+            float(areas.max()), 1.0
+        ):
+            fail("cells are not closed (check normal orientation)")
+
+    if "cell_centroid" in data:
+        cen = data.cell_centroid
+        if "face_index" in data:
+            o, nb = data.face_index
+            dots = ((cen[nb] - cen[o]) * data.face_normal).sum(dim=1)
+            if not bool((dots > 0).all()):
+                fail("face_normal does not point from owner to neighbour")
+        if "bface_nodes" in data and data.bface_owner.numel():
+            mid = data.pos[data.bface_nodes].mean(dim=0)
+            dots = ((mid - cen[data.bface_owner]) * data.bface_normal).sum(dim=1)
+            if not bool((dots > 0).all()):
+                fail("bface_normal does not point out of the owner cell")
+
+    for name in _GRAPH_SCALARS:
+        if name in data and tuple(data[name].shape) != (1, 1):
+            fail(f"{name} must have shape (1, 1)")
+    if "dt" in data and not bool((data.dt > 0).all()):
+        fail("dt must be positive")
     return data
 
 

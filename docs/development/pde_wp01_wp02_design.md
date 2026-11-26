@@ -214,6 +214,37 @@ now uses `scale_only` for `f` and `q`, replacing the hand-written scale factors.
   DDStore and DDStore-feature modes, including batched offsets of faces, cells and boundary faces.
 - Single meshes too large for one device are out of scope until WP11. Record this as a known limitation.
 
+### 3.7 3D meshes, validation and metadata
+
+- `from_tetrahedra(pos, tets)` and `unit_cube_mesh(nx, ny, nz)` (Kuhn split, 6 tets per hexahedron) build 3D
+  `MeshData` with triangular faces (`face_nodes [3, F]`). Triangles and tetrahedra share one face-pairing routine,
+  so orientation (owner to neighbour, outward on the boundary) and batching behave the same in 2D and 3D.
+  MeshGraphNet query heads remain triangle-only.
+- `validate_mesh(data)` checks index ranges, row counts, positive volumes/areas, unit normals, no self-faces, and
+  closure: the outward `normal * area` summed over each cell is zero. A flipped interior normal or a missing face
+  breaks closure.
+- Optional metadata: `material_id [C]` (long, cell-indexed rows), and graph-level `time`, `dt`, `fidelity` of
+  shape `[1, 1]` (batched to `[B, 1]`). `validate_mesh` checks their shapes and `dt > 0`.
+- Units: each `Variables` entry takes an optional `"units"` string. Units are recorded in the config (and thus
+  in checkpoints) and are not converted.
+
+### 3.8 Trajectories
+
+`Trajectory(mesh, times, fields, static=None)` stores fields `[T, rows, dim]` on one shared mesh.
+`snapshot(t)` returns the mesh with fields at step `t` and `time`. `pairs(horizon, stride)` returns one-step
+training samples with targets `<name>_next` at `t + horizon`, plus `time` and `dt`. Samples are clones, so
+they never alias the stored mesh.
+
+### 3.9 Mesh hierarchies
+
+`MeshHierarchy(MeshData)` holds a fine level (plain keys) and a coarse level (`coarse_` prefix) in one sample.
+`fine_to_coarse [C_fine]` maps each fine cell to its coarse parent. By default `build_hierarchy` fills it by
+locating fine centroids in the coarse triangles. `__inc__`/`__cat_dim__` offset coarse cell/node/face indices
+and `fine_to_coarse` by coarse counts, so batching and `to_data_list()` stay consistent.
+`restrict` (volume-weighted mean, which preserves integrals) and `prolong` (piecewise-constant injection,
+with `restrict(prolong(c)) = c`) work on batches. The ADIOS reader rebuilds `MeshHierarchy` from the stored
+`data_class`. Hierarchies deeper than two levels are deferred to WP04, which can nest prefixes.
+
 ## 4. First vertical slice
 
 Goal: `mpnn_type="MeshGraphNet"` trains on a 2D manufactured Poisson problem using the existing `train_validate_test`, and passes the tests below.
@@ -235,6 +266,8 @@ Goal: `mpnn_type="MeshGraphNet"` trains on a 2D manufactured Poisson problem usi
 | `test_meshgraphnet_contract` | added to `tests/test_model_registry.py` parametrization | existing |
 | `test_meshgraphnet_permutation` | node relabelling equivariance | FP64 1e-10 |
 | `test_batched_vs_single` | batched vs per-sample predictions | FP64 1e-12 |
+| `test_mesh_contracts` | tet geometry/closure/orientation; `validate_mesh` rejects corruptions; trajectory pairs; hierarchy restrict/prolong and batching; units | FP64 1e-13 / exact |
+| `test_hierarchy_and_tet_adios_round_trip` | `MeshHierarchy` and tet meshes survive ADIOS write/read and batch identically | exact |
 | `test_poisson_mgn_train` | loss decreases; relative L2 on held-out resolution reported (no fixed threshold until baseline measured) | report |
 
 ### 4.2 GPU runs (Frontier, 1 node)

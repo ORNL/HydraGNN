@@ -38,12 +38,14 @@
       "id": "WP02",
       "title": "Mesh, fields, trajectory, hierarchy contracts",
       "dependencies": ["WP01"],
-      "status": "partial",
-      "pr": 581,
+      "status": "verified",
+      "pr": [581, 583],
       "commit": "e1564c39",
       "design_doc": "docs/development/pde_wp01_wp02_design.md",
       "source_files": [
         "hydragnn/data/meshes/mesh_data.py",
+        "hydragnn/data/meshes/trajectory.py",
+        "hydragnn/data/meshes/hierarchy.py",
         "hydragnn/config/variable_schema.py",
         "hydragnn/preprocess/field_normalizer.py",
         "hydragnn/preprocess/load_data.py",
@@ -54,6 +56,7 @@
       ],
       "tests": [
         "tests/test_mesh_data.py",
+        "tests/test_mesh_contracts.py",
         "tests/test_named_variable_schema.py",
         "tests/test_variable_levels_pde.py",
         "tests/test_field_normalizer.py",
@@ -66,8 +69,8 @@
         "hardware": "Frontier, 1 node, MI250X GCDs, FP64"
       },
       "limitations": [
-        "Trajectory and hierarchy containers are not implemented (needed by WP04/WP09)",
-        "2D triangle meshes only in tests"
+        "Hierarchy supports nested meshes only; conservative transfer between non-nested meshes is deferred",
+        "Normal orientation check assumes convex cells"
       ]
     },
     {
