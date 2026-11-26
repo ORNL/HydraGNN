@@ -15,12 +15,12 @@ from typing import Literal
 
 import torch
 
-VariableLevel = Literal["node", "edge", "graph", "face", "cell"]
+VariableLevel = Literal["node", "edge", "graph", "face", "cell", "query"]
 VariableRole = Literal["feature", "position"]
 GraphType = Literal["homogeneous", "heterogeneous"]
-_LEVELS = frozenset(("node", "edge", "graph", "face", "cell"))
+_LEVELS = frozenset(("node", "edge", "graph", "face", "cell", "query"))
 # Mesh levels need MeshData entity tensors; they are supported as outputs only.
-_MESH_LEVELS = frozenset(("face", "cell"))
+_MESH_LEVELS = frozenset(("face", "cell", "query"))
 _SPATIAL_DIMS = frozenset((1, 2, 3))
 _ROLES = frozenset(("feature", "position"))
 _GRAPH_TYPES = frozenset(("homogeneous", "heterogeneous"))
@@ -42,6 +42,7 @@ _DERIVED_TENSOR_NAMES = frozenset(
         "graph_output",
         "face_output",
         "cell_output",
+        "query_output",
     )
 )
 
@@ -414,6 +415,14 @@ def _expected_rows(data, level: VariableLevel) -> int:
                 "use hydragnn.data.meshes.MeshData"
             )
         return int(cell_size.numel())
+    if level == "query":
+        query_pos = getattr(data, "query_pos", None)
+        if query_pos is None:
+            raise ValueError(
+                "Cannot validate query variables because query_pos is missing; "
+                "use hydragnn.data.meshes.locate_queries"
+            )
+        return int(query_pos.shape[0])
     return 1
 
 

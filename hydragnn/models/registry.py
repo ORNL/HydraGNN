@@ -432,7 +432,7 @@ def _build_uma(p):
 @register_model(
     "MeshGraphNet",
     Capabilities(
-        output_levels=frozenset({"node", "face", "cell"}),
+        output_levels=frozenset({"node", "face", "cell", "query"}),
         requires=frozenset({"pos", "edge_index"}),
         reference="Pfaff et al. 2021, arXiv:2010.03409 (single-mesh variant)",
     ),

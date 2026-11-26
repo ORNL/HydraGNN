@@ -24,6 +24,9 @@ Mesh-level heads (HydraGNN extension, not in the paper) need ``MeshData``:
   ``g(c_o, c_n, n_f) - g(c_n, c_o, -n_f)``, so it changes sign with the face
   orientation and a flux shared by two cells cancels exactly.
 * ``cell``: MLP on the mean node latent of each cell.
+* ``query``: MLP on the node latent linearly interpolated (barycentric
+  weights) at ``query_pos`` inside the triangle ``query_cell``; see
+  :func:`hydragnn.data.meshes.locate_queries`. Triangle meshes only.
 """
 
 import torch
@@ -62,7 +65,7 @@ class _ProcessorStep(nn.Module):
 
 
 class MeshGraphNet(OperatorBase):
-    supported_output_levels = frozenset({"node", "face", "cell"})
+    supported_output_levels = frozenset({"node", "face", "cell", "query"})
 
     def __init__(
         self,
@@ -81,10 +84,14 @@ class MeshGraphNet(OperatorBase):
         super().__init__(output_dim, output_type, loss_function_type, loss_weights)
         if mlp_layers < 1:
             raise ValueError("mgn_mlp_layers must be >= 1")
+        if "query" in self.head_type and spatial_dim != 2:
+            raise ValueError("MeshGraphNet query heads need mgn_spatial_dim=2")
         self.spatial_dim = spatial_dim
         self.conservative_faces = conservative_faces
         act = activation_function_selection(activation_function)
-        self.node_encoder = _mlp(input_dim, hidden_dim, hidden_dim, mlp_layers, act, True)
+        self.node_encoder = _mlp(
+            input_dim, hidden_dim, hidden_dim, mlp_layers, act, True
+        )
         self.edge_encoder = _mlp(
             spatial_dim + 1, hidden_dim, hidden_dim, mlp_layers, act, True
         )
@@ -95,6 +102,7 @@ class MeshGraphNet(OperatorBase):
         in_dims = {
             "node": hidden_dim,
             "cell": hidden_dim,
+            "query": hidden_dim,
             "face": 2 * hidden_dim + spatial_dim + 2,
         }
         self.decoders = nn.ModuleList(
@@ -128,6 +136,8 @@ class MeshGraphNet(OperatorBase):
                 outputs.append(decoder(node))
             elif level == "cell":
                 outputs.append(decoder(self._cell_latent(node, data)))
+            elif level == "query":
+                outputs.append(decoder(self._query_latent(node, data)))
             else:
                 outputs.append(self._decode_face(decoder, dim, node, data))
         return outputs
@@ -138,9 +148,24 @@ class MeshGraphNet(OperatorBase):
         total.index_add_(0, cells, node[data.cell_conn])
         return total / data.cell_size.unsqueeze(1).to(node.dtype)
 
+    def _query_latent(self, node, data):
+        # cell_conn offsets stay aligned with triangles after batching.
+        tri = data.cell_conn.view(-1, 3)[data.query_cell]
+        corners = data.pos[tri][..., :2].to(node.dtype)
+        a, b, c = corners[:, 0], corners[:, 1], corners[:, 2]
+        v0, v1 = b - a, c - a
+        rel = data.query_pos[:, :2].to(node.dtype) - a
+        det = v0[:, 0] * v1[:, 1] - v0[:, 1] * v1[:, 0]
+        l1 = (rel[:, 0] * v1[:, 1] - rel[:, 1] * v1[:, 0]) / det
+        l2 = (v0[:, 0] * rel[:, 1] - v0[:, 1] * rel[:, 0]) / det
+        weights = torch.stack([1 - l1 - l2, l1, l2], dim=1)
+        return (weights.unsqueeze(-1) * node[tri]).sum(dim=1)
+
     def _decode_face(self, decoder, dim, node, data):
         cell = self._cell_latent(node, data)
-        centroid = self._cell_latent(data.pos[:, : self.spatial_dim].to(node.dtype), data)
+        centroid = self._cell_latent(
+            data.pos[:, : self.spatial_dim].to(node.dtype), data
+        )
         o, n = data.face_index
         normal = data.face_normal[:, : self.spatial_dim].to(node.dtype)
         area = data.face_area.to(node.dtype)

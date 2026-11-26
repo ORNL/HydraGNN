@@ -22,6 +22,9 @@ Entity tensors (all optional except ``pos``):
 * boundary faces: ``bface_owner [Fb]`` (cell id), ``bface_normal [Fb, d]``
   (outward unit), ``bface_area [Fb, 1]``, ``bface_tag [Fb]``,
   ``bface_nodes [k, Fb]``
+* query points (off-mesh outputs): ``query_pos [Q, d]`` and
+  ``query_cell [Q]``, the id of the cell containing each point; see
+  :func:`locate_queries`
 
 Cell connectivity is stored as sizes rather than CSR pointers so PyG can
 concatenate it without offset bookkeeping; use :func:`cell_offsets`.
@@ -30,7 +33,7 @@ concatenate it without offset bookkeeping; use :func:`cell_offsets`.
 import torch
 from torch_geometric.data import Data
 
-_CELL_INDEXED = frozenset({"face_index", "bface_owner"})
+_CELL_INDEXED = frozenset({"face_index", "bface_owner", "query_cell"})
 _NODE_INDEXED = frozenset({"cell_conn", "face_nodes", "bface_nodes"})
 _FACE_COLUMNS = frozenset({"face_index", "face_nodes", "bface_nodes"})
 
@@ -72,6 +75,37 @@ def cell_batch(data):
     if batch is None:
         return torch.zeros(data.num_cells, dtype=torch.long, device=data.pos.device)
     return batch[data.cell_conn[cell_offsets(data)]]
+
+
+def query_batch(data):
+    """Graph id of every query point (zeros for an unbatched mesh)."""
+    return cell_batch(data)[data.query_cell]
+
+
+def locate_queries(data, query_pos, eps=1e-9):
+    """Attach ``query_pos`` and the containing triangle ``query_cell`` to ``data``.
+
+    Brute force over all cells (O(Q * C) memory), meant for preprocessing.
+    Points on a shared edge go to the lowest cell id. Raises if a point lies
+    outside the mesh.
+    """
+    if not bool((data.cell_size == 3).all()):
+        raise ValueError("locate_queries supports triangle meshes only")
+    query_pos = torch.as_tensor(query_pos, dtype=data.pos.dtype)
+    tri = data.pos[data.cell_conn.view(-1, 3)]
+    a, b, c = tri[:, 0], tri[:, 1], tri[:, 2]
+    v0, v1 = b - a, c - a
+    det = v0[:, 0] * v1[:, 1] - v0[:, 1] * v1[:, 0]
+    rel = query_pos[:, None, :] - a[None]
+    l1 = (rel[..., 0] * v1[:, 1] - rel[..., 1] * v1[:, 0]) / det
+    l2 = (v0[:, 0] * rel[..., 1] - v0[:, 1] * rel[..., 0]) / det
+    inside = (l1 >= -eps) & (l2 >= -eps) & (l1 + l2 <= 1 + eps)
+    found = inside.any(dim=1)
+    if not bool(found.all()):
+        raise ValueError(f"{int((~found).sum())} query points lie outside the mesh")
+    data.query_pos = query_pos
+    data.query_cell = inside.to(torch.int8).argmax(dim=1)
+    return data
 
 
 def cell_of_conn(data):

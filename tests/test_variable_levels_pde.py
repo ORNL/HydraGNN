@@ -8,7 +8,7 @@ from hydragnn.config.variable_schema import (
     parse_variable_schema,
     prepare_data_from_schema,
 )
-from hydragnn.data.meshes import unit_square_mesh
+from hydragnn.data.meshes import locate_queries, query_batch, unit_square_mesh
 
 pytestmark = pytest.mark.mpi_skip()
 
@@ -80,7 +80,7 @@ def test_invalid_spatial_dim(value):
         parse_variable_schema(variables)
 
 
-@pytest.mark.parametrize("level", ["face", "cell"])
+@pytest.mark.parametrize("level", ["face", "cell", "query"])
 def test_mesh_levels_rejected_as_inputs(level):
     inputs = [
         {"name": "pos", "level": "node", "dim": 2, "role": "position"},
@@ -127,9 +127,49 @@ def test_face_output_shape_is_validated():
         prepare_data_from_schema(mesh, schema)
 
 
-@pytest.mark.parametrize("level,missing", [("face", "face_index"), ("cell", "cell_size")])
+def test_query_output_compiles_and_batches():
+    schema = parse_variable_schema(
+        _variables(
+            [
+                {"name": "u", "level": "node", "dim": 1},
+                {"name": "uq", "level": "query", "dim": 1},
+            ]
+        )
+    )
+    meshes = []
+    for nq in (5, 3):
+        mesh = locate_queries(_mesh(), torch.rand(nq, 2))
+        mesh.uq = torch.randn(nq, 1)
+        meshes.append(prepare_data_from_schema(mesh, schema))
+    n = meshes[0].num_nodes
+    assert meshes[0].y_loc.tolist() == [[0, n, n + 5]]
+    torch.testing.assert_close(meshes[0].query_output, meshes[0].uq)
+    batch = Batch.from_data_list(meshes)
+    assert batch.query_output.shape == (8, 1)
+    c = meshes[0].num_cells
+    torch.testing.assert_close(
+        batch.query_cell, torch.cat([meshes[0].query_cell, meshes[1].query_cell + c])
+    )
+    assert query_batch(batch).tolist() == [0] * 5 + [1] * 3
+
+
+def test_locate_queries_finds_containing_triangle():
+    mesh = unit_square_mesh(4, 3, dtype=torch.float64)
+    centroids = mesh.cell_centroid
+    located = locate_queries(mesh.clone(), centroids)
+    assert located.query_cell.tolist() == list(range(mesh.num_cells))
+    with pytest.raises(ValueError, match="outside the mesh"):
+        locate_queries(mesh.clone(), torch.tensor([[1.5, 0.5]], dtype=torch.float64))
+
+
+@pytest.mark.parametrize(
+    "level,missing",
+    [("face", "face_index"), ("cell", "cell_size"), ("query", "query_pos")],
+)
 def test_mesh_outputs_require_mesh_data(level, missing):
-    schema = parse_variable_schema(_variables([{"name": "t", "level": level, "dim": 1}]))
+    schema = parse_variable_schema(
+        _variables([{"name": "t", "level": level, "dim": 1}])
+    )
     data = Data(
         pos=torch.zeros(3, 2),
         f=torch.zeros(3, 1),

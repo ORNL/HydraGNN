@@ -4,7 +4,7 @@ import pytest
 import torch
 from torch_geometric.data import Batch
 
-from hydragnn.data.meshes import unit_square_mesh
+from hydragnn.data.meshes import locate_queries, unit_square_mesh
 from hydragnn.models.create import create_model
 from hydragnn.models.registry import Capabilities, get_capabilities
 
@@ -48,7 +48,7 @@ def model():
 
 def test_capabilities():
     caps = get_capabilities("MeshGraphNet")
-    assert caps.output_levels == frozenset({"node", "face", "cell"})
+    assert caps.output_levels == frozenset({"node", "face", "cell", "query"})
     assert "pos" in caps.requires
     assert get_capabilities("GIN") == Capabilities()
 
@@ -83,7 +83,10 @@ def test_create_model_rejects_mesh_levels_for_legacy_models():
     with pytest.raises(ValueError, match=r"GIN cannot predict \['face'\]"):
         create_model(
             **_args(
-                mpnn_type="GIN", output_dim=[1], output_type=["face"], task_weights=[1.0]
+                mpnn_type="GIN",
+                output_dim=[1],
+                output_type=["face"],
+                task_weights=[1.0],
             )
         )
 
@@ -127,7 +130,9 @@ def test_conservative_face_head_is_antisymmetric():
     net = torch.zeros(mesh.num_cells, 2, dtype=torch.float64)
     net.index_add_(0, mesh.face_index[0], face)
     net.index_add_(0, mesh.face_index[1], -face)
-    torch.testing.assert_close(net.sum(0), torch.zeros(2, dtype=torch.float64), rtol=0, atol=1e-12)
+    torch.testing.assert_close(
+        net.sum(0), torch.zeros(2, dtype=torch.float64), rtol=0, atol=1e-12
+    )
 
 
 def test_non_conservative_face_head_is_not_antisymmetric():
@@ -146,6 +151,48 @@ def test_mesh_heads_batched_equals_single():
     for head in range(3):
         expected = torch.cat([out[head] for out in singles])
         torch.testing.assert_close(batched[head], expected, rtol=0, atol=1e-12)
+
+
+def _query_model(**overrides):
+    args = _args(output_dim=[1, 1], output_type=["node", "query"])
+    args.update(overrides)
+    return create_model(**args).double().eval()
+
+
+def _query_mesh(nx, ny, nq, seed):
+    mesh = _mesh(nx, ny, seed, torch.float64)
+    g = torch.Generator().manual_seed(seed + 100)
+    return locate_queries(mesh, torch.rand(nq, 2, generator=g, dtype=torch.float64))
+
+
+def test_query_head_interpolates_node_latent():
+    model = _query_model()
+    mesh = _mesh(3, 2, 0, torch.float64)
+    mesh = locate_queries(mesh, mesh.pos.clone())
+    with torch.no_grad():
+        state = model.process(model.encode(mesh), mesh)
+        latent = model._query_latent(state["node"], mesh)
+    # At mesh nodes the barycentric interpolant returns the node latent.
+    torch.testing.assert_close(latent, state["node"], rtol=0, atol=1e-12)
+    node, query = model(mesh)
+    assert query.shape == (mesh.num_nodes, 1)
+
+
+def test_query_head_batched_equals_single():
+    model = _query_model()
+    meshes = [_query_mesh(2, 3, 4, 1), _query_mesh(3, 1, 6, 2)]
+    with torch.no_grad():
+        batched = model(Batch.from_data_list(meshes))
+        singles = [model(m) for m in meshes]
+    assert batched[1].shape == (10, 1)
+    for head in range(2):
+        expected = torch.cat([out[head] for out in singles])
+        torch.testing.assert_close(batched[head], expected, rtol=0, atol=1e-12)
+
+
+def test_query_head_requires_2d():
+    with pytest.raises(ValueError, match="mgn_spatial_dim=2"):
+        _query_model(mgn_spatial_dim=3)
 
 
 def test_conservative_face_head_gaussian_variance_positive():
