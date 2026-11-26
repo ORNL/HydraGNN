@@ -329,11 +329,13 @@ def validate_mesh(data, atol=1e-10):
             fail(f"{prefix}_normal is not unit length")
         nodes = data.get(f"{prefix}_nodes")
         if nodes is not None and (
-            nodes.shape[1] != rows
+            nodes.dtype != torch.long
+            or nodes.dim() != 2
+            or nodes.shape[1] != rows
             or nodes.numel()
             and (int(nodes.min()) < 0 or int(nodes.max()) >= n)
         ):
-            fail(f"{prefix}_nodes has wrong shape or out-of-range ids")
+            fail(f"{prefix}_nodes must be a 2D long tensor of in-range node ids")
     if "face_index" in data and bool((data.face_index[0] == data.face_index[1]).any()):
         fail("face_index connects a cell to itself")
     if "bface_tag" in data and data.bface_tag.shape != data.bface_owner.shape:

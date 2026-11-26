@@ -126,6 +126,10 @@ def test_tet_batching_offsets():
             "query_pos",
         ),
         (lambda m: setattr(m, "query_cell", torch.tensor([0])), "together"),
+        (lambda m: setattr(m, "bface_nodes", m.bface_nodes.float()), "bface_nodes"),
+        (lambda m: setattr(m, "bface_nodes", m.bface_nodes[0]), "bface_nodes"),
+        (lambda m: setattr(m, "face_nodes", m.face_nodes.float()), "face_nodes"),
+        (lambda m: setattr(m, "face_nodes", m.face_nodes[0]), "face_nodes"),
     ],
 )
 def test_validate_mesh_rejects(corrupt, match):
