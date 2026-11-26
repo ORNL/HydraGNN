@@ -42,7 +42,11 @@ def _mlp(in_dim, hidden_dim, out_dim, num_layers, activation, layer_norm):
     layers = []
     dim = in_dim
     for _ in range(num_layers - 1):
-        layers += [nn.Linear(dim, hidden_dim), activation]
+        # Fresh instance per layer so learnable activations (PReLU) are not shared.
+        layers += [
+            nn.Linear(dim, hidden_dim),
+            activation_function_selection(activation),
+        ]
         dim = hidden_dim
     layers.append(nn.Linear(dim, out_dim))
     if layer_norm:
@@ -89,7 +93,7 @@ class MeshGraphNet(OperatorBase):
             raise ValueError("MeshGraphNet query heads need mgn_spatial_dim=2")
         self.spatial_dim = spatial_dim
         self.conservative_faces = conservative_faces
-        act = activation_function_selection(activation_function)
+        act = activation_function
         self.node_encoder = _mlp(
             input_dim, hidden_dim, hidden_dim, mlp_layers, act, True
         )
@@ -154,6 +158,8 @@ class MeshGraphNet(OperatorBase):
         return total / data.cell_size.unsqueeze(1).to(node.dtype)
 
     def _query_latent(self, node, data):
+        if not bool((data.cell_size == 3).all()):
+            raise ValueError("MeshGraphNet query heads support triangle meshes only")
         # cell_conn offsets stay aligned with triangles after batching.
         tri = data.cell_conn.view(-1, 3)[data.query_cell]
         # Geometry stays in coordinate precision; only the weights are cast,

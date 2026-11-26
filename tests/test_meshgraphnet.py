@@ -207,6 +207,25 @@ def test_freeze_conv_freezes_trunk_only():
     assert all(p.requires_grad for p in model.decoders.parameters())
 
 
+def test_prelu_not_shared_across_mlps():
+    model = create_model(**_args(activation_function="prelu", freeze_conv=True))
+    prelus = [m for m in model.modules() if isinstance(m, torch.nn.PReLU)]
+    assert len({id(m) for m in prelus}) == len(prelus) > 1
+    decoder_prelus = [
+        m for m in model.decoders.modules() if isinstance(m, torch.nn.PReLU)
+    ]
+    assert decoder_prelus and all(m.weight.requires_grad for m in decoder_prelus)
+
+
+def test_query_head_rejects_non_triangle_cells():
+    model = _query_model()
+    mesh = _query_mesh(3, 2, 4, 0)
+    # 12 triangles relabelled as 9 quads: reshape to triangles would succeed.
+    mesh.cell_size = torch.full((9,), 4, dtype=torch.long)
+    with pytest.raises(ValueError, match="triangle meshes only"):
+        model._query_latent(torch.zeros(mesh.num_nodes, 16), mesh)
+
+
 def test_query_head_requires_2d():
     with pytest.raises(ValueError, match="mgn_spatial_dim=2"):
         _query_model(mgn_spatial_dim=3)

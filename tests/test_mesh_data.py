@@ -27,8 +27,12 @@ def test_unit_square_counts_and_geometry():
     assert mesh.num_faces + mesh.bface_owner.numel() == edges
     assert mesh.bface_owner.numel() == 2 * (nx + ny)
     assert mesh.edge_index.shape[1] == 2 * edges
-    torch.testing.assert_close(mesh.cell_volume.sum(), torch.tensor(1.0, dtype=torch.float64))
-    torch.testing.assert_close(mesh.bface_area.sum(), torch.tensor(4.0, dtype=torch.float64))
+    torch.testing.assert_close(
+        mesh.cell_volume.sum(), torch.tensor(1.0, dtype=torch.float64)
+    )
+    torch.testing.assert_close(
+        mesh.bface_area.sum(), torch.tensor(4.0, dtype=torch.float64)
+    )
     torch.testing.assert_close(
         mesh.face_normal.norm(dim=1), torch.ones(mesh.num_faces, dtype=torch.float64)
     )
@@ -77,17 +81,13 @@ def test_batching_preserves_entity_indices():
     assert batch.face_index.shape[1] == sum(m.num_faces for m in meshes)
 
     graph_of_cell = cell_batch(batch)
-    expected = torch.cat(
-        [torch.full((m.num_cells,), i) for i, m in enumerate(meshes)]
-    )
+    expected = torch.cat([torch.full((m.num_cells,), i) for i, m in enumerate(meshes)])
     assert torch.equal(graph_of_cell, expected)
     # Faces never cross graphs.
     assert torch.equal(
         graph_of_cell[batch.face_index[0]], graph_of_cell[batch.face_index[1]]
     )
-    assert torch.equal(
-        batch.batch[batch.cell_conn[cell_offsets(batch)]], graph_of_cell
-    )
+    assert torch.equal(batch.batch[batch.cell_conn[cell_offsets(batch)]], graph_of_cell)
     torch.testing.assert_close(
         _divergence_of_constant(batch),
         torch.zeros(batch.num_cells, 2, dtype=torch.float64),
@@ -120,8 +120,21 @@ def test_clockwise_input_is_reoriented():
 def test_rejects_degenerate_and_non_manifold():
     from hydragnn.data.meshes import from_triangles
 
-    pos = torch.tensor([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [0.0, 1.0], [0.0, -1.0], [1.0, 1.0]])
+    pos = torch.tensor(
+        [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [0.0, 1.0], [0.0, -1.0], [1.0, 1.0]]
+    )
     with pytest.raises(ValueError, match="degenerate"):
         from_triangles(pos, torch.tensor([[0, 1, 2]]))
     with pytest.raises(ValueError, match="non-manifold"):
         from_triangles(pos, torch.tensor([[0, 1, 3], [0, 1, 4], [0, 1, 5]]))
+
+
+@pytest.mark.parametrize("bad", [-1, 6])
+def test_rejects_out_of_range_triangle_indices(bad):
+    from hydragnn.data.meshes import from_triangles
+
+    pos = torch.tensor(
+        [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [0.0, 1.0], [0.0, -1.0], [1.0, 1.0]]
+    )
+    with pytest.raises(ValueError, match=r"must lie in \[0, 6\)"):
+        from_triangles(pos, torch.tensor([[0, 1, bad]]))

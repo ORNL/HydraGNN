@@ -125,6 +125,53 @@ def test_metadata_path_is_branch_aware(tmp_path, monkeypatch):
     assert loaded == config
 
 
+class _FakeDeepSpeedEngine(torch.nn.Module):
+    """Stores client_state like DeepSpeed's save/load_checkpoint."""
+
+    store = {}
+
+    def save_checkpoint(self, save_dir, tag, client_state=None):
+        self.store[(save_dir, tag)] = dict(client_state or {})
+
+    def load_checkpoint(self, load_dir, tag):
+        return load_dir, dict(self.store.get((load_dir, tag), {}))
+
+
+def test_deepspeed_round_trips_metadata(tmp_path):
+    normalizer = FieldNormalizer(
+        {"f": {"policy": "scale_only", "shift": 0.0, "scale": 3.0}}
+    )
+    loader = SimpleNamespace(dataset=SimpleNamespace(normalizer=normalizer))
+    engine = _FakeDeepSpeedEngine()
+    save_model(
+        engine,
+        None,
+        "ds",
+        path=str(tmp_path),
+        use_deepspeed=True,
+        metadata=checkpoint_metadata(_config(), loader),
+    )
+    saved = load_and_validate(
+        engine,
+        "ds",
+        _config(),
+        path=str(tmp_path),
+        normalizer=normalizer,
+        strict=True,
+        use_deepspeed=True,
+    )
+    assert saved.state_dict() == normalizer.state_dict()
+    with pytest.raises(ValueError, match="hidden_dim"):
+        load_and_validate(
+            engine,
+            "ds",
+            _config(hidden_dim=16),
+            path=str(tmp_path),
+            strict=True,
+            use_deepspeed=True,
+        )
+
+
 def test_normalized_outputs_rejected_with_interatomic_loss():
     from hydragnn.config.config_utils import reject_normalized_derivative_outputs
     from hydragnn.config import parse_variable_schema

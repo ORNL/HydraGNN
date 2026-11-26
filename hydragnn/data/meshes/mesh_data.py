@@ -127,6 +127,9 @@ def from_triangles(pos, triangles, **fields):
         raise ValueError("from_triangles expects pos of shape [N, 2]")
     if tri.dim() != 2 or tri.shape[1] != 3:
         raise ValueError("from_triangles expects triangles of shape [C, 3]")
+    if tri.numel() and (tri.min() < 0 or tri.max() >= pos.shape[0]):
+        # Negative indices would be offset by batching into another mesh.
+        raise ValueError(f"triangle indices must lie in [0, {pos.shape[0]})")
 
     # Counter-clockwise orientation gives positive signed area.
     a, b, c = pos[tri[:, 0]], pos[tri[:, 1]], pos[tri[:, 2]]

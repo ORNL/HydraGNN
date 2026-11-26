@@ -139,12 +139,15 @@ def load_checkpoint_metadata(model_name, path="./logs/", model=None):
     ``<name>_branch<id>.pk`` file, as in ``load_existing_model``. Checkpoints
     written before these entries existed yield ``None`` values.
     """
+    path_name = _checkpoint_file(model, model_name, path)
+    return _parse_metadata(torch.load(path_name, map_location="cpu", weights_only=True))
+
+
+def _parse_metadata(checkpoint):
     import json
 
     from hydragnn.preprocess.field_normalizer import FieldNormalizer
 
-    path_name = _checkpoint_file(model, model_name, path)
-    checkpoint = torch.load(path_name, map_location="cpu", weights_only=True)
     config = checkpoint.get("config")
     state = checkpoint.get("normalizer")
     return (
@@ -226,25 +229,34 @@ def load_and_validate(
     """
     import warnings
 
-    saved_normalizer = None
-    if not use_deepspeed:
+    if use_deepspeed:
+        # DeepSpeed keeps metadata in client_state, readable only by loading,
+        # so validation happens after the weights are restored.
+        _, client_state = model.load_checkpoint(
+            os.path.join(path, model_name), model_name
+        )
+        saved_config, saved_version, saved_normalizer = _parse_metadata(
+            client_state or {}
+        )
+    else:
         saved_config, saved_version, saved_normalizer = load_checkpoint_metadata(
             model_name, path, model
         )
-        if saved_config is None:
-            print_master(f"Checkpoint {model_name} has no metadata; not validated")
-        problems = checkpoint_mismatches(
-            config, saved_config, saved_version, saved_normalizer, normalizer
+    if saved_config is None:
+        print_master(f"Checkpoint {model_name} has no metadata; not validated")
+    problems = checkpoint_mismatches(
+        config, saved_config, saved_version, saved_normalizer, normalizer
+    )
+    if problems:
+        message = (
+            f"Checkpoint {model_name} does not match the current run:\n  "
+            + "\n  ".join(problems)
         )
-        if problems:
-            message = (
-                f"Checkpoint {model_name} does not match the current run:\n  "
-                + "\n  ".join(problems)
-            )
-            if strict:
-                raise ValueError(message)
-            warnings.warn(message)
-    load_existing_model(model, model_name, path, optimizer, use_deepspeed=use_deepspeed)
+        if strict:
+            raise ValueError(message)
+        warnings.warn(message)
+    if not use_deepspeed:
+        load_existing_model(model, model_name, path, optimizer)
     return saved_normalizer
 
 
@@ -337,7 +349,9 @@ def save_model(
                 os.symlink(fname, link)
         dist.barrier()
     else:
-        model.save_checkpoint(os.path.join(path, name), name)
+        model.save_checkpoint(
+            os.path.join(path, name), name, client_state=dict(metadata or {})
+        )
 
 
 def get_summary_writer(name, path="./logs/"):
