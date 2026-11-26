@@ -1,7 +1,7 @@
 # PDE extension: WP01/WP02 design
 
 Status: partially implemented. Slice 1 (MeshData, OperatorBase, MeshGraphNet, Poisson example) and slice 2
-(face/cell outputs, `Variables.spatial_dim`) are done; `query` level, normalizers and storage are not. Base commit `d751d688` (ORNL/HydraGNN `main`, 2026-11-25).
+(face/cell outputs, `Variables.spatial_dim`) and slice 3 (`FieldNormalizer`) are done; the `query` level, checkpoint storage of the normalizer, and dataset storage are not. Base commit `d751d688` (ORNL/HydraGNN `main`, 2026-11-25).
 Scope: WP01 (registry, configuration, compatibility baseline) and WP02 (mesh/field data contracts),
 plus the minimum needed for the first vertical slice (MeshGraphNets on a manufactured Poisson problem).
 
@@ -179,6 +179,14 @@ Today min-max scaling is dataset-global per head. Add a `FieldNormalizer` stored
 - Statistics are fitted on the training split only.
 - Vector and tensor fields use one scale per field, not per component, to preserve rotation equivariance.
 - Inverse transforms are applied before any physics residual is computed.
+
+Implemented in `hydragnn/preprocess/field_normalizer.py`. Each variable entry takes an optional
+`"normalize"` key (default `"none"`; positions and encoded inputs are rejected). Fitting happens in
+`create_dataloaders` on the training split, with statistics reduced across MPI ranks, and the normalizer
+is applied in `SchemaPreparedDataset` before `x`/`y` are compiled. The fitted normalizer is reachable as
+`loader.dataset.normalizer` and serializes through `state_dict()`. It is not yet written to checkpoints.
+No default policy is inferred, so fluxes must opt in to `scale_only` explicitly. The Poisson example
+now uses `scale_only` for `f` and `q`, replacing the hand-written scale factors.
 
 ### 3.6 Data storage
 

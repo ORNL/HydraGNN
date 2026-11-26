@@ -12,11 +12,13 @@
 
 Each sample is a manufactured solution
 ``u = a sin(kπx) sin(lπy)``, ``f = (k² + l²) π² u`` on a triangulated unit
-square whose resolution varies per sample. The model maps (f scaled to O(1),
-boundary flag) on mesh nodes to u. With ``poisson_mgn_flux.json`` it also
-predicts the diffusive flux ``q = -∇u·n A`` through every interior face
-(midpoint rule, scaled to O(1)). After training, the relative L2 error of
-each output is reported on held-out samples at a finer, unseen resolution.
+square whose resolution varies per sample. The model maps (f, boundary flag)
+on mesh nodes to u. With ``poisson_mgn_flux.json`` it also predicts the
+diffusive flux ``q = -∇u·n A`` through every interior face (midpoint rule,
+multiplied by the resolution n so it is O(1) at every resolution). f and q
+use the ``scale_only`` normalization fitted on the training split. After
+training, the relative L2 error of each output, in physical units, is reported
+on held-out samples at a finer, unseen resolution.
 """
 
 import argparse
@@ -43,7 +45,7 @@ def manufactured_sample(n, generator, max_mode=2):
     x, y = mesh.pos[:, 0], mesh.pos[:, 1]
     u = amplitude * torch.sin(k * math.pi * x) * torch.sin(l * math.pi * y)
     f = (k * k + l * l) * math.pi**2 * u
-    mesh.f = (f / (2 * math.pi**2 * max_mode**2)).unsqueeze(1)
+    mesh.f = f.unsqueeze(1)
     mesh.boundary = mesh.boundary_node_mask.float().unsqueeze(1)
     mesh.u = u.unsqueeze(1)
 
@@ -52,8 +54,8 @@ def manufactured_sample(n, generator, max_mode=2):
     cx, cy = torch.cos(k * math.pi * mid[:, 0]), torch.cos(l * math.pi * mid[:, 1])
     grad = amplitude * math.pi * torch.stack([k * cx * sy, l * sx * cy], dim=1)
     q = -(grad * mesh.face_normal).sum(dim=1, keepdim=True) * mesh.face_area
-    # A_f ~ 1/n, so q * n is O(1) across resolutions.
-    mesh.q = q * n / (math.pi * max_mode)
+    # A_f ~ 1/n, so q * n has the same magnitude across resolutions.
+    mesh.q = q * n
     return mesh
 
 
@@ -65,8 +67,8 @@ def make_dataset(num_samples, resolutions, seed):
     ]
 
 
-def relative_l2(model, loader, names, device):
-    """Relative L2 error per output head, keyed by variable name."""
+def relative_l2(model, loader, names, device, normalizer=None):
+    """Relative L2 error per output head in physical units, keyed by name."""
     model.eval()
     num = dict.fromkeys(names, 0.0)
     den = dict.fromkeys(names, 0.0)
@@ -75,6 +77,9 @@ def relative_l2(model, loader, names, device):
             data = data.to(device)
             for name, pred in zip(names, model(data)):
                 true = data[name]
+                if normalizer is not None:
+                    pred = normalizer.inverse(name, pred)
+                    true = normalizer.inverse(name, true)
                 num[name] += float(((pred - true) ** 2).sum())
                 den[name] += float((true**2).sum())
     return {name: math.sqrt(num[name] / den[name]) for name in names}
@@ -135,19 +140,20 @@ def main(num_samples=240, num_epoch=None, config_name="poisson_mgn.json"):
     )
 
     schema = hydragnn.config.parse_variable_schema(config["Variables"])
+    test_set = test_loader.dataset
+    normalizer = test_set.normalizer
     heldout = SchemaPreparedDataset(
-        make_dataset(16, (HELDOUT_RESOLUTION,), seed=2), schema
+        make_dataset(16, (HELDOUT_RESOLUTION,), seed=2), schema, normalizer
     )
     device = next(model.parameters()).device
     names = [spec.name for spec in schema.outputs]
-    test_set = test_loader.dataset
     results = {
         "test_rel_l2": relative_l2(
-            model, DataLoader(test_set, batch_size=16), names, device
+            model, DataLoader(test_set, batch_size=16), names, device, normalizer
         ),
         "heldout_resolution": HELDOUT_RESOLUTION,
         "heldout_rel_l2": relative_l2(
-            model, DataLoader(heldout, batch_size=16), names, device
+            model, DataLoader(heldout, batch_size=16), names, device, normalizer
         ),
     }
     hydragnn.utils.print.print_utils.print_master(json.dumps(results))

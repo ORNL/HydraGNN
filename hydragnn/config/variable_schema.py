@@ -25,6 +25,7 @@ _SPATIAL_DIMS = frozenset((1, 2, 3))
 _ROLES = frozenset(("feature", "position"))
 _GRAPH_TYPES = frozenset(("homogeneous", "heterogeneous"))
 _ENCODING_TYPES = frozenset(("embedding", "one_hot"))
+NORMALIZE_POLICIES = frozenset(("none", "minmax", "standard", "scale_only"))
 _DERIVED_TENSOR_NAMES = frozenset(
     (
         "x",
@@ -67,6 +68,8 @@ class VariableSpec:
     node_type: str | None = None
     # Optional semantic names for the columns of a multi-dimensional variable.
     components: tuple[str, ...] = ()
+    # Policy applied by hydragnn.preprocess.FieldNormalizer.
+    normalize: str = "none"
 
 
 @dataclass(frozen=True)
@@ -101,6 +104,7 @@ def _parse_group(
             "encoding",
             "node_type",
             "components",
+            "normalize",
         }
         missing = {"name", "level", "dim"} - set(raw)
         if missing:
@@ -115,6 +119,7 @@ def _parse_group(
         raw_encoding = raw.get("encoding")
         node_type = raw.get("node_type")
         raw_components = raw.get("components")
+        normalize = raw.get("normalize", "none")
         if not isinstance(name, str) or not name.strip():
             raise ValueError(f"{path}.name must be a non-empty string")
         if level not in _LEVELS:
@@ -206,6 +211,14 @@ def _parse_group(
             )
         if group == "inputs" and name == "pos" and role != "position":
             raise ValueError(f"{path} named 'pos' must declare role 'position'")
+        if normalize not in NORMALIZE_POLICIES:
+            raise ValueError(
+                f"{path}.normalize must be one of {sorted(NORMALIZE_POLICIES)}"
+            )
+        if normalize != "none" and (role == "position" or encoding is not None):
+            raise ValueError(
+                f"{path}.normalize is not supported for positions or encoded inputs"
+            )
         parsed.append(
             VariableSpec(
                 name=name,
@@ -215,6 +228,7 @@ def _parse_group(
                 encoding=encoding,
                 node_type=node_type,
                 components=components,
+                normalize=normalize,
             )
         )
     return tuple(parsed)

@@ -35,6 +35,7 @@ from .load_data import (
     HydraDataLoader,
     build_dataset_on_rank_zero,
 )
+from .field_normalizer import FieldNormalizer
 from .graph_dataset import (
     load_prepared_graph_dataset,
     load_pickled_graphs,

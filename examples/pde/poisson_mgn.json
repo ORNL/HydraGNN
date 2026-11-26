@@ -58,7 +58,8 @@
       {
         "name": "f",
         "level": "node",
-        "dim": 1
+        "dim": 1,
+        "normalize": "scale_only"
       },
       {
         "name": "boundary",

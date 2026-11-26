@@ -59,7 +59,8 @@
       {
         "name": "f",
         "level": "node",
-        "dim": 1
+        "dim": 1,
+        "normalize": "scale_only"
       },
       {
         "name": "boundary",
@@ -76,7 +77,8 @@
       {
         "name": "q",
         "level": "face",
-        "dim": 1
+        "dim": 1,
+        "normalize": "scale_only"
       }
     ],
     "spatial_dim": 2
