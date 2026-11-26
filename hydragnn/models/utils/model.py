@@ -106,7 +106,46 @@ def multitask_optim_state_dict(model, optimizer):
     return optimizer_state_dict
 
 
-def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
+def checkpoint_metadata(config, train_loader=None):
+    """Extra checkpoint entries: resolved config, schema version, normalizer."""
+    import json
+
+    from hydragnn.config.variable_schema import SCHEMA_VERSION
+
+    normalizer = getattr(getattr(train_loader, "dataset", None), "normalizer", None)
+    return {
+        # Stored as JSON text so torch.load(weights_only=True) can read it.
+        "config": json.dumps(
+            config, default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o)
+        ),
+        "schema_version": SCHEMA_VERSION,
+        "normalizer": None if normalizer is None else normalizer.state_dict(),
+    }
+
+
+def load_checkpoint_metadata(model_name, path="./logs/"):
+    """Return (config, schema_version, normalizer) from a checkpoint.
+
+    Checkpoints written before these entries existed yield ``None`` values.
+    """
+    import json
+
+    from hydragnn.preprocess.field_normalizer import FieldNormalizer
+
+    path_name = os.path.join(path, model_name, model_name + ".pk")
+    checkpoint = torch.load(path_name, map_location="cpu", weights_only=True)
+    config = checkpoint.get("config")
+    state = checkpoint.get("normalizer")
+    return (
+        None if config is None else json.loads(config),
+        checkpoint.get("schema_version"),
+        None if state is None else FieldNormalizer.from_state_dict(state),
+    )
+
+
+def save_model(
+    model, optimizer, name, path="./logs/", use_deepspeed=False, metadata=None
+):
     """Save both model and optimizer state in a single checkpoint file"""
     if not use_deepspeed:
         _, world_rank = get_comm_size_and_rank()
@@ -178,6 +217,7 @@ def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
                 {
                     "model_state_dict": model_state_dict,
                     "optimizer_state_dict": optimizer_state_dict,
+                    **(metadata or {}),
                 },
                 path_name,
             )
@@ -576,7 +616,9 @@ class Checkpoint:
         warmup: int = 0,
         path: str = "./logs/",
         use_deepspeed: bool = False,
+        metadata=None,
     ):
+        self.metadata = metadata
         self.count = 1
         self.warmup = warmup
         self.path = path
@@ -599,5 +641,6 @@ class Checkpoint:
                 name=self.name,
                 path=self.path,
                 use_deepspeed=self.use_deepspeed,
+                metadata=self.metadata,
             )
             return True

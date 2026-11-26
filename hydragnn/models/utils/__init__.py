@@ -11,6 +11,8 @@
 from .model import (
     activation_function_selection,
     save_model,
+    checkpoint_metadata,
+    load_checkpoint_metadata,
     get_summary_writer,
     unsorted_segment_mean,
     load_existing_model,

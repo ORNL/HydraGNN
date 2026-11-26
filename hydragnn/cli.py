@@ -385,7 +385,11 @@ def run_training(
     if after_train is not None:
         after_train(model)
     hydragnn.models.utils.save_model(
-        model, optimizer, log_name, use_deepspeed=use_deepspeed
+        model,
+        optimizer,
+        log_name,
+        use_deepspeed=use_deepspeed,
+        metadata=hydragnn.models.utils.checkpoint_metadata(config, train_loader),
     )
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
     if writer is not None:

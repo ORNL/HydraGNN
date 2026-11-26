@@ -1,7 +1,7 @@
 # PDE extension: WP01/WP02 design
 
 Status: partially implemented. Slice 1 (MeshData, OperatorBase, MeshGraphNet, Poisson example) and slice 2
-(face/cell outputs, `Variables.spatial_dim`) and slice 3 (`FieldNormalizer`) are done; the `query` level, checkpoint storage of the normalizer, and dataset storage are not. Base commit `d751d688` (ORNL/HydraGNN `main`, 2026-11-25).
+(face/cell outputs, `Variables.spatial_dim`) slice 3 (`FieldNormalizer`) and checkpoint metadata are done; the `query` level, `load_and_validate`, and dataset storage are not. Base commit `d751d688` (ORNL/HydraGNN `main`, 2026-11-25).
 Scope: WP01 (registry, configuration, compatibility baseline) and WP02 (mesh/field data contracts),
 plus the minimum needed for the first vertical slice (MeshGraphNets on a manufactured Poisson problem).
 
@@ -90,6 +90,11 @@ Before implementation, confirm every attribute the trainer reads from `model.mod
   It is ignored when absent, so existing configs are untouched.
 - `save_model` writes two extra keys, `"config"` (resolved) and `"schema_version"`. `load_existing_model` ignores
   them when missing. A new `load_and_validate` warns or raises on mismatch.
+  Implemented: `save_model(..., metadata=checkpoint_metadata(config, train_loader))` adds `config` (JSON text,
+  so `weights_only=True` loading works), `schema_version` (`variable_schema.SCHEMA_VERSION`) and `normalizer`
+  (`FieldNormalizer.state_dict()` or `None`). The training loop's `Checkpoint` and the CLI pass this metadata.
+  `load_checkpoint_metadata(name)` reads the entries back and returns `None` values for older checkpoints.
+  `load_and_validate` is not implemented yet.
 
 ### 2.4 Compatibility baseline
 
@@ -184,7 +189,7 @@ Implemented in `hydragnn/preprocess/field_normalizer.py`. Each variable entry ta
 `"normalize"` key (default `"none"`; positions and encoded inputs are rejected). Fitting happens in
 `create_dataloaders` on the training split, with statistics reduced across MPI ranks, and the normalizer
 is applied in `SchemaPreparedDataset` before `x`/`y` are compiled. The fitted normalizer is reachable as
-`loader.dataset.normalizer` and serializes through `state_dict()`. It is not yet written to checkpoints.
+`loader.dataset.normalizer`, serializes through `state_dict()`, and is stored in checkpoints (§2.3).
 No default policy is inferred, so fluxes must opt in to `scale_only` explicitly. The Poisson example
 now uses `scale_only` for `f` and `q`, replacing the hand-written scale factors.
 

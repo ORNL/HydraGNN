@@ -25,6 +25,8 @@ _SPATIAL_DIMS = frozenset((1, 2, 3))
 _ROLES = frozenset(("feature", "position"))
 _GRAPH_TYPES = frozenset(("homogeneous", "heterogeneous"))
 _ENCODING_TYPES = frozenset(("embedding", "one_hot"))
+# Bumped when the meaning of the Variables section changes; stored in checkpoints.
+SCHEMA_VERSION = 1
 NORMALIZE_POLICIES = frozenset(("none", "minmax", "standard", "scale_only"))
 _DERIVED_TENSOR_NAMES = frozenset(
     (

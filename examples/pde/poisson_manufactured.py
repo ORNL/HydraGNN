@@ -138,6 +138,12 @@ def main(num_samples=240, num_epoch=None, config_name="poisson_mgn.json"):
         log_name,
         verbosity,
     )
+    hydragnn.models.utils.save_model(
+        model,
+        optimizer,
+        log_name,
+        metadata=hydragnn.models.utils.checkpoint_metadata(config, train_loader),
+    )
 
     schema = hydragnn.config.parse_variable_schema(config["Variables"])
     test_set = test_loader.dataset

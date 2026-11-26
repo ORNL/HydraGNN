@@ -6,6 +6,9 @@ import os
 
 import pytest
 
+from hydragnn.config.variable_schema import SCHEMA_VERSION
+from hydragnn.models.utils import load_checkpoint_metadata
+
 pytestmark = pytest.mark.mpi_skip()
 
 EXAMPLE = os.path.join(
@@ -28,3 +31,9 @@ def test_poisson_mgn_train(tmp_path, monkeypatch, config_name, names):
         assert sorted(results[key]) == sorted(names)
         for value in results[key].values():
             assert 0.0 <= value < 10.0  # also rejects NaN
+
+    log_name = os.path.splitext(config_name)[0]
+    config, version, normalizer = load_checkpoint_metadata(log_name)
+    assert config["Variables"]["spatial_dim"] == 2
+    assert version == SCHEMA_VERSION
+    assert sorted(normalizer.state_dict()) == sorted({"f", *names} - {"u"})
