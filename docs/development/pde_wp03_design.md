@@ -87,20 +87,25 @@ Deliberate differences from the reference FluxGNN:
 
 ## 4. Verification and results
 
-Environment: Frontier login node, CPU, single process; Python 3.11.17, torch 2.9.1+rocm7.13.0, PyG 2.8.0;
-FP64; seeds fixed in code (`torch.manual_seed(0)`, dataset seed 1, held-out seed 7).
+Environment: Python 3.11.17, torch 2.9.1+rocm7.13.0, PyG 2.8.0; FP64; seeds fixed in code
+(`torch.manual_seed(0)`, dataset seed 1, held-out seed 7). CPU: Frontier login node, single process.
+GPU: Frontier compute node, MI250X GCDs, Slurm job 6003340 at commit `ff946bc5`. Training-set SHA-256
+(`dataset_sha256` in the example output): `98fc70dd21327b9e3956ad09dcd1a08bb505d3a2e64a6bb6f056faa68eb6d7b3`.
 
-### 4.1 Property checks (`python examples/pde/verify_fluxgnn.py`, random weights, 3-mesh batch)
+### 4.1 Property checks (`python examples/pde/verify_fluxgnn.py [--device cuda]`, random weights, 3-mesh batch)
 
-| Check | Value | Tolerance |
-|---|---|---|
-| interior cancellation (relative) | 8.2e-18 | 1e-11 |
-| balance, learned boundary + source (relative) | 4.6e-16 | 1e-11 |
-| balance, closed boundary (relative) | 1.9e-15 | 1e-11 |
-| face orientation flip (abs) | 0 | 1e-11 |
-| rotation / reflection + translation (abs) | 6.4e-15 / 8.9e-15 | 1e-11 |
-| batched vs single (abs) | 0 | 1e-11 |
-| balance over a 20-step rollout (relative) | 2.6e-17 | 1e-11 |
+| Check | CPU | GPU (1 GCD) | Tolerance |
+|---|---|---|---|
+| interior cancellation (relative) | 8.2e-18 | 4.1e-18 | 1e-11 |
+| balance, learned boundary + source (relative) | 4.6e-16 | 6.8e-16 | 1e-11 |
+| balance, closed boundary (relative) | 1.9e-15 | 1.0e-15 | 1e-11 |
+| face orientation flip (abs) | 0 | 4.4e-16 | 1e-11 |
+| rotation / reflection + translation (abs) | 6.4e-15 / 8.9e-15 | 6.5e-15 / 8.9e-15 | 1e-11 |
+| batched vs single (abs) | 0 | 1.1e-14 | 1e-11 |
+| balance over a 20-step rollout (relative) | 2.6e-17 | 3.4e-17 | 1e-11 |
+
+GPU values are nonzero where CPU values are exactly 0 because GPU scatter-add is non-deterministic in
+summation order.
 
 ### 4.2 Matched training on transport
 
@@ -123,6 +128,22 @@ exactly; its drift from the reference comes from boundary outflow and source err
 non-conservation. MeshGraphNet rollout error grows roughly linearly, while FluxGNN's grows sublinearly; at
 the held-out resolution FluxGNN is about 40× more accurate at step 10.
 
+### 4.3 GPU and multi-rank DDP
+
+Same command under `srun -N1 -n{1,8} --gpus-per-task=1`; `batch_size` is global (split across ranks), so
+both runs take the same optimizer steps. Training time excludes data generation and evaluation.
+
+| Model | GCDs | Test one-step rel. L2 | Rollout step 1 / 5 / 10 | Mass drift | Max balance residual | Train (s) |
+|---|---|---|---|---|---|---|
+| FluxGNN | 1 | 3.1e-3 | 0.0046 / 0.0098 / 0.013 | 9.7e-4 | 2.7e-17 | 19 |
+| FluxGNN | 8 | 3.1e-3 | 0.0047 / 0.0095 / 0.013 | 7.3e-4 | 3.6e-17 | 24 |
+| MeshGraphNet | 1 | 7.8e-2 | 0.079 / 0.324 / 0.533 | 0.025 | n/a | 25 |
+| MeshGraphNet | 8 | 8.0e-2 | 0.084 / 0.349 / 0.583 | 0.205 | n/a | 21 |
+
+One-GCD results reproduce the CPU numbers. FluxGNN under 8-rank DDP (which exercises
+`requires_find_unused_parameters`) matches 1 rank and keeps round-off balance. This 360-sample problem is
+too small to show speedup: 8 ranks see 2 samples per step each, so communication dominates.
+
 Tests: `tests/test_fluxgnn.py` (properties, construction, config, rollout),
 `tests/test_fv_transport_train.py` (end-to-end training of both configs, `update_config` errors),
 `tests/test_meshgraphnet.py::test_rollout_feeds_node_head_back`, `tests/test_variable_levels_pde.py` (cell inputs).
@@ -139,3 +160,5 @@ Tests: `tests/test_fluxgnn.py` (properties, construction, config, rollout),
   not yet inputs, so the example uses zero inflow.
 * Cell inputs are FluxGNN-only; MGN consumes cell data through the dual graph conversion in the example.
 * No DDStore/ADIOS-specific test for `cell_x`; it is derived from stored cell variables at load time.
+* MeshGraphNet is not compared with the DeepMind reference under matched settings: that code needs
+  TensorFlow 1, which is not available on Frontier (blocked).

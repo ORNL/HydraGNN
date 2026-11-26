@@ -102,6 +102,15 @@
           "batched_vs_single": 0.0,
           "rollout_balance_relative": 2.6e-17
         },
+        "transport_gpu": {
+          "hardware": "Frontier MI250X, Slurm job 6003340, commit ff946bc5",
+          "dataset_sha256": "98fc70dd21327b9e3956ad09dcd1a08bb505d3a2e64a6bb6f056faa68eb6d7b3",
+          "fluxgnn_1gcd": {"test_rel_l2": 3.08e-3, "rollout_rel_l2_1_5_10": [0.0046, 0.0098, 0.0133], "mass_drift": 9.7e-4, "max_balance": 2.7e-17, "train_seconds": 18.9},
+          "fluxgnn_8gcd": {"test_rel_l2": 3.14e-3, "rollout_rel_l2_1_5_10": [0.0047, 0.0095, 0.0130], "mass_drift": 7.3e-4, "max_balance": 3.6e-17, "train_seconds": 23.8},
+          "mgn_1gcd": {"test_rel_l2": 7.82e-2, "rollout_rel_l2_1_5_10": [0.079, 0.324, 0.533], "mass_drift": 0.025, "train_seconds": 25.1},
+          "mgn_8gcd": {"test_rel_l2": 8.01e-2, "rollout_rel_l2_1_5_10": [0.084, 0.349, 0.583], "mass_drift": 0.205, "train_seconds": 21.3},
+          "property_checks_max": 1.1e-14
+        },
         "transport_cpu_1rank": {
           "fluxgnn": {"params": 2248, "test_rel_l2": 3.1e-3, "rollout_rel_l2_1_5_10": [0.0046, 0.0098, 0.013], "mass_drift": 9.7e-4},
           "mgn": {"params": 246849, "test_rel_l2": 7.8e-2, "rollout_rel_l2_1_5_10": [0.079, 0.324, 0.533], "mass_drift": 0.025}

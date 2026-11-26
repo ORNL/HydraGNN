@@ -48,7 +48,7 @@ measured values and environments are in the linked design documents.
   `test_variable_levels_pde.py`. 316 regression tests pass.
 * Results: FP64 property checks at round-off (interior cancellation, global balance with sources and
   boundaries, orientation, rotation/reflection, batching, 20-step rollout balance). On held-out transport,
-  FluxGNN step-10 rollout relative L2 0.013 vs 0.533 for MGN with 100× fewer parameters. CPU and
-  Frontier GPU/DDP numbers are in `pde_wp03_design.md` §4.
+  FluxGNN step-10 rollout relative L2 0.013 vs 0.533 for MGN with 100× fewer parameters. Reproduced on
+  Frontier MI250X with 1 and 8 GCDs (DDP); property checks pass on GPU. Details in `pde_wp03_design.md` §4.
 * Limitations: no positivity or CFL enforcement; 2D triangles only; boundary-condition values are not
   inputs; MGN not compared with the TF1 DeepMind reference (blocked: no TF1 environment).
