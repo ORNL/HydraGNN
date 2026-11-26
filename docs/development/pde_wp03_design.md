@@ -114,13 +114,14 @@ face) with the same inputs. Held-out: a 16×16 trajectory (unseen resolution), 1
 
 | Model | Params | Test one-step rel. L2 | Rollout rel. L2, step 1 / 5 / 10 | Mass drift after 10 steps | Max balance residual |
 |---|---|---|---|---|---|
-| FluxGNN (hidden 16, 4 substeps) | 2,248 | 3.1e-3 | 0.018 / 0.084 / 0.163 | 0.117 | 1.8e-17 |
-| MeshGraphNet (hidden 64, 8 layers) | 246,849 | 7.8e-2 | 0.082 / 0.326 / 0.527 | 0.130 | n/a |
+| FluxGNN (hidden 16, 4 substeps) | 2,248 | 3.1e-3 | 0.0046 / 0.0098 / 0.013 | 9.7e-4 | 2.8e-17 |
+| MeshGraphNet (hidden 64, 8 layers) | 246,849 | 7.8e-2 | 0.079 / 0.324 / 0.533 | 0.025 | n/a |
 
-"Mass drift" is $|\sum V(u_{10} - u^{ref}_{10})| / \sum V |u^{ref}_{10}|$. FluxGNN balances its *own* fluxes
+"Mass drift" is $|\sum V(u_{10} - u^{ref}_{10})| / \sum V |u^{ref}_{10}|$. The held-out trajectory is
+normalized with the training-split statistics, like the test split. FluxGNN balances its *own* fluxes
 exactly; its drift from the reference comes from boundary outflow and source errors, not from interior
-non-conservation. Rollout error grows roughly linearly for both models; at the held-out resolution FluxGNN
-stays about 3× more accurate at step 10.
+non-conservation. MeshGraphNet rollout error grows roughly linearly, while FluxGNN's grows sublinearly; at
+the held-out resolution FluxGNN is about 40× more accurate at step 10.
 
 Tests: `tests/test_fluxgnn.py` (properties, construction, config, rollout),
 `tests/test_fv_transport_train.py` (end-to-end training of both configs, `update_config` errors),

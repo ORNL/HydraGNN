@@ -149,6 +149,14 @@ class FluxGNN(OperatorBase):
             if source
             else None
         )
+        # With one substep and no cell head, the face flux is computed from
+        # the initial state, so boundary/source parameters (which only affect
+        # u_new) receive no gradient; DDP must tolerate unused parameters.
+        self.requires_find_unused_parameters = (
+            num_steps == 1
+            and "cell" not in self.head_type
+            and (boundary == "learned" or source)
+        )
         if freeze_conv:
             for name, param in self.named_parameters():
                 if not name.startswith("encoder."):

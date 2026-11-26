@@ -80,6 +80,45 @@ def _rotate(mesh, angle, reflect=False):
     return out
 
 
+@pytest.mark.parametrize(
+    "steps, heads, boundary, source, expected",
+    [
+        (1, ("face",), "learned", False, True),
+        (1, ("face",), "closed", True, True),
+        (1, ("face",), "closed", False, False),
+        (2, ("face",), "learned", True, False),
+        (1, ("cell", "face"), "learned", True, False),
+    ],
+)
+def test_requires_find_unused_parameters(steps, heads, boundary, source, expected):
+    model = FluxGNN(
+        5,
+        8,
+        [2] * len(heads),
+        list(heads),
+        steps,
+        layout=LAYOUT,
+        num_bface_tags=2,
+        boundary=boundary,
+        source=source,
+    )
+    assert model.requires_find_unused_parameters is expected
+    if expected:
+        model = model.double()
+        out = model(_mesh(2, 0))[0]
+        out.sum().backward()
+        unused = [n for n, p in model.named_parameters() if p.grad is None]
+        assert unused
+
+
+def test_net_outflow_casts_boundary_flux_to_accumulator_dtype():
+    mesh = _mesh(3, 0)
+    face = torch.randn(mesh.num_faces, 2, dtype=torch.float32)
+    bface = torch.randn(mesh.bface_owner.numel(), 2, dtype=torch.bfloat16)
+    out = net_outflow(mesh, face, bface)
+    assert out.dtype == torch.float32
+
+
 # -- conservation -------------------------------------------------------------
 def test_interior_fluxes_cancel():
     mesh = _mesh(4, 0)

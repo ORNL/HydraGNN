@@ -146,11 +146,14 @@ def evaluate(model, schema, test_set, device, dual=False):
     # Held-out trajectory: rollout error, drift of sum V u, flux balance.
     g = torch.Generator().manual_seed(7)
     traj = trajectory(HELDOUT_RESOLUTION, g, ROLLOUT_STEPS)
+    # Apply the training normalizer so rollout inputs match training.
+    normalizer = getattr(test_set, "normalizer", None)
     if dual:
-        first = SchemaPreparedDataset([to_dual(traj[0])], schema)[0].to(device)
+        first = SchemaPreparedDataset([to_dual(traj[0])], schema, normalizer)[0]
+        first = first.to(device)
         states = rollout(model, first, ROLLOUT_STEPS, [0], level="node")
     else:
-        first = SchemaPreparedDataset(traj[:1], schema)[0].to(device)
+        first = SchemaPreparedDataset(traj[:1], schema, normalizer)[0].to(device)
         states = rollout(model, first, ROLLOUT_STEPS, model.state_cols, level="cell")
     errors = [
         relative_l2(state, step.u_next.to(device)) for state, step in zip(states, traj)

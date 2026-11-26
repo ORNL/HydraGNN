@@ -36,9 +36,8 @@ def net_outflow(data, face_flux, bface_flux=None):
     out.index_add_(0, owner, flux)
     out.index_add_(0, neighbour, -flux)
     if bface_flux is not None:
-        out.index_add_(
-            0, data.bface_owner, data.bface_area.to(bface_flux.dtype) * bface_flux
-        )
+        bflux = data.bface_area.to(out.dtype) * bface_flux.to(out.dtype)
+        out.index_add_(0, data.bface_owner, bflux)
     return out
 
 
