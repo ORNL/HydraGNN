@@ -34,10 +34,12 @@ worst relative global balance residual of the model's own fluxes.
 """
 
 import argparse
+import hashlib
 import json
 import math
 import os
 import random
+import time
 
 import torch
 import torch.distributed as dist
@@ -114,6 +116,15 @@ def make_dataset(num_samples, resolutions, seed, steps=STEPS_PER_TRAJECTORY):
         dataset += trajectory(resolutions[i % len(resolutions)], g, steps)
         i += 1
     return dataset[:num_samples]
+
+
+def dataset_hash(dataset):
+    """SHA-256 of the generated samples, for provenance in the reported results."""
+    h = hashlib.sha256()
+    for sample in dataset:
+        for key in ("pos", "face_index", "u", "v", "s", "u_next"):
+            h.update(sample[key].contiguous().numpy().tobytes())
+    return h.hexdigest()
 
 
 def to_dual(sample):
@@ -207,6 +218,7 @@ def main(num_samples=360, num_epoch=None, config_name="fv_transport_fluxgnn.json
 
     dual = config["NeuralNetwork"]["Architecture"]["mpnn_type"] != "FluxGNN"
     dataset = make_dataset(num_samples, TRAIN_RESOLUTIONS, seed=1)
+    data_hash = dataset_hash(dataset)
     if dual:
         dataset = [to_dual(sample) for sample in dataset]
     random.seed(0)
@@ -245,6 +257,7 @@ def main(num_samples=360, num_epoch=None, config_name="fv_transport_fluxgnn.json
     writer = hydragnn.models.utils.model.get_summary_writer(log_name)
     hydragnn.config.save_config(config, log_name)
 
+    start = time.perf_counter()
     hydragnn.train.train_validate_test(
         model,
         optimizer,
@@ -258,6 +271,7 @@ def main(num_samples=360, num_epoch=None, config_name="fv_transport_fluxgnn.json
         verbosity,
         precision=training.get("precision", "fp32"),
     )
+    train_seconds = time.perf_counter() - start
     hydragnn.models.utils.save_model(
         model,
         optimizer,
@@ -268,6 +282,12 @@ def main(num_samples=360, num_epoch=None, config_name="fv_transport_fluxgnn.json
     device = next(model.parameters()).device
     schema = hydragnn.config.parse_variable_schema(config["Variables"])
     results = evaluate(unwrap(model), schema, test_loader.dataset, device, dual)
+    results.update(
+        dataset_sha256=data_hash,
+        train_seconds=train_seconds,
+        device=str(device),
+        world_size=world_size,
+    )
     hydragnn.utils.print.print_utils.print_master(json.dumps(results))
 
     if writer is not None:

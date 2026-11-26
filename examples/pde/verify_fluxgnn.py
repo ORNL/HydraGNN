@@ -81,11 +81,12 @@ def make_model(boundary, source, seed):
 
 def transform(mesh, angle, reflect):
     c, s = math.cos(angle), math.sin(angle)
-    R = torch.tensor([[c, -s], [s, c]], dtype=torch.float64)
+    kw = dict(dtype=torch.float64, device=mesh.pos.device)
+    R = torch.tensor([[c, -s], [s, c]], **kw)
     if reflect:
-        R = R @ torch.diag(torch.tensor([1.0, -1.0], dtype=torch.float64))
+        R = R @ torch.diag(torch.tensor([1.0, -1.0], **kw))
     out = mesh.clone()
-    shift = torch.tensor([2.0, -3.0], dtype=torch.float64)
+    shift = torch.tensor([2.0, -3.0], **kw)
     out.pos = mesh.pos @ R.T + shift
     out.cell_centroid = mesh.cell_centroid @ R.T + shift
     out.face_normal = mesh.face_normal @ R.T
@@ -114,13 +115,13 @@ def worst_balance(model, data):
 
 
 @torch.no_grad()
-def verify(seed=0):
-    meshes = [make_mesh(n, seed + n) for n in (4, 6, 9)]
+def verify(seed=0, device="cpu"):
+    meshes = [make_mesh(n, seed + n).to(device) for n in (4, 6, 9)]
     batch = Batch.from_data_list(meshes)
-    model = make_model("learned", True, seed)
-    closed = make_model("closed", False, seed)
+    model = make_model("learned", True, seed).to(device)
+    closed = make_model("closed", False, seed).to(device)
 
-    flux = torch.randn(batch.num_faces, 3, dtype=torch.float64)
+    flux = torch.randn(batch.num_faces, 3, dtype=torch.float64, device=device)
     cancel = float(net_outflow(batch, flux).sum(0).abs().max()) / float(
         (batch.face_area * flux).abs().sum()
     )
@@ -165,8 +166,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--tol", type=float, default=1e-11)
+    parser.add_argument("--device", default="cpu")
     args = parser.parse_args()
-    report = verify(args.seed)
+    report = verify(args.seed, args.device)
     checked = {k: v for k, v in report.items() if k != "rollout_final_abs_max"}
     failed = sorted(k for k, v in checked.items() if not v <= args.tol)
     print(
@@ -178,6 +180,7 @@ def main():
                 "torch": torch.__version__,
                 "python": platform.python_version(),
                 "seed": args.seed,
+                "device": args.device,
                 "precision": "fp64",
             },
             indent=2,
