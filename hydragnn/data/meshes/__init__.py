@@ -1,4 +1,11 @@
-from .hierarchy import MeshHierarchy, build_hierarchy, prolong, restrict
+from .hierarchy import (
+    MeshHierarchy,
+    build_hierarchy,
+    prolong,
+    prolong_nodes,
+    restrict,
+    restrict_nodes,
+)
 from .mesh_data import (
     MeshData,
     cell_batch,

@@ -18,7 +18,11 @@ EXAMPLE = os.path.join(
 
 @pytest.mark.parametrize(
     "config_name,names",
-    [("poisson_mgn.json", ["u"]), ("poisson_mgn_flux.json", ["u", "q"])],
+    [
+        ("poisson_mgn.json", ["u"]),
+        ("poisson_mgn_flux.json", ["u", "q"]),
+        ("poisson_msmgn.json", ["u"]),
+    ],
 )
 def test_poisson_mgn_train(tmp_path, monkeypatch, config_name, names):
     monkeypatch.chdir(tmp_path)

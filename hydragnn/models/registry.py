@@ -48,6 +48,7 @@ from hydragnn.models.heterogeneous import (
 
 from hydragnn.models.fluxgnn import FluxGNN
 from hydragnn.models.meshgraphnet import MeshGraphNet
+from hydragnn.models.multiscale_meshgraphnet import MultiscaleMeshGraphNet
 
 ModelBuilder = Callable[[SimpleNamespace], object]
 
@@ -455,6 +456,50 @@ def _build_meshgraphnet(p):
         mlp_layers=p.mgn.mlp_layers,
         spatial_dim=p.mgn.spatial_dim,
         conservative_faces=p.mgn.conservative_faces,
+        freeze_conv=p.freeze_conv,
+    )
+
+
+@register_model(
+    "MultiscaleMeshGraphNet",
+    Capabilities(
+        output_levels=frozenset({"node", "face", "cell", "query"}),
+        requires=frozenset(
+            {
+                "pos",
+                "edge_index",
+                "coarse_pos",
+                "coarse_edge_index",
+                "coarse_boundary_node_mask",
+                "down_index",
+                "up_index",
+            }
+        ),
+        reference="Fortunato et al. 2022, arXiv:2210.00612 (two-level MS-MGN)",
+    ),
+)
+def _build_multiscale_meshgraphnet(p):
+    if p.global_attn_engine or p.pe_dim:
+        raise ValueError(
+            "MultiscaleMeshGraphNet does not support global attention or pe_dim"
+        )
+    if p.use_graph_attr_conditioning:
+        raise ValueError(
+            "MultiscaleMeshGraphNet does not support graph_attr conditioning"
+        )
+    return MultiscaleMeshGraphNet(
+        p.input_dim,
+        p.hidden_dim,
+        p.output_dim,
+        p.output_type,
+        p.num_conv_layers,
+        activation_function=p.activation_function,
+        loss_function_type=p.loss_function_type,
+        loss_weights=p.task_weights,
+        mlp_layers=p.mgn.mlp_layers,
+        spatial_dim=p.mgn.spatial_dim,
+        conservative_faces=p.mgn.conservative_faces,
+        schedule=p.msmgn.schedule,
         freeze_conv=p.freeze_conv,
     )
 

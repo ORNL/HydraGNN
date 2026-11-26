@@ -120,6 +120,17 @@ class MeshGraphNetSettings(_PrefixedSettings):
 
 
 @dataclass(frozen=True)
+class MultiscaleMGNSettings(_PrefixedSettings):
+    """MultiscaleMeshGraphNet options on top of the ``mgn_`` ones.
+    ``schedule`` (e.g. ``"1H 11L 1H"``) defaults to one V-cycle with
+    ``num_conv_layers`` steps, counting the down and up blocks."""
+
+    prefix: ClassVar[str] = "msmgn_"
+
+    schedule: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class FluxGNNSettings(_PrefixedSettings):
     """FluxGNN options; latent width and substeps per forward come from
     ``hidden_dim`` and ``num_conv_layers``. ``layout`` (filled from the

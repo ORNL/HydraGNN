@@ -14,6 +14,15 @@ The fine level uses the plain :class:`MeshData` keys. Coarse-level tensors
 carry a ``coarse_`` prefix and ``fine_to_coarse [C_fine]`` maps every fine
 cell to the coarse cell that contains it. All coarse indices are offset by
 coarse counts during batching, so restriction/prolongation work on batches.
+
+With ``node_transfer=True`` (triangle meshes) :func:`build_hierarchy` also
+adds the node transfer graphs of MultiScale MeshGraphNets (Fortunato et al.
+2022, arXiv:2210.00612, Sec. 2): ``down_index [2, 3 N_fine]`` links every fine
+node (row 0) to the three corners (row 1) of the coarse triangle containing
+it, and ``up_index [2, 3 N_coarse]`` links every coarse node (row 0) to the
+corners (row 1) of the fine triangle containing it. ``down_weight`` and
+``up_weight`` hold the barycentric weights, so :func:`prolong_nodes` and
+:func:`restrict_nodes` are exact for linear fields.
 """
 
 import torch
@@ -43,6 +52,11 @@ class MeshHierarchy(MeshData):
     def __inc__(self, key, value, *args, **kwargs):
         if key == "fine_to_coarse":
             return self.num_coarse_cells
+        # Rows index different node sets, so each row has its own offset.
+        if key == "down_index":
+            return torch.tensor([[self.num_nodes], [self.num_coarse_nodes]])
+        if key == "up_index":
+            return torch.tensor([[self.num_coarse_nodes], [self.num_nodes]])
         if key.startswith(PREFIX):
             base = key[len(PREFIX) :]
             if base in _CELL_INDEXED:
@@ -59,13 +73,31 @@ class MeshHierarchy(MeshData):
         return super().__cat_dim__(key, value, *args, **kwargs)
 
 
-def build_hierarchy(fine, coarse, fine_to_coarse=None, volume_rtol=1e-8):
+def _barycentric_links(mesh, points):
+    """Corners and barycentric weights of the triangle of ``mesh`` holding each point."""
+    probe = MeshData(pos=mesh.pos, cell_conn=mesh.cell_conn, cell_size=mesh.cell_size)
+    cell = locate_queries(probe, points).query_cell
+    tri = mesh.cell_conn.view(-1, 3)[cell]
+    a, b, c = (mesh.pos[tri[:, k], :2] for k in range(3))
+    v0, v1, rel = b - a, c - a, points[:, :2].to(a.dtype) - a
+    det = v0[:, 0] * v1[:, 1] - v0[:, 1] * v1[:, 0]
+    l1 = (rel[:, 0] * v1[:, 1] - rel[:, 1] * v1[:, 0]) / det
+    l2 = (v0[:, 0] * rel[:, 1] - v0[:, 1] * rel[:, 0]) / det
+    weight = torch.stack([1 - l1 - l2, l1, l2], dim=1)
+    src = torch.arange(points.shape[0]).repeat_interleave(3)
+    return torch.stack([src, tri.reshape(-1)]), weight.reshape(-1)
+
+
+def build_hierarchy(
+    fine, coarse, fine_to_coarse=None, volume_rtol=1e-8, node_transfer=False
+):
     """Combine two nested :class:`MeshData` levels into one :class:`MeshHierarchy`.
 
     ``fine_to_coarse`` defaults to the coarse cell containing each fine
     centroid (triangle meshes only, via :func:`locate_queries`). The fine
     volumes mapped to each coarse cell must sum to its volume (within
     ``volume_rtol``), so :func:`restrict` preserves integrals.
+    ``node_transfer`` adds the MS-MGN down/up node graphs (triangles only).
     """
     if fine_to_coarse is None:
         probe = MeshData(
@@ -97,6 +129,9 @@ def build_hierarchy(fine, coarse, fine_to_coarse=None, volume_rtol=1e-8):
     for key, value in coarse.items():
         data[PREFIX + key] = value
     data.fine_to_coarse = fine_to_coarse
+    if node_transfer:
+        data.down_index, data.down_weight = _barycentric_links(coarse, fine.pos)
+        data.up_index, data.up_weight = _barycentric_links(fine, coarse.pos)
     return data
 
 
@@ -113,3 +148,23 @@ def restrict(data, fine_values):
 def prolong(data, coarse_values):
     """Piecewise-constant injection of coarse-cell values to fine cells."""
     return coarse_values[data.fine_to_coarse]
+
+
+def _interpolate(index, weight, values, num_out):
+    out = values.new_zeros(num_out, values.shape[1])
+    w = weight.to(values.dtype).unsqueeze(1)
+    return out.index_add_(0, index[0], w * values[index[1]])
+
+
+def prolong_nodes(data, coarse_values):
+    """Linear interpolation of coarse-node values to fine nodes (``down_index``)."""
+    return _interpolate(
+        data.down_index, data.down_weight, coarse_values, data.num_nodes
+    )
+
+
+def restrict_nodes(data, fine_values):
+    """Linear interpolation of fine-node values at coarse nodes (``up_index``)."""
+    return _interpolate(
+        data.up_index, data.up_weight, fine_values, data.num_coarse_nodes
+    )

@@ -113,6 +113,10 @@ def reject_normalized_derivative_outputs(config, schema):
         )
 
 
+# Models sharing the mgn_* settings and the MeshGraphNet decoder heads.
+MGN_FAMILY = frozenset({"MeshGraphNet", "MultiscaleMeshGraphNet"})
+
+
 def reject_shifted_conservative_faces(config, schema):
     """Conservative MeshGraphNet face outputs must not be shifted.
 
@@ -120,7 +124,7 @@ def reject_shifted_conservative_faces(config, schema):
     ``2 * shift``, so ``minmax`` and ``standard`` break antisymmetry.
     """
     arch = config["NeuralNetwork"]["Architecture"]
-    if schema is None or arch.get("mpnn_type") != "MeshGraphNet":
+    if schema is None or arch.get("mpnn_type") not in MGN_FAMILY:
         return
     if not arch.get("mgn_conservative_faces", True):
         return
@@ -253,7 +257,7 @@ def update_config(config, train_loader, val_loader, test_loader):
             "Named edge outputs are valid data attributes, but HydraGNN does "
             "not yet provide an edge prediction head"
         )
-    if config["NeuralNetwork"]["Architecture"]["mpnn_type"] == "MeshGraphNet":
+    if config["NeuralNetwork"]["Architecture"]["mpnn_type"] in MGN_FAMILY:
         config["NeuralNetwork"]["Architecture"].setdefault(
             "mgn_spatial_dim", named_schema.spatial_dim
         )
