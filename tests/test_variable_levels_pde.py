@@ -111,7 +111,7 @@ def test_conservative_faces_reject_shifted_normalization(policy, conservative, o
             reject_shifted_conservative_faces(config, schema)
 
 
-@pytest.mark.parametrize("level", ["face", "cell", "query"])
+@pytest.mark.parametrize("level", ["face", "query"])
 def test_mesh_levels_rejected_as_inputs(level):
     inputs = [
         {"name": "pos", "level": "node", "dim": 2, "role": "position"},
@@ -119,6 +119,28 @@ def test_mesh_levels_rejected_as_inputs(level):
         {"name": "g", "level": level, "dim": 1},
     ]
     with pytest.raises(ValueError, match="supported only for outputs"):
+        parse_variable_schema(_variables([], inputs=inputs))
+
+
+def test_cell_inputs_compile_to_cell_x():
+    inputs = [
+        {"name": "pos", "level": "node", "dim": 2, "role": "position"},
+        {"name": "c", "level": "cell", "dim": 1},
+        {"name": "q", "level": "cell", "dim": 2},
+    ]
+    schema = parse_variable_schema(
+        _variables([{"name": "c", "level": "cell", "dim": 1}], inputs=inputs)
+    )
+    mesh = _mesh()
+    mesh.q = torch.randn(mesh.num_cells, 2)
+    data = prepare_data_from_schema(mesh.clone(), schema)
+    assert data.x.shape == (mesh.num_nodes, 0)
+    torch.testing.assert_close(data.cell_x, torch.cat([mesh.c, mesh.q], dim=1))
+
+
+def test_requires_node_or_cell_feature():
+    inputs = [{"name": "pos", "level": "node", "dim": 2, "role": "position"}]
+    with pytest.raises(ValueError, match="at least one node or cell feature"):
         parse_variable_schema(_variables([], inputs=inputs))
 
 

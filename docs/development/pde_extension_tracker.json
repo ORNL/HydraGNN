@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "spec": "HydraGNN PDE Implementation Specification, November 2026",
+  "work_packages": [
+    {
+      "id": "WP01",
+      "title": "Registry, configuration, compatibility baseline",
+      "dependencies": [],
+      "status": "verified",
+      "pr": 581,
+      "commit": "e1564c39",
+      "design_doc": "docs/development/pde_wp01_wp02_design.md",
+      "source_files": [
+        "hydragnn/models/registry.py",
+        "hydragnn/models/operator_base.py",
+        "hydragnn/models/create.py",
+        "hydragnn/model_settings.py",
+        "hydragnn/config/config_utils.py",
+        "hydragnn/models/utils/model.py",
+        "hydragnn/cli.py"
+      ],
+      "tests": [
+        "tests/test_model_registry.py",
+        "tests/test_create_model.py",
+        "tests/test_config.py",
+        "tests/test_checkpoint_metadata.py",
+        "tests/test_cli.py"
+      ],
+      "results": {
+        "regression_tests_passed": 276,
+        "checkpoint": "config, schema_version and FieldNormalizer stored; load_and_validate rejects mismatches"
+      },
+      "limitations": [
+        "Capability metadata covers MeshGraphNet and FluxGNN; legacy architectures declare node/graph only"
+      ]
+    },
+    {
+      "id": "WP02",
+      "title": "Mesh, fields, trajectory, hierarchy contracts",
+      "dependencies": ["WP01"],
+      "status": "partial",
+      "pr": 581,
+      "commit": "e1564c39",
+      "design_doc": "docs/development/pde_wp01_wp02_design.md",
+      "source_files": [
+        "hydragnn/data/meshes/mesh_data.py",
+        "hydragnn/config/variable_schema.py",
+        "hydragnn/preprocess/field_normalizer.py",
+        "hydragnn/preprocess/load_data.py",
+        "hydragnn/data/adiosdataset/dataset.py",
+        "hydragnn/data/adiosdataset/writer.py",
+        "hydragnn/models/meshgraphnet.py",
+        "examples/pde/poisson_manufactured.py"
+      ],
+      "tests": [
+        "tests/test_mesh_data.py",
+        "tests/test_named_variable_schema.py",
+        "tests/test_variable_levels_pde.py",
+        "tests/test_field_normalizer.py",
+        "tests/test_mesh_adios.py",
+        "tests/test_meshgraphnet.py",
+        "tests/test_poisson_mgn_train.py"
+      ],
+      "results": {
+        "poisson_mgn_heldout_rel_l2": {"node_1gcd": 0.231, "node_8gcd": 0.224, "flux_1gcd": 0.192, "flux_8gcd": 0.208},
+        "hardware": "Frontier, 1 node, MI250X GCDs, FP64"
+      },
+      "limitations": [
+        "Trajectory and hierarchy containers are not implemented (needed by WP04/WP09)",
+        "2D triangle meshes only in tests"
+      ]
+    },
+    {
+      "id": "WP03",
+      "title": "MeshGraphNets and FluxGNN",
+      "dependencies": ["WP02"],
+      "status": "verified",
+      "pr": 582,
+      "commit": null,
+      "design_doc": "docs/development/pde_wp03_design.md",
+      "source_files": [
+        "hydragnn/models/fluxgnn.py",
+        "hydragnn/models/rollout.py",
+        "hydragnn/physics/conservation.py",
+        "hydragnn/config/config_utils.py",
+        "hydragnn/config/variable_schema.py",
+        "examples/pde/fv_transport.py",
+        "examples/pde/verify_fluxgnn.py"
+      ],
+      "tests": [
+        "tests/test_fluxgnn.py",
+        "tests/test_fv_transport_train.py",
+        "tests/test_meshgraphnet.py",
+        "tests/test_variable_levels_pde.py"
+      ],
+      "results": {
+        "regression_tests_passed": 316,
+        "property_checks_fp64_max_abs": {
+          "interior_cancellation": 0.0,
+          "rotation": 6.4e-15,
+          "reflection": 8.9e-15,
+          "batched_vs_single": 0.0,
+          "rollout_balance_relative": 2.6e-17
+        },
+        "transport_gpu": {
+          "hardware": "Frontier MI250X, Slurm job 6003340, commit ff946bc5",
+          "dataset_sha256": "98fc70dd21327b9e3956ad09dcd1a08bb505d3a2e64a6bb6f056faa68eb6d7b3",
+          "fluxgnn_1gcd": {"test_rel_l2": 3.08e-3, "rollout_rel_l2_1_5_10": [0.0046, 0.0098, 0.0133], "mass_drift": 9.7e-4, "max_balance": 2.7e-17, "train_seconds": 18.9},
+          "fluxgnn_8gcd": {"test_rel_l2": 3.14e-3, "rollout_rel_l2_1_5_10": [0.0047, 0.0095, 0.0130], "mass_drift": 7.3e-4, "max_balance": 3.6e-17, "train_seconds": 23.8},
+          "mgn_1gcd": {"test_rel_l2": 7.82e-2, "rollout_rel_l2_1_5_10": [0.079, 0.324, 0.533], "mass_drift": 0.025, "train_seconds": 25.1},
+          "mgn_8gcd": {"test_rel_l2": 8.01e-2, "rollout_rel_l2_1_5_10": [0.084, 0.349, 0.583], "mass_drift": 0.205, "train_seconds": 21.3},
+          "property_checks_max": 1.1e-14
+        },
+        "transport_cpu_1rank": {
+          "fluxgnn": {"params": 2248, "test_rel_l2": 3.1e-3, "rollout_rel_l2_1_5_10": [0.0046, 0.0098, 0.013], "mass_drift": 9.7e-4},
+          "mgn": {"params": 246849, "test_rel_l2": 7.8e-2, "rollout_rel_l2_1_5_10": [0.079, 0.324, 0.533], "mass_drift": 0.025}
+        }
+      },
+      "limitations": [
+        "Conservation does not imply positivity or entropy stability; no CFL enforcement",
+        "2D triangle meshes only in tests",
+        "Boundary-condition values are not inputs; example uses zero inflow",
+        "MGN not compared against the DeepMind reference (TF1); blocked"
+      ]
+    },
+    {"id": "WP04", "title": "Multiscale MGN and RIGNO", "dependencies": ["WP02"], "status": "not_started"},
+    {"id": "WP05", "title": "Transolver, ++, -3 and GAOT", "dependencies": ["WP02", "WP11"], "status": "not_started"},
+    {"id": "WP06", "title": "FNO, GINO, GSNO", "dependencies": ["WP02"], "status": "not_started"},
+    {"id": "WP07", "title": "DeepONet and composite architecture", "dependencies": ["WP01", "WP02"], "status": "not_started"},
+    {"id": "WP08", "title": "Physics losses, constraints and residuals", "dependencies": ["WP02"], "status": "not_started"},
+    {"id": "WP09", "title": "Time integration and adaptivity", "dependencies": ["WP08"], "status": "not_started"},
+    {"id": "WP10", "title": "Hybrid solvers and preconditioning", "dependencies": ["WP08"], "status": "not_started"},
+    {"id": "WP11", "title": "Spatial and hybrid parallelism", "dependencies": ["WP02"], "status": "not_started"},
+    {"id": "WP12", "title": "Multi-PDE, symbolic, fidelity, UQ, AL, HPO", "dependencies": ["WP03", "WP08"], "status": "not_started"},
+    {"id": "WP13", "title": "Verification, benchmark suite, documentation", "dependencies": [], "status": "in_progress"}
+  ]
+}

@@ -36,6 +36,45 @@ from .variable_schema import (
 _UNSAFE_LOG_COMPONENT = re.compile(r"[^A-Za-z0-9._-]+")
 
 
+def configure_fluxgnn(architecture, schema):
+    """Fill FluxGNN's ``input_dim`` and ``fluxgnn_layout`` from the schema.
+
+    ``fluxgnn_vector_inputs`` and ``fluxgnn_scalar_inputs`` name cell inputs
+    (default: none); every other cell input is a conserved state channel.
+    State, vector and output fields must not be normalized: the update
+    ``u + dt * (...)`` is only consistent in the units of the data.
+    """
+    cell_inputs = [s for s in schema.inputs if s.level == "cell"]
+    by_name = {s.name: s for s in cell_inputs}
+    vectors = list(architecture.get("fluxgnn_vector_inputs", []))
+    scalars = list(architecture.get("fluxgnn_scalar_inputs", []))
+    unknown = sorted(set(vectors + scalars) - set(by_name))
+    if unknown:
+        raise ValueError(f"FluxGNN inputs are not cell inputs: {', '.join(unknown)}")
+    if set(vectors) & set(scalars):
+        raise ValueError("FluxGNN vector and scalar inputs must be disjoint")
+    offsets, start = {}, 0
+    for spec in cell_inputs:
+        offsets[spec.name] = list(range(start, start + spec.dim))
+        start += spec.dim
+    state = [s.name for s in cell_inputs if s.name not in set(vectors + scalars)]
+    unnormalized = [by_name[name] for name in state + vectors]
+    unnormalized += [s for s in schema.outputs]
+    normalized = sorted(s.name for s in unnormalized if s.normalize != "none")
+    if normalized:
+        raise ValueError(
+            "FluxGNN state, vector and output variables must use normalize "
+            f"'none': {', '.join(normalized)}"
+        )
+    architecture.setdefault("fluxgnn_spatial_dim", schema.spatial_dim)
+    architecture["input_dim"] = start
+    architecture["fluxgnn_layout"] = {
+        "state": sum((offsets[name] for name in state), []),
+        "vectors": [offsets[name] for name in vectors],
+        "scalars": sum((offsets[name] for name in scalars), []),
+    }
+
+
 def sanitize_filename_component(value, max_length=48):
     """Return a bounded, filesystem-safe representation of one path component.
 
@@ -221,6 +260,12 @@ def update_config(config, train_loader, val_loader, test_loader):
     config["NeuralNetwork"]["Architecture"]["input_dim"] = encoded_schema_dimensions(
         named_schema, "node", "inputs"
     )
+    if any(spec.level == "cell" for spec in named_schema.inputs):
+        if config["NeuralNetwork"]["Architecture"]["mpnn_type"] != "FluxGNN":
+            raise ValueError("Cell-level inputs are supported only by FluxGNN")
+        configure_fluxgnn(config["NeuralNetwork"]["Architecture"], named_schema)
+    elif config["NeuralNetwork"]["Architecture"]["mpnn_type"] == "FluxGNN":
+        raise ValueError("FluxGNN needs cell-level inputs in Variables.inputs")
     node_offset = 0
     input_node_encodings = []
     for spec in named_schema.inputs:
