@@ -46,6 +46,7 @@ from hydragnn.models.heterogeneous import (
     HeteroRGATStack,
 )
 
+from hydragnn.models.fluxgnn import FluxGNN
 from hydragnn.models.meshgraphnet import MeshGraphNet
 
 ModelBuilder = Callable[[SimpleNamespace], object]
@@ -454,6 +455,44 @@ def _build_meshgraphnet(p):
         mlp_layers=p.mgn.mlp_layers,
         spatial_dim=p.mgn.spatial_dim,
         conservative_faces=p.mgn.conservative_faces,
+        freeze_conv=p.freeze_conv,
+    )
+
+
+@register_model(
+    "FluxGNN",
+    Capabilities(
+        output_levels=frozenset({"cell", "face"}),
+        requires=frozenset({"cell_x", "face_index", "cell_volume"}),
+        reference=(
+            "inspired: Horie & Mitsume 2024 (ICML), "
+            "yellowshippo/fluxgnn-icml2024@d4d44497"
+        ),
+    ),
+)
+def _build_fluxgnn(p):
+    if p.global_attn_engine or p.pe_dim:
+        raise ValueError("FluxGNN does not support global attention or pe_dim")
+    if p.use_graph_attr_conditioning:
+        raise ValueError("FluxGNN does not support graph_attr conditioning")
+    return FluxGNN(
+        p.input_dim,
+        p.hidden_dim,
+        p.output_dim,
+        p.output_type,
+        p.num_conv_layers,
+        activation_function=p.activation_function,
+        loss_function_type=p.loss_function_type,
+        loss_weights=p.task_weights,
+        layout=p.fluxgnn.layout,
+        dt=p.fluxgnn.dt,
+        spatial_dim=p.fluxgnn.spatial_dim,
+        mlp_layers=p.fluxgnn.mlp_layers,
+        advection=p.fluxgnn.advection,
+        diffusion=p.fluxgnn.diffusion,
+        boundary=p.fluxgnn.boundary,
+        num_bface_tags=p.fluxgnn.num_bface_tags,
+        source=p.fluxgnn.source,
         freeze_conv=p.freeze_conv,
     )
 

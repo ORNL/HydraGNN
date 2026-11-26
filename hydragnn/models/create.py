@@ -17,6 +17,7 @@ from typing import Dict, List, Union
 from hydragnn.model_settings import (
     AllScAIPSettings,
     EquivariantAttentionSettings,
+    FluxGNNSettings,
     MeshGraphNetSettings,
     UMASettings,
 )
@@ -114,6 +115,7 @@ def create_model_config(
         allscaip=AllScAIPSettings.from_mapping(config["Architecture"]),
         uma=UMASettings.from_mapping(config["Architecture"]),
         mgn=MeshGraphNetSettings.from_mapping(config["Architecture"]),
+        fluxgnn=FluxGNNSettings.from_mapping(config["Architecture"]),
         hetero_pooling_mode=config["Architecture"].get("hetero_pooling_mode", "sum"),
         node_target_type=config["Architecture"].get("node_target_type", None),
         share_relation_weights=config["Architecture"].get(
@@ -148,6 +150,7 @@ _SETTINGS_CLASSES = {
     "allscaip": AllScAIPSettings,
     "uma": UMASettings,
     "mgn": MeshGraphNetSettings,
+    "fluxgnn": FluxGNNSettings,
 }
 
 
@@ -226,6 +229,7 @@ def create_model(
     allscaip: AllScAIPSettings | None = None,
     uma: UMASettings | None = None,
     mgn: MeshGraphNetSettings | None = None,
+    fluxgnn: FluxGNNSettings | None = None,
     **flat_settings,
 ):
     params = dict(locals())
