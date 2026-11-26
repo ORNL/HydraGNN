@@ -1,7 +1,8 @@
 # PDE extension: WP01/WP02 design
 
-Status: partially implemented. Slice 1 (MeshData, OperatorBase, MeshGraphNet, Poisson example) and slice 2
-(face/cell outputs, `Variables.spatial_dim`) slice 3 (`FieldNormalizer`) and checkpoint metadata are done; the `query` level, `load_and_validate`, and dataset storage are not. Base commit `d751d688` (ORNL/HydraGNN `main`, 2026-11-25).
+Status: implemented. Slice 1 (MeshData, OperatorBase, MeshGraphNet, Poisson example), slice 2
+(face/cell/query outputs, `Variables.spatial_dim`), slice 3 (`FieldNormalizer`), checkpoint metadata with
+`load_and_validate`, and ADIOS2/DDStore storage of `MeshData` are done. Base commit `d751d688` (ORNL/HydraGNN `main`, 2026-11-25).
 Scope: WP01 (registry, configuration, compatibility baseline) and WP02 (mesh/field data contracts),
 plus the minimum needed for the first vertical slice (MeshGraphNets on a manufactured Poisson problem).
 
@@ -94,7 +95,11 @@ Before implementation, confirm every attribute the trainer reads from `model.mod
   so `weights_only=True` loading works), `schema_version` (`variable_schema.SCHEMA_VERSION`) and `normalizer`
   (`FieldNormalizer.state_dict()` or `None`). The training loop's `Checkpoint` and the CLI pass this metadata.
   `load_checkpoint_metadata(name)` reads the entries back and returns `None` values for older checkpoints.
-  `load_and_validate` is not implemented yet.
+  `load_and_validate(model, name, config, normalizer=..., strict=False)` compares `schema_version`, the
+  `Variables` section, `NeuralNetwork.Architecture` (key by key) and the normalizer statistics against the
+  checkpoint, warns on each mismatch (raises `ValueError` with `strict=True`), then loads the weights.
+  Checkpoints without metadata load with a "not validated" notice. The CLI uses it when
+  `Training.continue` is set.
 
 ### 2.4 Compatibility baseline
 
@@ -145,8 +150,7 @@ Extend `VariableLevel` to `node | edge | face | cell | query | graph`. `_expecte
 `num_cells` and `query_pos.shape[0]`. `prepare_data_from_schema` already flattens each output into `y`/`y_loc`,
 so target indexing works without changes. Add `face_output`, `cell_output` and `query_output` to `_DERIVED_TENSOR_NAMES`.
 
-Implemented: `face` and `cell` levels exist and are accepted **for outputs only** (inputs raise). `query` is not
-implemented yet. The `pos` dimension is controlled by `Variables.spatial_dim` (default 3, allowed 1/2/3): the
+Implemented: `face`, `cell` and `query` levels exist and are accepted **for outputs only** (inputs raise). The `pos` dimension is controlled by `Variables.spatial_dim` (default 3, allowed 1/2/3): the
 position input must have dim `spatial_dim`, so atomistic configs keep the dim-3 check unchanged. For MeshGraphNet,
 `update_config` copies `spatial_dim` into `Architecture.mgn_spatial_dim` unless it is already set. `create_model`
 rejects output levels outside the model's registered `Capabilities.output_levels` (legacy models: node/graph).
@@ -170,6 +174,11 @@ variance columns use the sum before the softplus so they stay orientation-invari
 two nodes *on* the face (`face_nodes`) with endpoint-symmetric features; it could not learn a normal flux
 (loss stayed at the target variance) because those nodes carry no information across the face. The cell head is an MLP on the mean node
 latent over the cell's vertices.
+
+The query head (triangle meshes, `mgn_spatial_dim=2`) is an MLP on the node latent interpolated with
+barycentric weights at `query_pos` inside the containing triangle `query_cell`. `locate_queries(mesh, pts)`
+fills both tensors at preprocessing time (brute force, raises for points outside the mesh). `query_cell` is
+cell-indexed, so batching offsets it by `num_cells`, and `query_batch(data)` returns the graph id of each point.
 
 The antisymmetric face head is what WP03 FluxGNN uses. The conservative update
 $u_i^{n+1} = u_i^n - \frac{\Delta t}{V_i}\left(\sum_{f \in \partial i} \pm A_f F_f + \sum_{b \in \partial i} A_b F_b\right) + \Delta t\, s_i$
@@ -198,6 +207,11 @@ now uses `scale_only` for `f` and `q`, replacing the hand-written scale factors.
 - Small fixtures and manufactured problems are generated on the fly in `examples/pde/` (no files).
 - For large datasets, reuse the ADIOS2 writer with the extra entity tensors registered as variable-length arrays.
   Verify that `adiosdataset` handles arrays whose first dimension is not `num_nodes` (faces, cells) before relying on it.
+  Implemented: the writer records a `data_class` attribute (`MeshData`) and the reader rebuilds samples with that
+  class, so `__inc__`/`__cat_dim__` offsets apply after loading. Bool tensors (e.g. `boundary_node_mask`) are
+  stored as int32 and listed in a `bool_keys` attribute (ADIOS has no bool, uint8 is read as a string, and
+  DDStore rejects int8). `tests/test_mesh_adios.py` round-trips MeshData exactly in file, preload, cache,
+  DDStore and DDStore-feature modes, including batched offsets of faces, cells and boundary faces.
 - Single meshes too large for one device are out of scope until WP11. Record this as a known limitation.
 
 ## 4. First vertical slice
@@ -222,6 +236,19 @@ Goal: `mpnn_type="MeshGraphNet"` trains on a 2D manufactured Poisson problem usi
 | `test_meshgraphnet_permutation` | node relabelling equivariance | FP64 1e-10 |
 | `test_batched_vs_single` | batched vs per-sample predictions | FP64 1e-12 |
 | `test_poisson_mgn_train` | loss decreases; relative L2 on held-out resolution reported (no fixed threshold until baseline measured) | report |
+
+### 4.2 GPU runs (Frontier, 1 node)
+
+`Training.batch_size` in the Poisson example is global: each rank uses `batch_size // world_size`. With a
+fixed per-rank batch, 8 GCDs took 8x fewer optimizer steps per epoch on this small dataset and accuracy dropped
+(test u rel-L2 0.257 vs 0.186). After the change (same epochs, relative L2):
+
+| Config | GCDs | test u | held-out u | test q | held-out q | wall (s) |
+|---|---|---|---|---|---|---|
+| node | 1 | 0.200 | 0.231 | – | – | 46 |
+| node | 8 | 0.147 | 0.224 | – | – | 38 |
+| flux | 1 | 0.182 | 0.192 | 0.159 | 0.282 | 49 |
+| flux | 8 | 0.077 | 0.208 | 0.138 | 0.272 | 41 |
 
 ## 5. Open decisions
 
