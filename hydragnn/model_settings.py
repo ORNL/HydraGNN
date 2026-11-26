@@ -117,3 +117,23 @@ class MeshGraphNetSettings(_PrefixedSettings):
     mlp_layers: int = 2
     spatial_dim: int = 3
     conservative_faces: bool = True
+
+
+@dataclass(frozen=True)
+class FluxGNNSettings(_PrefixedSettings):
+    """FluxGNN options; latent width and substeps per forward come from
+    ``hidden_dim`` and ``num_conv_layers``. ``layout`` (filled from the
+    variable schema) maps ``state``/``vectors``/``scalars`` to columns of
+    ``data.cell_x``."""
+
+    prefix: ClassVar[str] = "fluxgnn_"
+
+    dt: float = 1.0
+    spatial_dim: int = 2
+    mlp_layers: int = 2
+    advection: bool = True
+    diffusion: bool = True
+    boundary: str = "learned"
+    num_bface_tags: int = 1
+    source: bool = False
+    layout: Optional[dict] = None

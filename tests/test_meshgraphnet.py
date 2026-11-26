@@ -305,6 +305,28 @@ def test_node_permutation_equivariance(model):
         torch.testing.assert_close(o, r[perm], rtol=1e-5, atol=1e-5)
 
 
+@pytest.mark.parametrize("residual", [False, True])
+def test_rollout_feeds_node_head_back(residual):
+    from hydragnn.models.rollout import rollout
+
+    model = create_model(
+        **_args(output_dim=[1], output_type=["node"], task_weights=[1.0])
+    )
+    model.eval()
+    mesh = _mesh(3, 2, 10)
+    states = rollout(model, mesh, 3, [1], level="node", residual=residual)
+    x = mesh.x.clone()
+    data = copy.copy(mesh)
+    with torch.no_grad():
+        for state in states:
+            out = model(data)[0]
+            x = x.clone()
+            x[:, 1:2] = x[:, 1:2] + out if residual else out
+            data.x = x
+            torch.testing.assert_close(state, x[:, 1:2])
+    assert mesh.x.data_ptr() != data.x.data_ptr()
+
+
 def test_translation_invariance(model):
     mesh = _mesh(2, 2, 3)
     shifted = copy.copy(mesh)

@@ -21,6 +21,7 @@ GraphType = Literal["homogeneous", "heterogeneous"]
 _LEVELS = frozenset(("node", "edge", "graph", "face", "cell", "query"))
 # Mesh levels need MeshData entity tensors; they are supported as outputs only.
 _MESH_LEVELS = frozenset(("face", "cell", "query"))
+_OUTPUT_ONLY_LEVELS = frozenset(("face", "query"))
 _SPATIAL_DIMS = frozenset((1, 2, 3))
 _ROLES = frozenset(("feature", "position"))
 _GRAPH_TYPES = frozenset(("homogeneous", "heterogeneous"))
@@ -31,6 +32,7 @@ NORMALIZE_POLICIES = frozenset(("none", "minmax", "standard", "scale_only"))
 _DERIVED_TENSOR_NAMES = frozenset(
     (
         "x",
+        "cell_x",
         "edge_attr",
         "graph_attr",
         "edge_index",
@@ -127,7 +129,7 @@ def _parse_group(
             raise ValueError(f"{path}.name must be a non-empty string")
         if level not in _LEVELS:
             raise ValueError(f"{path}.level must be one of {sorted(_LEVELS)}")
-        if level in _MESH_LEVELS and group != "outputs":
+        if level in _OUTPUT_ONLY_LEVELS and group != "outputs":
             raise ValueError(f"{path}.level '{level}' is supported only for outputs")
         if isinstance(dim, bool) or not isinstance(dim, int) or dim <= 0:
             raise ValueError(f"{path}.dim must be a positive integer")
@@ -361,9 +363,12 @@ def parse_variable_schema(raw_variables: dict) -> VariableSchema:
                 + ", ".join(unknown)
             )
     if not any(
-        spec.level == "node" and spec.role == "feature" for spec in schema.inputs
+        spec.level in ("node", "cell") and spec.role == "feature"
+        for spec in schema.inputs
     ):
-        raise ValueError("Variables.inputs must contain at least one node feature")
+        raise ValueError(
+            "Variables.inputs must contain at least one node or cell feature"
+        )
     reserved = sorted(
         {
             spec.name
@@ -454,9 +459,9 @@ def validate_variable(data, spec: VariableSpec) -> torch.Tensor:
 def prepare_data_from_schema(data, schema: VariableSchema):
     """Validate named attributes and compile them for existing model internals.
 
-    Named tensors remain on ``data``. Feature inputs at node, edge, and graph
-    level are concatenated into ``x``, ``edge_attr``, and ``graph_attr``
-    respectively. Geometric positions are validated but remain exclusively in
+    Named tensors remain on ``data``. Feature inputs at node, edge, graph and
+    cell level are concatenated into ``x``, ``edge_attr``, ``graph_attr`` and
+    ``cell_x`` respectively. Geometric positions are validated but remain exclusively in
     ``data.pos`` and are never concatenated into ``data.x``.
     Outputs of each level are concatenated along dimension 1 into
     ``node_output``, ``edge_output``, or ``graph_output``. They are also
@@ -483,6 +488,10 @@ def prepare_data_from_schema(data, schema: VariableSchema):
         data.graph_attr = torch.cat(by_level["graph"], dim=-1)
     elif "graph_attr" in data:
         del data["graph_attr"]
+    if by_level["cell"]:
+        data.cell_x = torch.cat(by_level["cell"], dim=-1)
+    elif "cell_x" in data:
+        del data["cell_x"]
 
     output_by_level = {level: [] for level in _LEVELS}
     outputs = []
