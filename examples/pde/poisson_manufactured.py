@@ -18,7 +18,8 @@ diffusive flux ``q = -∇u·n A`` through every interior face (midpoint rule,
 multiplied by the resolution n so it is O(1) at every resolution). f and q
 use the ``scale_only`` normalization fitted on the training split. After
 training, the relative L2 error of each output, in physical units, is reported
-on held-out samples at a finer, unseen resolution.
+on held-out samples at a finer, unseen resolution. ``batch_size`` in the config
+is the global batch, split evenly across MPI ranks.
 """
 
 import argparse
@@ -102,11 +103,16 @@ def main(num_samples=240, num_epoch=None, config_name="poisson_mgn.json"):
     train, val, test = hydragnn.preprocess.split_dataset(
         dataset, config["NeuralNetwork"]["Training"]["perc_train"], False
     )
+    # batch_size is global: on a small dataset, a fixed per-rank batch would cut
+    # the optimizer steps per epoch by the world size and stall convergence.
+    world_size, _ = hydragnn.distributed.get_comm_size_and_rank()
+    training = config["NeuralNetwork"]["Training"]
+    training["batch_size"] = max(1, training["batch_size"] // world_size)
     train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
         train,
         val,
         test,
-        config["NeuralNetwork"]["Training"]["batch_size"],
+        training["batch_size"],
         variables=config["Variables"],
     )
     config = hydragnn.config.update_config(
