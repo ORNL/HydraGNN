@@ -17,8 +17,9 @@ Family-specific options live on settings objects (``p.allscaip``, ``p.uma``,
 New architectures register themselves with ``@register_model("Name")``.
 """
 
+from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Callable, Dict
+from typing import Callable, Dict, FrozenSet, Optional
 
 from hydragnn.models.gin_stack import GINStack
 from hydragnn.models.pna_stack import PNAStack
@@ -45,19 +46,42 @@ from hydragnn.models.heterogeneous import (
     HeteroRGATStack,
 )
 
+from hydragnn.models.meshgraphnet import MeshGraphNet
+
 ModelBuilder = Callable[[SimpleNamespace], object]
 
+
+@dataclass(frozen=True)
+class Capabilities:
+    """What a registered model accepts and produces.
+
+    ``reference`` records the paper and, for faithful ports, the pinned
+    upstream commit; ``"inspired"`` marks a non-faithful variant.
+    """
+
+    output_levels: FrozenSet[str] = frozenset({"node", "graph"})
+    requires: FrozenSet[str] = frozenset()
+    reference: Optional[str] = None
+
+
 MODEL_REGISTRY: Dict[str, ModelBuilder] = {}
+MODEL_CAPABILITIES: Dict[str, Capabilities] = {}
 
 
-def register_model(name: str):
+def register_model(name: str, capabilities: Optional[Capabilities] = None):
     def decorator(builder: ModelBuilder) -> ModelBuilder:
         if name in MODEL_REGISTRY:
             raise ValueError(f"Model '{name}' is already registered")
         MODEL_REGISTRY[name] = builder
+        MODEL_CAPABILITIES[name] = capabilities or Capabilities()
         return builder
 
     return decorator
+
+
+def get_capabilities(name: str) -> Capabilities:
+    get_model_builder(name)
+    return MODEL_CAPABILITIES[name]
 
 
 def get_model_builder(name: str) -> ModelBuilder:
@@ -397,6 +421,38 @@ def _build_uma(p):
         uma_equivariant_vector_head=p.uma.equivariant_vector_head,
         uma_vector_head_index=p.uma.vector_head_index,
         **_base_kwargs(p),
+    )
+
+
+# ---------------------------------------------------------------------------
+# PDE operator models
+# ---------------------------------------------------------------------------
+
+
+@register_model(
+    "MeshGraphNet",
+    Capabilities(
+        output_levels=frozenset({"node"}),
+        requires=frozenset({"pos", "edge_index"}),
+        reference="Pfaff et al. 2021, arXiv:2010.03409 (single-mesh variant)",
+    ),
+)
+def _build_meshgraphnet(p):
+    if p.global_attn_engine or p.pe_dim:
+        raise ValueError("MeshGraphNet does not support global attention or pe_dim")
+    if p.use_graph_attr_conditioning:
+        raise ValueError("MeshGraphNet does not support graph_attr conditioning")
+    return MeshGraphNet(
+        p.input_dim,
+        p.hidden_dim,
+        p.output_dim,
+        p.output_type,
+        p.num_conv_layers,
+        activation_function=p.activation_function,
+        loss_function_type=p.loss_function_type,
+        loss_weights=p.task_weights,
+        mlp_layers=p.mgn.mlp_layers,
+        spatial_dim=p.mgn.spatial_dim,
     )
 
 
