@@ -228,7 +228,7 @@ def test_specialized_hetero_forward_uses_device_transfer(mpnn_type, monkeypatch)
 
     def move_data(input_data):
         transferred.append(input_data)
-        return data
+        return data.to(next(model.parameters()).device)
 
     monkeypatch.setattr(model, "_move_data_to_model_device", move_data)
 
