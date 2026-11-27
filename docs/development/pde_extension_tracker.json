@@ -145,7 +145,12 @@
         "hydragnn/models/registry.py",
         "examples/pde/poisson_manufactured.py",
         "examples/pde/poisson_msmgn.json",
-        "examples/pde/poisson_rigno.json"
+        "examples/pde/poisson_rigno.json",
+        "examples/pde/darcy_mgn.json",
+        "examples/pde/darcy_msmgn.json",
+        "examples/pde/darcy_rigno.json",
+        "examples/pde/verify_wp04.py",
+        "examples/pde/verify_rigno_upstream.py"
       ],
       "tests": [
         "tests/test_multiscale_meshgraphnet.py",
@@ -155,24 +160,29 @@
       ],
       "results": {
         "poisson_cpu_1rank": {
-          "mgn": {
-            "test_rel_l2": 0.147,
-            "heldout_rel_l2_n14": 0.188
-          },
-          "msmgn": {
-            "test_rel_l2": 0.153,
-            "heldout_rel_l2_n14": 0.198
-          },
-          "rigno": {
-            "test_rel_l2": 0.186,
-            "heldout_rel_l2_n14": 0.262
-          }
+          "mgn": {"test_rel_l2": 0.147, "heldout_rel_l2_n14": 0.188},
+          "msmgn": {"test_rel_l2": 0.153, "heldout_rel_l2_n14": 0.198},
+          "rigno": {"test_rel_l2": 0.186, "heldout_rel_l2_n14": 0.262}
         },
-        "rigno_irregular_lshape_heldout_rel_l2": 0.215
+        "darcy_cpu_1rank": {
+          "mgn": {"test_rel_l2": 0.235, "heldout_rel_l2_n14": 0.248},
+          "msmgn": {"test_rel_l2": 0.213, "heldout_rel_l2_n14": 0.215},
+          "rigno": {"test_rel_l2": 0.239, "heldout_rel_l2_n14": 0.214}
+        },
+        "rigno_irregular_lshape_heldout_rel_l2": 0.215,
+        "verify_wp04_fp64_max_error": {"cpu": 1.0e-15, "mi250x": 1.1e-15, "tol": 1e-11},
+        "rigno_upstream_parity": {
+          "upstream_commit": "3e4b307c90f34237d0c1e5e497d4301116e9c3db",
+          "max_abs_diff": 2.7e-15,
+          "graphs_identical": true,
+          "settings": "LayerNorm eps 1e-5, f32_aggregation=False"
+        },
+        "scaling_fwd_bwd_ms_n128_mi250x_fp32": {"mgn": 35.7, "msmgn": 28.3, "rigno": 21.3},
+        "hardware": "CPU AMD EPYC 7763; GPU Frontier MI250X"
       },
       "limitations": [
-        "MS-MGN: two nested triangle levels; coarse mesh supplied by the user",
-        "RIGNO: 2D non-periodic only; no numeric parity with the JAX upstream (JAX unavailable)",
+        "MS-MGN: two nested triangle levels; coarse mesh supplied by the user; O(N*C) point location",
+        "RIGNO: 2D non-periodic only; upstream parity needs LayerNorm eps 1e-5 and FP64 aggregation; parity script needs a JAX environment",
         "RIGNO: isotropic coordinate scaling and nearest-node decoder fallback deviate from upstream",
         "Regional-node resampling per epoch is left to the data pipeline"
       ]

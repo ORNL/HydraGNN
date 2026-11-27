@@ -1,0 +1,85 @@
+{
+  "Verbosity": {
+    "level": 2
+  },
+  "NeuralNetwork": {
+    "Architecture": {
+      "mpnn_type": "MultiscaleMeshGraphNet",
+      "msmgn_schedule": "2H 2L 2H",
+      "hidden_dim": 64,
+      "num_conv_layers": 8,
+      "mgn_mlp_layers": 2,
+      "activation_function": "relu",
+      "equivariance": false,
+      "freeze_conv_layers": false,
+      "initial_bias": null,
+      "max_neighbours": null,
+      "edge_dim": null,
+      "output_heads": {
+        "node": {
+          "num_headlayers": 1,
+          "dim_headlayers": [
+            64
+          ],
+          "type": "mlp"
+        }
+      },
+      "task_weights": [
+        1.0
+      ]
+    },
+    "Training": {
+      "num_epoch": 60,
+      "perc_train": 0.8,
+      "loss_function_type": "mse",
+      "batch_size": 16,
+      "continue": 0,
+      "startfrom": "existing_model",
+      "conv_checkpointing": false,
+      "Optimizer": {
+        "type": "AdamW",
+        "learning_rate": 0.001
+      }
+    }
+  },
+  "Visualization": {
+    "plot_init_solution": false,
+    "plot_hist_solution": false,
+    "create_plots": false
+  },
+  "Variables": {
+    "graph_type": "homogeneous",
+    "inputs": [
+      {
+        "name": "pos",
+        "role": "position",
+        "level": "node",
+        "dim": 2
+      },
+      {
+        "name": "f",
+        "level": "node",
+        "dim": 1,
+        "normalize": "scale_only"
+      },
+      {
+        "name": "boundary",
+        "level": "node",
+        "dim": 1
+      },
+      {
+        "name": "kappa",
+        "level": "node",
+        "dim": 1
+      }
+    ],
+    "outputs": [
+      {
+        "name": "u",
+        "level": "node",
+        "dim": 1
+      }
+    ],
+    "spatial_dim": 2
+  }
+}
