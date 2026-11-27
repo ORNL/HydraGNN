@@ -132,9 +132,9 @@
       "dependencies": [
         "WP02"
       ],
-      "status": "in_review",
+      "status": "verified",
       "pr": 584,
-      "commit": null,
+      "commit": "c32cae8c",
       "design_doc": "docs/development/pde_wp04_design.md",
       "source_files": [
         "hydragnn/data/meshes/hierarchy.py",

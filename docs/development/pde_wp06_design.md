@@ -1,6 +1,6 @@
 # PDE extension: WP06 design (FNO, GINO, GSNO)
 
-Status: implemented. Base: branch `pde-wp04` (PR #584).
+Status: implemented, in review (PR #585). Base: `main` at `c32cae8c` (WP04, PR #584).
 
 | Item | Spec acceptance criterion | Where |
 |---|---|---|
@@ -290,6 +290,25 @@ emits the same tolerance warning as on the CPU.
 
 Wall time includes process startup and data generation. The 1-GCD errors
 match the CPU runs to the reported digits.
+
+### 5.2 Full regression suite
+
+Command: `python -m pytest -q -W error -W ignore::DeprecationWarning -W ignore::UserWarning`
+on a Frontier login node (serial; `mpi`-marked tests are skipped by `pytest-mpi`
+and run separately with `srun -n 2 python -m pytest --with-mpi -m mpi`).
+
+Failures found on this host and their fixes:
+
+| Failures | Cause | Fix |
+|---|---|---|
+| 7 | `AugmentedLagrangian.update` all-reduced CPU tensors, which NCCL rejects | `_all_reduce_sum` in `domain_losses/constraint_optimizers.py` moves the buffer to the process device for the reduction |
+| 2 | `test_heterogeneous_message_passing.py` mocked `move_data` left data on CPU while the model was on GPU | the mock moves data to the model's device |
+| 340 | pyg-lib built against the wrong Python ABI and ROCm 6 libraries | environment: rebuild pyg-lib with the venv Python and `gcc` |
+| 4 | `fairchem` import failed on missing dependencies | environment: install `fairchem-core` dependencies with torch pinned |
+| 3 | `mpi`-marked tests ran in a serial session | environment: install `pytest-mpi`, as in CI |
+
+The first two are code fixes in this PR. The last three are local
+environment issues; CI was not affected.
 
 ## 6. Limitations
 
