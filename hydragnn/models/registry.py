@@ -46,6 +46,8 @@ from hydragnn.models.heterogeneous import (
     HeteroRGATStack,
 )
 
+from hydragnn.models.composite import CompositeNeuralOperator
+from hydragnn.models.deeponet import DeepONet
 from hydragnn.models.fluxgnn import FluxGNN
 from hydragnn.models.fno import FNO
 from hydragnn.models.gino import GINO
@@ -687,6 +689,57 @@ def _build_gsno(p):
         output_time_steps=g.output_time_steps,
         projection_channels=g.projection_channels,
         tie_degenerate=g.tie_degenerate,
+        **_operator_kwargs(p),
+    )
+
+
+@register_model(
+    "DeepONet",
+    Capabilities(
+        output_levels=frozenset({"node", "query"}),
+        requires=frozenset({"pos"}),
+        reference=(
+            "Lu et al. 2021 (Nat. Mach. Intell.), doi:10.1038/s42256-021-00302-5; "
+            "semantics follow lululxvi/deepxde"
+        ),
+    ),
+)
+def _build_deeponet(p):
+    _reject_unsupported("DeepONet", p)
+    d = p.deeponet
+    return DeepONet(
+        *_operator_args(p),
+        num_sensors=d.num_sensors,
+        sensor_channels=d.sensor_channels,
+        branch_layers=d.branch_layers,
+        trunk_layers=d.trunk_layers,
+        basis_dim=d.basis_dim,
+        multi_output_strategy=d.multi_output_strategy,
+        stacked=d.stacked,
+        coord_dim=d.coord_dim,
+        **_operator_kwargs(p),
+    )
+
+
+@register_model(
+    "CompositeNeuralOperator",
+    Capabilities(
+        output_levels=frozenset({"node", "cell", "face", "query"}),
+        # Data needs depend on the pipeline; the model validates them.
+        requires=frozenset(),
+        reference="inspired: HydraGNN-native hybrid of MeshGraphNet/RIGNO/GSNO blocks",
+    ),
+)
+def _build_composite(p):
+    _reject_unsupported("CompositeNeuralOperator", p)
+    c = p.composite
+    return CompositeNeuralOperator(
+        *_operator_args(p),
+        encoder=c.encoder,
+        processors=c.processors,
+        decoders=c.decoders,
+        mlp_layers=c.mlp_layers,
+        spatial_dim=c.spatial_dim,
         **_operator_kwargs(p),
     )
 

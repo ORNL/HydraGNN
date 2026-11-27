@@ -28,7 +28,12 @@ the mesh nodes are the ``(n+1) x (n+1)`` grid, recorded as ``grid_shape``.
 With ``poisson_gino.json`` (GINO) only node positions are used: the model
 encodes them onto its own latent grid and decodes back at the nodes. With
 ``poisson_gsno.json`` (GSNO) every sample carries the leading eigenvectors
-of its Gaussian-weighted normalized graph Laplacian.
+of its Gaussian-weighted normalized graph Laplacian. With
+``poisson_deeponet.json`` (DeepONet) the branch net reads f at a fixed
+``8 x 8`` sensor grid (``deeponet_sensors``), independent of the mesh, and
+the trunk evaluates u at the mesh nodes. ``poisson_composite_*.json``
+(CompositeNeuralOperator) attach the regional graphs and/or spectral basis
+that their pipeline components need.
 
 Configs whose inputs include ``kappa`` (``darcy_*.json``) switch to the Darcy
 problem ``-∇·(κ∇u) = f`` with the same ``u`` and a log-periodic coefficient
@@ -64,8 +69,31 @@ GRAPH_MODES = {
     "RIGNO": "rigno",
     "FNO": "grid",
     "GSNO": "spectral",
+    "DeepONet": "deeponet",
 }
 GSNO_MODES = 16
+SENSOR_GRID = 8
+_REGIONAL = {"RegionalGraphEncoder", "NodeToRegion", "RegionalMessagePassing"}
+
+
+def graph_mode(arch):
+    """Per-sample graph data needed by the model in ``arch``."""
+    if arch["mpnn_type"] != "CompositeNeuralOperator":
+        return GRAPH_MODES.get(arch["mpnn_type"])
+    specs = [arch.get("composite_encoder") or {}]
+    specs += arch.get("composite_processors") or []
+    types = {spec.get("type") for spec in specs}
+    if types & _REGIONAL and "GraphSpectral" in types:
+        return "rigno+spectral"
+    if types & _REGIONAL:
+        return "rigno"
+    return "spectral" if "GraphSpectral" in types else None
+
+
+def _sensor_points():
+    ticks = (torch.arange(SENSOR_GRID, dtype=torch.float32) + 0.5) / SENSOR_GRID
+    x, y = torch.meshgrid(ticks, ticks, indexing="ij")
+    return torch.stack([x.flatten(), y.flatten()], dim=1)
 
 
 def _mesh(n, graph):
@@ -108,11 +136,16 @@ def manufactured_sample(n, generator, max_mode=2, graph=None, darcy=False):
     else:
         kp, kq, beta = 1, 1, 0.0  # κ = 1
     mesh = _mesh(n, graph)
-    u, grad_u = _solution(mesh.pos, amplitude, k, l)
-    kappa, grad_kappa = _coefficient(mesh.pos, beta, kp, kq)
-    # -∇·(κ∇u) = -κΔu - ∇κ·∇u, with -Δu = (k² + l²)π² u.
-    f = kappa * (k * k + l * l) * math.pi**2 * u - (grad_kappa * grad_u).sum(dim=1)
-    mesh.f = f.unsqueeze(1)
+
+    def source(pos):
+        u, grad_u = _solution(pos, amplitude, k, l)
+        kappa, grad_kappa = _coefficient(pos, beta, kp, kq)
+        # -∇·(κ∇u) = -κΔu - ∇κ·∇u, with -Δu = (k² + l²)π² u.
+        return kappa * (k * k + l * l) * math.pi**2 * u - (grad_kappa * grad_u).sum(1)
+
+    u, _ = _solution(mesh.pos, amplitude, k, l)
+    kappa, _ = _coefficient(mesh.pos, beta, kp, kq)
+    mesh.f = source(mesh.pos).unsqueeze(1)
     mesh.boundary = mesh.boundary_node_mask.float().unsqueeze(1)
     mesh.u = u.unsqueeze(1)
     if darcy:
@@ -125,12 +158,17 @@ def manufactured_sample(n, generator, max_mode=2, graph=None, darcy=False):
     q = q * mesh.face_area
     # A_f ~ 1/n, so q * n has the same magnitude across resolutions.
     mesh.q = q * n
-    if graph == "rigno":
+    if graph in ("rigno", "rigno+spectral"):
         mesh = build_rigno_graph(mesh, generator=generator)
-    elif graph == "grid":
-        mesh.grid_shape = torch.tensor([[n + 1, n + 1]])
-    elif graph == "spectral":
+    if graph in ("spectral", "rigno+spectral"):
         attach_graph_spectral_basis(mesh, GSNO_MODES)
+    if graph == "grid":
+        mesh.grid_shape = torch.tensor([[n + 1, n + 1]])
+    elif graph == "deeponet":
+        # Graph-level [1, m]: batches to [G, m] whatever the mesh size.
+        # Divided by 8π² (largest (k² + l²)π²) so the branch inputs are O(1).
+        sensors = source(_sensor_points()) / (8 * math.pi**2)
+        mesh.deeponet_sensors = sensors.unsqueeze(0)
     return mesh
 
 
@@ -175,7 +213,7 @@ def main(num_samples=240, num_epoch=None, config_name="poisson_mgn.json"):
     log_name = os.path.splitext(config_name)[0]
     hydragnn.utils.print.print_utils.setup_log(log_name)
 
-    graph = GRAPH_MODES.get(config["NeuralNetwork"]["Architecture"]["mpnn_type"])
+    graph = graph_mode(config["NeuralNetwork"]["Architecture"])
     darcy = any(v["name"] == "kappa" for v in config["Variables"]["inputs"])
     dataset = make_dataset(
         num_samples, TRAIN_RESOLUTIONS, seed=1, graph=graph, darcy=darcy

@@ -194,9 +194,9 @@
       "dependencies": [
         "WP02"
       ],
-      "status": "in_review",
+      "status": "verified",
       "pr": 585,
-      "commit": null,
+      "commit": "6ef13162",
       "design_doc": "docs/development/pde_wp06_design.md",
       "source_files": [
         "hydragnn/models/fno.py",
@@ -250,7 +250,56 @@
         "No spherical GSNO or SGNO"
       ]
     },
-    {"id": "WP07", "title": "DeepONet and composite architecture", "dependencies": ["WP01", "WP02"], "status": "not_started"},
+    {
+      "id": "WP07",
+      "title": "DeepONet and composite architecture",
+      "dependencies": ["WP01", "WP02"],
+      "status": "in_review",
+      "pr": null,
+      "design_doc": "docs/development/pde_wp07_design.md",
+      "source_files": [
+        "hydragnn/models/deeponet.py",
+        "hydragnn/models/composite.py",
+        "hydragnn/models/meshgraphnet.py",
+        "hydragnn/models/gino.py",
+        "hydragnn/models/heterogeneous/__init__.py",
+        "hydragnn/model_settings.py",
+        "hydragnn/models/registry.py",
+        "hydragnn/models/create.py",
+        "examples/pde/poisson_manufactured.py",
+        "examples/pde/poisson_deeponet.json",
+        "examples/pde/poisson_composite_mgn_gsno.json",
+        "examples/pde/poisson_composite_regional_flux.json",
+        "examples/pde/verify_wp07.py"
+      ],
+      "tests": [
+        "tests/test_deeponet.py",
+        "tests/test_composite.py",
+        "tests/test_poisson_mgn_train.py",
+        "tests/test_model_registry.py"
+      ],
+      "results": {
+        "poisson_cpu_1rank": {
+          "deeponet": {"test_rel_l2": 0.073, "heldout_rel_l2_n14": 0.080, "wall_s": 47, "peak_rss_gb": 2.4},
+          "composite_mgn_gsno": {"test_rel_l2": 0.019, "heldout_rel_l2_n14": 0.027, "wall_s": 61, "peak_rss_gb": 2.3},
+          "composite_regional_flux": {"test_rel_l2": {"u": 0.099, "q": 0.113}, "heldout_rel_l2_n14": {"u": 0.177, "q": 0.250}, "wall_s": 80, "peak_rss_gb": 2.2}
+        },
+        "verify_wp07_fp64_cpu": {"failed": [], "antiderivative_heldout_rel_l2": 0.0494, "antiderivative_initial_rel_l2": 1.020, "strategies_max_abs_diff": 2.2e-16, "composite_mgn_gsno_loss": [0.392, 1.60e-4], "composite_regional_flux_loss": [0.383, 1.98e-4], "rejections_passed": 6, "wall_s": 158},
+        "verify_wp07_fp64_mi250x": {"failed": [], "antiderivative_heldout_rel_l2": 0.0487, "wall_s": 28},
+        "poisson_mi250x": {
+          "deeponet": {"gcd1": {"test_rel_l2": 0.090, "heldout_rel_l2_n14": 0.105, "wall_s": 33}, "gcd8": {"test_rel_l2": 0.117, "heldout_rel_l2_n14": 0.164, "wall_s": 28}},
+          "composite_mgn_gsno": {"gcd1": {"test_rel_l2": 0.019, "heldout_rel_l2_n14": 0.027, "wall_s": 51}, "gcd8": {"test_rel_l2": 0.018, "heldout_rel_l2_n14": 0.029, "wall_s": 37}},
+          "composite_regional_flux": {"gcd1": {"test_rel_l2": {"u": 0.099, "q": 0.113}, "heldout_rel_l2_n14": {"u": 0.177, "q": 0.250}, "wall_s": 66}, "gcd8": {"test_rel_l2": {"u": 0.083, "q": 0.103}, "heldout_rel_l2_n14": {"u": 0.159, "q": 0.233}, "wall_s": 49}}
+        },
+        "gpu_job": 6007497,
+        "hardware": "CPU AMD EPYC 7763; GPU Frontier MI250X"
+      },
+      "limitations": [
+        "DeepONet: one fixed sensor layout per model; coordinate-only trunk; no POD-DeepONet or MIONet",
+        "Composite: regional components and query decoder are 2D only; no multiscale, attention or FiLM components",
+        "Composite pipelines are HydraGNN-native hybrids, not published architectures"
+      ]
+    },
     {"id": "WP08", "title": "Physics losses, constraints and residuals", "dependencies": ["WP02"], "status": "not_started"},
     {"id": "WP09", "title": "Time integration and adaptivity", "dependencies": ["WP08"], "status": "not_started"},
     {"id": "WP10", "title": "Hybrid solvers and preconditioning", "dependencies": ["WP08"], "status": "not_started"},

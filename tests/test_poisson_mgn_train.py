@@ -26,6 +26,9 @@ EXAMPLE = os.path.join(
         ("darcy_mgn.json", ["u"]),
         ("darcy_msmgn.json", ["u"]),
         ("darcy_rigno.json", ["u"]),
+        ("poisson_deeponet.json", ["u"]),
+        ("poisson_composite_mgn_gsno.json", ["u"]),
+        ("poisson_composite_regional_flux.json", ["u", "q"]),
     ],
 )
 def test_poisson_mgn_train(tmp_path, monkeypatch, config_name, names):

@@ -152,41 +152,62 @@ class MeshGraphNet(OperatorBase):
         return outputs
 
     def _cell_latent(self, node, data):
-        cells = cell_of_conn(data)
-        total = node.new_zeros(data.cell_size.numel(), node.shape[1])
-        total.index_add_(0, cells, node[data.cell_conn])
-        return total / data.cell_size.unsqueeze(1).to(node.dtype)
+        return cell_latent(node, data)
 
     def _query_latent(self, node, data):
-        if not bool((data.cell_size == 3).all()):
-            raise ValueError("MeshGraphNet query heads support triangle meshes only")
-        # cell_conn offsets stay aligned with triangles after batching.
-        tri = data.cell_conn.view(-1, 3)[data.query_cell]
-        # Geometry stays in coordinate precision; only the weights are cast,
-        # so low-precision latents do not distort the interpolation.
-        corners = data.pos[tri][..., :2]
-        a, b, c = corners[:, 0], corners[:, 1], corners[:, 2]
-        v0, v1 = b - a, c - a
-        rel = data.query_pos[:, :2].to(a.dtype) - a
-        det = v0[:, 0] * v1[:, 1] - v0[:, 1] * v1[:, 0]
-        l1 = (rel[:, 0] * v1[:, 1] - rel[:, 1] * v1[:, 0]) / det
-        l2 = (v0[:, 0] * rel[:, 1] - v0[:, 1] * rel[:, 0]) / det
-        weights = torch.stack([1 - l1 - l2, l1, l2], dim=1).to(node.dtype)
-        return (weights.unsqueeze(-1) * node[tri]).sum(dim=1)
+        return query_latent(node, data, "MeshGraphNet")
 
     def _decode_face(self, decoder, dim, node, data):
-        cell = self._cell_latent(node, data)
-        # Centroids and distances stay in coordinate precision so that
-        # low-precision latents cannot collapse nearby geometry.
-        centroid = self._cell_latent(data.pos[:, : self.spatial_dim], data)
-        o, n = data.face_index
-        normal = data.face_normal[:, : self.spatial_dim].to(node.dtype)
-        area = data.face_area.to(node.dtype)
-        dist = (centroid[n] - centroid[o]).norm(dim=-1, keepdim=True).to(node.dtype)
-        out = decoder(torch.cat([cell[o], cell[n], normal, area, dist], dim=-1))
-        if not self.conservative_faces:
-            return out
-        flipped = decoder(torch.cat([cell[n], cell[o], -normal, area, dist], dim=-1))
-        mean = out[:, :dim] - flipped[:, :dim]
-        # Variance columns (GaussianNLL) must not flip sign with orientation.
-        return torch.cat([mean, out[:, dim:] + flipped[:, dim:]], dim=-1)
+        return decode_face(
+            decoder, dim, node, data, self.spatial_dim, self.conservative_faces
+        )
+
+
+def cell_latent(node, data):
+    """Mean of the node rows of every cell."""
+    cells = cell_of_conn(data)
+    total = node.new_zeros(data.cell_size.numel(), node.shape[1])
+    total.index_add_(0, cells, node[data.cell_conn])
+    return total / data.cell_size.unsqueeze(1).to(node.dtype)
+
+
+def query_latent(node, data, owner="MeshGraphNet"):
+    """Barycentric interpolation of node rows at ``query_pos`` (triangles)."""
+    if not bool((data.cell_size == 3).all()):
+        raise ValueError(f"{owner} query heads support triangle meshes only")
+    # cell_conn offsets stay aligned with triangles after batching.
+    tri = data.cell_conn.view(-1, 3)[data.query_cell]
+    # Geometry stays in coordinate precision; only the weights are cast,
+    # so low-precision latents do not distort the interpolation.
+    corners = data.pos[tri][..., :2]
+    a, b, c = corners[:, 0], corners[:, 1], corners[:, 2]
+    v0, v1 = b - a, c - a
+    rel = data.query_pos[:, :2].to(a.dtype) - a
+    det = v0[:, 0] * v1[:, 1] - v0[:, 1] * v1[:, 0]
+    l1 = (rel[:, 0] * v1[:, 1] - rel[:, 1] * v1[:, 0]) / det
+    l2 = (v0[:, 0] * rel[:, 1] - v0[:, 1] * rel[:, 0]) / det
+    weights = torch.stack([1 - l1 - l2, l1, l2], dim=1).to(node.dtype)
+    return (weights.unsqueeze(-1) * node[tri]).sum(dim=1)
+
+
+def decode_face(decoder, dim, node, data, spatial_dim, conservative):
+    """Face decoder on ``[cell_o, cell_n, normal, area, dist]``.
+
+    With ``conservative`` the mean is ``g(o, n) - g(n, o)``, so the two
+    orientations of a face give exactly opposite fluxes.
+    """
+    cell = cell_latent(node, data)
+    # Centroids and distances stay in coordinate precision so that
+    # low-precision latents cannot collapse nearby geometry.
+    centroid = cell_latent(data.pos[:, :spatial_dim], data)
+    o, n = data.face_index
+    normal = data.face_normal[:, :spatial_dim].to(node.dtype)
+    area = data.face_area.to(node.dtype)
+    dist = (centroid[n] - centroid[o]).norm(dim=-1, keepdim=True).to(node.dtype)
+    out = decoder(torch.cat([cell[o], cell[n], normal, area, dist], dim=-1))
+    if not conservative:
+        return out
+    flipped = decoder(torch.cat([cell[n], cell[o], -normal, area, dist], dim=-1))
+    mean = out[:, :dim] - flipped[:, :dim]
+    # Variance columns (GaussianNLL) must not flip sign with orientation.
+    return torch.cat([mean, out[:, dim:] + flipped[:, dim:]], dim=-1)

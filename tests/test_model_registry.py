@@ -60,9 +60,11 @@ HETEROGENEOUS_MODELS = [
 ]
 # Operator models; contracts live in tests/test_meshgraphnet.py and
 # tests/test_fluxgnn.py, tests/test_multiscale_meshgraphnet.py,
-# tests/test_rigno.py, tests/test_fno.py, tests/test_gino.py and
-# tests/test_gsno.py.
+# tests/test_rigno.py, tests/test_fno.py, tests/test_gino.py,
+# tests/test_gsno.py, tests/test_deeponet.py and tests/test_composite.py.
 PDE_MODELS = [
+    "CompositeNeuralOperator",
+    "DeepONet",
     "FNO",
     "FluxGNN",
     "GINO",
