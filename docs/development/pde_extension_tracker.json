@@ -233,8 +233,15 @@
           "settings": "upstream cfloat patched to complex128 for FP64 runs only"
         },
         "gino_3d_heldout_query_rel_l2": {"gino": 0.078, "fno_grid_reference": 0.029},
-        "verify_wp06_fp64_max_error": {"cpu": 3.0e-15, "tol": 1e-12},
-        "hardware": "CPU AMD EPYC 7763; GPU pending"
+        "verify_wp06_fp64_max_error": {"cpu": 3.0e-15, "mi250x": 3.3e-15, "tol": 1e-12},
+        "poisson_mi250x": {
+          "fno": {"1gcd": {"test_rel_l2": 0.024, "heldout_rel_l2_n14": 0.025, "wall_s": 167}, "8gcd": {"test_rel_l2": 0.020, "heldout_rel_l2_n14": 0.021, "wall_s": 72}},
+          "gino": {"1gcd": {"test_rel_l2": 0.050, "heldout_rel_l2_n14": 0.067, "wall_s": 106}, "8gcd": {"test_rel_l2": 0.051, "heldout_rel_l2_n14": 0.068, "wall_s": 59}},
+          "gsno": {"1gcd": {"test_rel_l2": 0.044, "heldout_rel_l2_n14": 0.039, "wall_s": 41}, "8gcd": {"test_rel_l2": 0.045, "heldout_rel_l2_n14": 0.038, "wall_s": 32}}
+        },
+        "gino_peak_gpu_mb_mi250x": {"500": 49, "2000": 197, "8000": 780},
+        "gpu_job": 6006158,
+        "hardware": "CPU AMD EPYC 7763; GPU Frontier MI250X"
       },
       "limitations": [
         "FNO: tensor-product grids only; dense weights; no mixed precision",

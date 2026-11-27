@@ -85,13 +85,14 @@ measured values and environments are in the linked design documents.
   `poisson_{fno,gino,gsno}.json`, `examples/pde/verify_wp06.py`, `examples/pde/verify_neuralop_upstream.py`,
   `LICENSES/NEURALOP-MIT.txt`.
 * Tests: `test_fno.py`, `test_gino.py`, `test_gsno.py`, `test_model_registry.py`.
-* Results (CPU):
+* Results (CPU; GPU rows from Frontier MI250X job 6006158):
   * FNO and GINO match neuralop 2.0.0 (`a6648ee`). FNO agrees exactly; GINO agrees to 1.1e-15 in FP64 and 4e-7 in FP32.
   * FP64 property checks pass at round-off. They cover the spectral identity in 1D/2D/3D, discretization
     invariance, the GSNO eigenbasis and degenerate tying, and reconstruction.
   * 3D GINO test on 250 held-out non-matching queries: relative L2 0.078. The FNO grid reference reaches 0.029.
   * Poisson, held-out n = 14 relative L2: FNO 0.025, GINO 0.067, GSNO 0.039 (MGN 0.188).
-  * GPU run pending. Details in `pde_wp06_design.md` §5.
+  * MI250X: `verify_wp06.py` passes in FP64 (max error 3.3e-15). Poisson held-out rel. L2 on 1 / 8 GCDs:
+    FNO 0.025 / 0.021, GINO 0.067 / 0.068, GSNO 0.039 / 0.038. Details in `pde_wp06_design.md` §5.1.
 * Limitations: FNO needs tensor-product grids. GINO uses a dense O(N·M) neighbour search with one latent grid shared
   by every graph. For GSNO, the edge-weight scale and the temporal I/O layout are assumptions (no reference code).
   No spherical GSNO and no SGNO.

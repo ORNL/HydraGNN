@@ -249,9 +249,47 @@ structured unit-square grid. GINO and GSNO make no use of grid structure.
 
 Job: `sbatch ~/fe_runs/wp06_gpu.sbatch` (1 node). It runs `verify_wp06.py
 --device cuda --sizes 16 32 64 128` on 1 GCD, then trains each preset on
-1 and 8 GCDs. Results: pending (job 6006158). Until they are recorded here,
-every number above is CPU-only, and this document makes no claim about GPU
-behaviour.
+1 and 8 GCDs. Job 6006158: AMD Instinct MI250X, torch 2.9.1+rocm7.13.0,
+Python 3.11.17, seed 0, code identical to `dba901f4`. Every step exited 0.
+
+**`verify_wp06.py`** (FP64, `failed: []`, 243 s inside the script, 436 s
+including startup):
+
+* FNO spectral identity ≤ 2.0e-15 (1D/2D/3D); discretization invariance
+  8.9e-16; padding round trip 0; gradcheck passes.
+* GSNO orthonormality 1.6e-15, eigen-residual 4.8e-16, sign invariance
+  2.8e-17, tied degenerate rotation 0 (untied 3.5e-5), full-basis
+  reconstruction 3.3e-15, temporal low-pass 2.2e-16.
+* GINO 3D held-out query rel. L2 0.078 (FNO grid reference 0.029), same as
+  CPU.
+
+**GINO memory** (one forward + backward pass on the GPU):
+
+| Points | Neighbour pairs | Peak GPU memory | Time |
+|---|---|---|---|
+| 500 | 10,027 | 49 MB | 0.011 s |
+| 2,000 | 40,583 | 197 MB | 0.021 s |
+| 8,000 | 161,672 | 780 MB | 0.077 s |
+
+**GSNO eigensolve.** This runs in SciPy on the compute node's CPU, not on the
+GPU: 289 / 1089 / 4225 nodes take 0.10 / 37.6 / 3.6 s dense and
+0.88 / 20.2 / 30.1 s LOBPCG; 16,641 nodes take 78 s LOBPCG. The timings are
+noisy (the dense 1089-node solve is slower than the 4225-node one). LOBPCG
+emits the same tolerance warning as on the CPU.
+
+**Manufactured Poisson** (FP32, 60 epochs, same data as above):
+
+| Model | GCDs | Test rel. L2 | Held-out 14×14 | Wall time |
+|---|---|---|---|---|
+| FNO | 1 | 0.024 | 0.025 | 167 s |
+| FNO | 8 | 0.020 | 0.021 | 72 s |
+| GINO | 1 | 0.050 | 0.067 | 106 s |
+| GINO | 8 | 0.051 | 0.068 | 59 s |
+| GSNO | 1 | 0.044 | 0.039 | 41 s |
+| GSNO | 8 | 0.045 | 0.038 | 32 s |
+
+Wall time includes process startup and data generation. The 1-GCD errors
+match the CPU runs to the reported digits.
 
 ## 6. Limitations
 
