@@ -12,7 +12,7 @@ measured values and environments are in the linked design documents.
 | WP03 | MeshGraphNets and FluxGNN | WP02 | verified | #582 | `pde_wp03_design.md` |
 | WP04 | Multiscale MGN and RIGNO | WP02 | in review | #584 | `pde_wp04_design.md` |
 | WP05 | Transolver, ++, -3 and GAOT | WP02, WP11 | not started | | |
-| WP06 | FNO, GINO, GSNO | WP02 | in review | | `pde_wp06_design.md` |
+| WP06 | FNO, GINO, GSNO | WP02 | in review | #585 | `pde_wp06_design.md` |
 | WP07 | DeepONet and composite architecture | WP01, WP02 | not started | | |
 | WP08 | Physics losses, constraints and residuals | WP02 | not started | | |
 | WP09 | Time integration and adaptivity | WP08 | not started | | |

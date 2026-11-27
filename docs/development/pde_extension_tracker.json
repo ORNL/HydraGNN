@@ -195,7 +195,7 @@
         "WP02"
       ],
       "status": "in_review",
-      "pr": null,
+      "pr": 585,
       "commit": null,
       "design_doc": "docs/development/pde_wp06_design.md",
       "source_files": [
