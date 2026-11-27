@@ -18,6 +18,9 @@ from hydragnn.model_settings import (
     AllScAIPSettings,
     EquivariantAttentionSettings,
     FluxGNNSettings,
+    FNOSettings,
+    GINOSettings,
+    GSNOSettings,
     MeshGraphNetSettings,
     MultiscaleMGNSettings,
     RIGNOSettings,
@@ -120,6 +123,9 @@ def create_model_config(
         msmgn=MultiscaleMGNSettings.from_mapping(config["Architecture"]),
         rigno=RIGNOSettings.from_mapping(config["Architecture"]),
         fluxgnn=FluxGNNSettings.from_mapping(config["Architecture"]),
+        fno=FNOSettings.from_mapping(config["Architecture"]),
+        gino=GINOSettings.from_mapping(config["Architecture"]),
+        gsno=GSNOSettings.from_mapping(config["Architecture"]),
         hetero_pooling_mode=config["Architecture"].get("hetero_pooling_mode", "sum"),
         node_target_type=config["Architecture"].get("node_target_type", None),
         share_relation_weights=config["Architecture"].get(
@@ -157,6 +163,9 @@ _SETTINGS_CLASSES = {
     "msmgn": MultiscaleMGNSettings,
     "rigno": RIGNOSettings,
     "fluxgnn": FluxGNNSettings,
+    "fno": FNOSettings,
+    "gino": GINOSettings,
+    "gsno": GSNOSettings,
 }
 
 
@@ -238,6 +247,9 @@ def create_model(
     msmgn: MultiscaleMGNSettings | None = None,
     rigno: RIGNOSettings | None = None,
     fluxgnn: FluxGNNSettings | None = None,
+    fno: FNOSettings | None = None,
+    gino: GINOSettings | None = None,
+    gsno: GSNOSettings | None = None,
     **flat_settings,
 ):
     params = dict(locals())

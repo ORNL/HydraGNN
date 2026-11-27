@@ -23,7 +23,12 @@ is the global batch, split evenly across MPI ranks. With
 ``poisson_msmgn.json`` (MultiscaleMeshGraphNet) every sample is a two-level
 mesh hierarchy whose coarse level has half the resolution. With
 ``poisson_rigno.json`` (RIGNO) every sample carries its regional graphs, with
-regional nodes drawn from a seeded generator.
+regional nodes drawn from a seeded generator. With ``poisson_fno.json`` (FNO)
+the mesh nodes are the ``(n+1) x (n+1)`` grid, recorded as ``grid_shape``.
+With ``poisson_gino.json`` (GINO) only node positions are used: the model
+encodes them onto its own latent grid and decodes back at the nodes. With
+``poisson_gsno.json`` (GSNO) every sample carries the leading eigenvectors
+of its Gaussian-weighted normalized graph Laplacian.
 
 Configs whose inputs include ``kappa`` (``darcy_*.json``) switch to the Darcy
 problem ``-∇·(κ∇u) = f`` with the same ``u`` and a log-periodic coefficient
@@ -42,14 +47,25 @@ import torch.distributed as dist
 from torch_geometric.loader import DataLoader
 
 import hydragnn
-from hydragnn.data.meshes import build_hierarchy, build_rigno_graph, unit_square_mesh
+from hydragnn.data.meshes import (
+    attach_graph_spectral_basis,
+    build_hierarchy,
+    build_rigno_graph,
+    unit_square_mesh,
+)
 from hydragnn.preprocess.load_data import SchemaPreparedDataset
 
 TRAIN_RESOLUTIONS = (6, 8, 10)
 HELDOUT_RESOLUTION = 14
 
 
-GRAPH_MODES = {"MultiscaleMeshGraphNet": "hierarchy", "RIGNO": "rigno"}
+GRAPH_MODES = {
+    "MultiscaleMeshGraphNet": "hierarchy",
+    "RIGNO": "rigno",
+    "FNO": "grid",
+    "GSNO": "spectral",
+}
+GSNO_MODES = 16
 
 
 def _mesh(n, graph):
@@ -111,6 +127,10 @@ def manufactured_sample(n, generator, max_mode=2, graph=None, darcy=False):
     mesh.q = q * n
     if graph == "rigno":
         mesh = build_rigno_graph(mesh, generator=generator)
+    elif graph == "grid":
+        mesh.grid_shape = torch.tensor([[n + 1, n + 1]])
+    elif graph == "spectral":
+        attach_graph_spectral_basis(mesh, GSNO_MODES)
     return mesh
 
 

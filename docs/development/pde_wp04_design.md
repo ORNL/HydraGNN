@@ -1,6 +1,6 @@
 # PDE extension: WP04 design (Multiscale MeshGraphNet and RIGNO)
 
-Status: implemented. Base: branch `pde-wp02-complete` (PR #583).
+Status: verified, merged in PR #584 (`c32cae8c`).
 
 | Item | Spec acceptance criterion | Where |
 |---|---|---|

@@ -2,6 +2,17 @@ import torch
 import torch.distributed as dist
 
 
+def _all_reduce_sum(tensor):
+    if not dist.is_initialized() or dist.get_world_size() == 1:
+        return tensor
+    from hydragnn.distributed import get_device
+
+    # NCCL cannot reduce CPU tensors, and the buffers may live on the CPU.
+    reduced = tensor.to(get_device())
+    dist.all_reduce(reduced)
+    return reduced.to(tensor.device)
+
+
 class ConstraintOptimizer(torch.nn.Module):
     """Turn named non-negative constraint residuals into scalar loss terms."""
 
@@ -55,16 +66,14 @@ class AugmentedLagrangian(ConstraintOptimizer):
     def update(self, completed_epoch):
         if completed_epoch < 0 or (completed_epoch + 1) % self.update_every:
             return
-        active = self.rho.new_tensor(float(any(self._counts.values())))
-        if dist.is_initialized():
-            dist.all_reduce(active)
+        active = _all_reduce_sum(self.rho.new_tensor(float(any(self._counts.values()))))
         if active == 0:
             return
         means = []
         for name in self.names:
-            stats = self.rho.new_tensor([self._sums[name], self._counts[name]])
-            if dist.is_initialized():
-                dist.all_reduce(stats)
+            stats = _all_reduce_sum(
+                self.rho.new_tensor([self._sums[name], self._counts[name]])
+            )
             mean = stats[0] / stats[1].clamp_min(1)
             means.append(mean)
             if stats[1] > 0:

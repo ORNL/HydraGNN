@@ -1,3 +1,8 @@
+from .graph_spectral import (
+    attach_graph_spectral_basis,
+    graph_spectral_basis,
+    normalized_laplacian,
+)
 from .hierarchy import (
     MeshHierarchy,
     build_hierarchy,

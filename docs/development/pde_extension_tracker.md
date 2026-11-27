@@ -10,9 +10,9 @@ measured values and environments are in the linked design documents.
 | WP01 | Registry, configuration, compatibility baseline | – | verified | #581 / `e1564c39` | `pde_wp01_wp02_design.md` |
 | WP02 | Mesh, fields, trajectory, hierarchy contracts | WP01 | verified | #581 / `e1564c39`, #583 | `pde_wp01_wp02_design.md` |
 | WP03 | MeshGraphNets and FluxGNN | WP02 | verified | #582 | `pde_wp03_design.md` |
-| WP04 | Multiscale MGN and RIGNO | WP02 | in review | #584 | `pde_wp04_design.md` |
+| WP04 | Multiscale MGN and RIGNO | WP02 | verified | #584 / `c32cae8c` | `pde_wp04_design.md` |
 | WP05 | Transolver, ++, -3 and GAOT | WP02, WP11 | not started | | |
-| WP06 | FNO, GINO, GSNO | WP02 | not started | | |
+| WP06 | FNO, GINO, GSNO | WP02 | in review | #585 | `pde_wp06_design.md` |
 | WP07 | DeepONet and composite architecture | WP01, WP02 | not started | | |
 | WP08 | Physics losses, constraints and residuals | WP02 | not started | | |
 | WP09 | Time integration and adaptivity | WP08 | not started | | |
@@ -77,3 +77,22 @@ measured values and environments are in the linked design documents.
   RIGNO reaches 0.215 on a held-out L-shaped domain. Details in `pde_wp04_design.md` §4.
 * Limitations: MS-MGN supports two nested triangle levels only, and its hierarchy point location is O(N·C).
   RIGNO is 2D non-periodic only. Upstream parity requires LayerNorm epsilon 1e-5 and FP64 aggregation.
+
+## WP06
+
+* Sources: `models/fno.py`, `models/gino.py`, `models/gsno.py`, `data/meshes/graph_spectral.py`,
+  `FNOSettings`/`GINOSettings`/`GSNOSettings` in `model_settings.py`, `examples/pde/poisson_manufactured.py`,
+  `poisson_{fno,gino,gsno}.json`, `examples/pde/verify_wp06.py`, `examples/pde/verify_neuralop_upstream.py`,
+  `LICENSES/NEURALOP-MIT.txt`.
+* Tests: `test_fno.py`, `test_gino.py`, `test_gsno.py`, `test_model_registry.py`.
+* Results (CPU; GPU rows from Frontier MI250X job 6006158):
+  * FNO and GINO match neuralop 2.0.0 (`a6648ee`). FNO agrees exactly; GINO agrees to 1.1e-15 in FP64 and 4e-7 in FP32.
+  * FP64 property checks pass at round-off. They cover the spectral identity in 1D/2D/3D, discretization
+    invariance, the GSNO eigenbasis and degenerate tying, and reconstruction.
+  * 3D GINO test on 250 held-out non-matching queries: relative L2 0.078. The FNO grid reference reaches 0.029.
+  * Poisson, held-out n = 14 relative L2: FNO 0.025, GINO 0.067, GSNO 0.039 (MGN 0.188).
+  * MI250X: `verify_wp06.py` passes in FP64 (max error 3.3e-15). Poisson held-out rel. L2 on 1 / 8 GCDs:
+    FNO 0.025 / 0.021, GINO 0.067 / 0.068, GSNO 0.039 / 0.038. Details in `pde_wp06_design.md` §5.1.
+* Limitations: FNO needs tensor-product grids. GINO uses a dense O(N·M) neighbour search with one latent grid shared
+  by every graph. For GSNO, the edge-weight scale and the temporal I/O layout are assumptions (no reference code).
+  No spherical GSNO and no SGNO.
