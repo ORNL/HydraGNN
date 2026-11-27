@@ -255,7 +255,7 @@
       "title": "DeepONet and composite architecture",
       "dependencies": ["WP01", "WP02"],
       "status": "in_review",
-      "pr": null,
+      "pr": 586,
       "design_doc": "docs/development/pde_wp07_design.md",
       "source_files": [
         "hydragnn/models/deeponet.py",

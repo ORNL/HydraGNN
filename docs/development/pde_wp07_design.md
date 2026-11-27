@@ -1,6 +1,6 @@
 # PDE extension: WP07 design (DeepONet and composite architecture)
 
-Status: implemented, in review. Base: `main` at `6ef13162` (WP06, PR #585).
+Status: implemented, in review (PR #586). Base: `main` at `6ef13162` (WP06, PR #585).
 
 | Item | Spec acceptance criterion | Where |
 |---|---|---|
