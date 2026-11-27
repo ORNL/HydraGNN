@@ -165,3 +165,59 @@ class FluxGNNSettings(_PrefixedSettings):
     num_bface_tags: int = 1
     source: bool = False
     layout: Optional[dict] = None
+
+
+@dataclass(frozen=True)
+class FNOSettings(_PrefixedSettings):
+    """FNO options (neuralop defaults); width and depth come from
+    ``hidden_dim`` and ``num_conv_layers``. Nodes need ``data.grid_shape``."""
+
+    prefix: ClassVar[str] = "fno_"
+
+    n_modes: tuple = (16, 16)
+    lifting_channel_ratio: float = 2
+    projection_channel_ratio: float = 2
+    positional_embedding: Optional[str] = "grid"
+    domain_padding: object = None
+    channel_mlp_expansion: float = 0.5
+
+
+@dataclass(frozen=True)
+class GINOSettings(_PrefixedSettings):
+    """GINO options (neuralop defaults except ``fno_in_channels``, which
+    defaults to the input width); width and FNO depth come from
+    ``hidden_dim`` and ``num_conv_layers``."""
+
+    prefix: ClassVar[str] = "gino_"
+
+    coord_dim: int = 2
+    n_modes: tuple = (16, 16)
+    latent_resolution: tuple = (32, 32)
+    box_min: object = 0.0
+    box_max: object = 1.0
+    in_radius: float = 0.033
+    out_radius: float = 0.033
+    fno_in_channels: Optional[int] = None
+    embed_channels: int = 32
+    embed_max_positions: int = 10000
+    in_channel_mlp_hidden_layers: tuple = (80, 80, 80)
+    out_channel_mlp_hidden_layers: tuple = (512, 256)
+    lifting_channel_ratio: float = 2
+    projection_channel_ratio: float = 4
+    channel_mlp_expansion: float = 0.5
+
+
+@dataclass(frozen=True)
+class GSNOSettings(_PrefixedSettings):
+    """GSNO options (paper defaults); width and depth come from
+    ``hidden_dim`` and ``num_conv_layers``. ``temporal_modes = 0`` is the
+    steady operator. Nodes need ``data.gsno_basis``."""
+
+    prefix: ClassVar[str] = "gsno_"
+
+    spatial_modes: int = 8
+    temporal_modes: int = 0
+    input_time_steps: int = 1
+    output_time_steps: int = 1
+    projection_channels: int = 128
+    tie_degenerate: bool = False

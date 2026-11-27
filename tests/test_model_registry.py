@@ -59,9 +59,18 @@ HETEROGENEOUS_MODELS = [
     "HeteroSAGE",
 ]
 # Operator models; contracts live in tests/test_meshgraphnet.py and
-# tests/test_fluxgnn.py, tests/test_multiscale_meshgraphnet.py and
-# tests/test_rigno.py.
-PDE_MODELS = ["FluxGNN", "MeshGraphNet", "MultiscaleMeshGraphNet", "RIGNO"]
+# tests/test_fluxgnn.py, tests/test_multiscale_meshgraphnet.py,
+# tests/test_rigno.py, tests/test_fno.py, tests/test_gino.py and
+# tests/test_gsno.py.
+PDE_MODELS = [
+    "FNO",
+    "FluxGNN",
+    "GINO",
+    "GSNO",
+    "MeshGraphNet",
+    "MultiscaleMeshGraphNet",
+    "RIGNO",
+]
 
 HIDDEN_DIM = 8
 NODE_DIM = 2

@@ -47,6 +47,9 @@ from hydragnn.models.heterogeneous import (
 )
 
 from hydragnn.models.fluxgnn import FluxGNN
+from hydragnn.models.fno import FNO
+from hydragnn.models.gino import GINO
+from hydragnn.models.gsno import GSNO
 from hydragnn.models.meshgraphnet import MeshGraphNet
 from hydragnn.models.multiscale_meshgraphnet import MultiscaleMeshGraphNet
 from hydragnn.models.rigno import RIGNO
@@ -585,6 +588,106 @@ def _build_fluxgnn(p):
         num_bface_tags=p.fluxgnn.num_bface_tags,
         source=p.fluxgnn.source,
         freeze_conv=p.freeze_conv,
+    )
+
+
+_NEURALOP = "neuraloperator/neuraloperator@a6648eee"
+
+
+def _reject_unsupported(name, p):
+    if p.global_attn_engine or p.pe_dim:
+        raise ValueError(f"{name} does not support global attention or pe_dim")
+    if p.use_graph_attr_conditioning:
+        raise ValueError(f"{name} does not support graph_attr conditioning")
+
+
+def _operator_args(p):
+    return (p.input_dim, p.hidden_dim, p.output_dim, p.output_type, p.num_conv_layers)
+
+
+def _operator_kwargs(p):
+    return dict(
+        activation_function=p.activation_function,
+        loss_function_type=p.loss_function_type,
+        loss_weights=p.task_weights,
+        freeze_conv=p.freeze_conv,
+    )
+
+
+@register_model(
+    "FNO",
+    Capabilities(
+        output_levels=frozenset({"node"}),
+        requires=frozenset({"grid_shape"}),
+        reference=f"Li et al. 2021 (ICLR), arXiv:2010.08895, {_NEURALOP}",
+    ),
+)
+def _build_fno(p):
+    _reject_unsupported("FNO", p)
+    return FNO(
+        *_operator_args(p),
+        n_modes=p.fno.n_modes,
+        lifting_channel_ratio=p.fno.lifting_channel_ratio,
+        projection_channel_ratio=p.fno.projection_channel_ratio,
+        positional_embedding=p.fno.positional_embedding,
+        domain_padding=p.fno.domain_padding,
+        channel_mlp_expansion=p.fno.channel_mlp_expansion,
+        **_operator_kwargs(p),
+    )
+
+
+@register_model(
+    "GINO",
+    Capabilities(
+        output_levels=frozenset({"node", "query"}),
+        requires=frozenset({"pos"}),
+        reference=f"Li et al. 2023 (NeurIPS), arXiv:2309.00583, {_NEURALOP}",
+    ),
+)
+def _build_gino(p):
+    _reject_unsupported("GINO", p)
+    g = p.gino
+    return GINO(
+        *_operator_args(p),
+        coord_dim=g.coord_dim,
+        n_modes=g.n_modes,
+        latent_resolution=g.latent_resolution,
+        box_min=g.box_min,
+        box_max=g.box_max,
+        in_radius=g.in_radius,
+        out_radius=g.out_radius,
+        fno_in_channels=g.fno_in_channels,
+        embed_channels=g.embed_channels,
+        embed_max_positions=g.embed_max_positions,
+        in_channel_mlp_hidden_layers=g.in_channel_mlp_hidden_layers,
+        out_channel_mlp_hidden_layers=g.out_channel_mlp_hidden_layers,
+        lifting_channel_ratio=g.lifting_channel_ratio,
+        projection_channel_ratio=g.projection_channel_ratio,
+        channel_mlp_expansion=g.channel_mlp_expansion,
+        **_operator_kwargs(p),
+    )
+
+
+@register_model(
+    "GSNO",
+    Capabilities(
+        output_levels=frozenset({"node"}),
+        requires=frozenset({"gsno_basis"}),
+        reference="Graph Spectral Neural Operator (paper sources, sec. Methods)",
+    ),
+)
+def _build_gsno(p):
+    _reject_unsupported("GSNO", p)
+    g = p.gsno
+    return GSNO(
+        *_operator_args(p),
+        spatial_modes=g.spatial_modes,
+        temporal_modes=g.temporal_modes,
+        input_time_steps=g.input_time_steps,
+        output_time_steps=g.output_time_steps,
+        projection_channels=g.projection_channels,
+        tie_degenerate=g.tie_degenerate,
+        **_operator_kwargs(p),
     )
 
 

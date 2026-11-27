@@ -188,7 +188,61 @@
       ]
     },
     {"id": "WP05", "title": "Transolver, ++, -3 and GAOT", "dependencies": ["WP02", "WP11"], "status": "not_started"},
-    {"id": "WP06", "title": "FNO, GINO, GSNO", "dependencies": ["WP02"], "status": "not_started"},
+    {
+      "id": "WP06",
+      "title": "FNO, GINO, GSNO",
+      "dependencies": [
+        "WP02"
+      ],
+      "status": "in_review",
+      "pr": null,
+      "commit": null,
+      "design_doc": "docs/development/pde_wp06_design.md",
+      "source_files": [
+        "hydragnn/models/fno.py",
+        "hydragnn/models/gino.py",
+        "hydragnn/models/gsno.py",
+        "hydragnn/data/meshes/graph_spectral.py",
+        "hydragnn/model_settings.py",
+        "hydragnn/models/registry.py",
+        "hydragnn/models/create.py",
+        "examples/pde/poisson_manufactured.py",
+        "examples/pde/poisson_fno.json",
+        "examples/pde/poisson_gino.json",
+        "examples/pde/poisson_gsno.json",
+        "examples/pde/verify_wp06.py",
+        "examples/pde/verify_neuralop_upstream.py",
+        "LICENSES/NEURALOP-MIT.txt"
+      ],
+      "tests": [
+        "tests/test_fno.py",
+        "tests/test_gino.py",
+        "tests/test_gsno.py",
+        "tests/test_model_registry.py"
+      ],
+      "results": {
+        "poisson_cpu_1rank": {
+          "fno": {"test_rel_l2": 0.024, "heldout_rel_l2_n14": 0.025, "wall_s": 96, "peak_rss_gb": 3.1},
+          "gino": {"test_rel_l2": 0.050, "heldout_rel_l2_n14": 0.067, "wall_s": 84, "peak_rss_gb": 3.5},
+          "gsno": {"test_rel_l2": 0.044, "heldout_rel_l2_n14": 0.039, "wall_s": 45, "peak_rss_gb": 1.9}
+        },
+        "neuralop_upstream_parity": {
+          "upstream_commit": "a6648eeeb60fe0837f2d7d021517a945a159a0c8",
+          "fno_max_rel": {"fp64": 0.0, "fp32": 0.0},
+          "gino_max_rel": {"fp64": 1.1e-15, "fp32": 4.0e-7},
+          "settings": "upstream cfloat patched to complex128 for FP64 runs only"
+        },
+        "gino_3d_heldout_query_rel_l2": {"gino": 0.078, "fno_grid_reference": 0.029},
+        "verify_wp06_fp64_max_error": {"cpu": 3.0e-15, "tol": 1e-12},
+        "hardware": "CPU AMD EPYC 7763; GPU pending"
+      },
+      "limitations": [
+        "FNO: tensor-product grids only; dense weights; no mixed precision",
+        "GINO: dense cdist neighbour search, O(N*M) memory; one latent grid shared by the batch",
+        "GSNO: no reference code; edge-weight scale and temporal I/O layout are assumptions; offline CPU eigensolve",
+        "No spherical GSNO or SGNO"
+      ]
+    },
     {"id": "WP07", "title": "DeepONet and composite architecture", "dependencies": ["WP01", "WP02"], "status": "not_started"},
     {"id": "WP08", "title": "Physics losses, constraints and residuals", "dependencies": ["WP02"], "status": "not_started"},
     {"id": "WP09", "title": "Time integration and adaptivity", "dependencies": ["WP08"], "status": "not_started"},
