@@ -15,6 +15,7 @@ import pytest
 import shutil
 
 import hydragnn, tests
+from mpi4py import MPI
 from tests._training_workflow import train_and_checkpoint
 
 pytestmark = pytest.mark.mpi
@@ -23,7 +24,7 @@ pytestmark = pytest.mark.mpi
 # Loss function unit test called by pytest wrappers.
 # Note the intent of this test is to make sure all interfaces work - it does not assert anything
 def unittest_optimizers(optimizer_type, use_zero, ci_input, overwrite_data=False):
-    world_size, rank = hydragnn.distributed.get_comm_size_and_rank()
+    world_size, rank = hydragnn.distributed.init_comm_size_and_rank()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
@@ -91,6 +92,7 @@ def unittest_optimizers(optimizer_type, use_zero, ci_input, overwrite_data=False
                         * 0.5
                     )
                 tests.ensure_deterministic_graph_data(data_path, num_samples)
+    MPI.COMM_WORLD.Barrier()
 
     config["NeuralNetwork"]["Training"]["num_epoch"] = 2
     config["NeuralNetwork"]["Training"]["Optimizer"]["type"] = optimizer_type

@@ -38,7 +38,7 @@ def unittest_train_model(
     use_deepspeed=False,
     overwrite_config=None,
 ):
-    world_size, rank = hydragnn.distributed.get_comm_size_and_rank()
+    world_size, rank = hydragnn.distributed.init_comm_size_and_rank()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 

@@ -80,7 +80,7 @@ def unittest_train_model_graphattr(
     graph_attr_conditioning_mode="concat_node",
 ):
     """Replicates test_graphs flow while relying on graph_attr conditioning."""
-    world_size, rank = hydragnn.distributed.get_comm_size_and_rank()
+    world_size, rank = hydragnn.distributed.init_comm_size_and_rank()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
