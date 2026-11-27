@@ -19,6 +19,8 @@ from hydragnn.model_settings import (
     EquivariantAttentionSettings,
     FluxGNNSettings,
     MeshGraphNetSettings,
+    MultiscaleMGNSettings,
+    RIGNOSettings,
     UMASettings,
 )
 from hydragnn.domain_losses import create_domain_loss
@@ -115,6 +117,8 @@ def create_model_config(
         allscaip=AllScAIPSettings.from_mapping(config["Architecture"]),
         uma=UMASettings.from_mapping(config["Architecture"]),
         mgn=MeshGraphNetSettings.from_mapping(config["Architecture"]),
+        msmgn=MultiscaleMGNSettings.from_mapping(config["Architecture"]),
+        rigno=RIGNOSettings.from_mapping(config["Architecture"]),
         fluxgnn=FluxGNNSettings.from_mapping(config["Architecture"]),
         hetero_pooling_mode=config["Architecture"].get("hetero_pooling_mode", "sum"),
         node_target_type=config["Architecture"].get("node_target_type", None),
@@ -150,6 +154,8 @@ _SETTINGS_CLASSES = {
     "allscaip": AllScAIPSettings,
     "uma": UMASettings,
     "mgn": MeshGraphNetSettings,
+    "msmgn": MultiscaleMGNSettings,
+    "rigno": RIGNOSettings,
     "fluxgnn": FluxGNNSettings,
 }
 
@@ -229,6 +235,8 @@ def create_model(
     allscaip: AllScAIPSettings | None = None,
     uma: UMASettings | None = None,
     mgn: MeshGraphNetSettings | None = None,
+    msmgn: MultiscaleMGNSettings | None = None,
+    rigno: RIGNOSettings | None = None,
     fluxgnn: FluxGNNSettings | None = None,
     **flat_settings,
 ):

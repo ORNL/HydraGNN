@@ -120,6 +120,34 @@ class MeshGraphNetSettings(_PrefixedSettings):
 
 
 @dataclass(frozen=True)
+class MultiscaleMGNSettings(_PrefixedSettings):
+    """MultiscaleMeshGraphNet options on top of the ``mgn_`` ones.
+    ``schedule`` (e.g. ``"1H 11L 1H"``) defaults to one V-cycle with
+    ``num_conv_layers`` steps, counting the down and up blocks."""
+
+    prefix: ClassVar[str] = "msmgn_"
+
+    schedule: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class RIGNOSettings(_PrefixedSettings):
+    """RIGNO options; latent width and processor steps come from
+    ``hidden_dim`` and ``num_conv_layers``. The overlap factors must match
+    the ones passed to ``build_rigno_graph``."""
+
+    prefix: ClassVar[str] = "rigno_"
+
+    mlp_layers: int = 2
+    edge_masking: float = 0.5
+    overlap_p2r: float = 1.0
+    overlap_r2p: float = 2.0
+    concat_time: bool = False
+    time_conditioning: bool = False
+    spatial_dim: int = 2
+
+
+@dataclass(frozen=True)
 class FluxGNNSettings(_PrefixedSettings):
     """FluxGNN options; latent width and substeps per forward come from
     ``hidden_dim`` and ``num_conv_layers``. ``layout`` (filled from the

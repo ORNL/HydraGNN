@@ -10,7 +10,7 @@ measured values and environments are in the linked design documents.
 | WP01 | Registry, configuration, compatibility baseline | – | verified | #581 / `e1564c39` | `pde_wp01_wp02_design.md` |
 | WP02 | Mesh, fields, trajectory, hierarchy contracts | WP01 | verified | #581 / `e1564c39`, #583 | `pde_wp01_wp02_design.md` |
 | WP03 | MeshGraphNets and FluxGNN | WP02 | verified | #582 | `pde_wp03_design.md` |
-| WP04 | Multiscale MGN and RIGNO | WP02 | not started | | |
+| WP04 | Multiscale MGN and RIGNO | WP02 | in review | #584 | `pde_wp04_design.md` |
 | WP05 | Transolver, ++, -3 and GAOT | WP02, WP11 | not started | | |
 | WP06 | FNO, GINO, GSNO | WP02 | not started | | |
 | WP07 | DeepONet and composite architecture | WP01, WP02 | not started | | |
@@ -54,3 +54,26 @@ measured values and environments are in the linked design documents.
   Frontier MI250X with 1 and 8 GCDs (DDP); property checks pass on GPU. Details in `pde_wp03_design.md` §4.
 * Limitations: no positivity or CFL enforcement; 2D triangles only; boundary-condition values are not
   inputs; MGN not compared with the TF1 DeepMind reference (blocked: no TF1 environment).
+
+## WP04
+
+* Sources: `models/multiscale_meshgraphnet.py`, node transfer in `data/meshes/hierarchy.py`,
+  `data/meshes/region_graph.py`, `models/rigno.py`, `MultiscaleMGNSettings`/`RIGNOSettings` in
+  `model_settings.py`, `examples/pde/poisson_manufactured.py`, `poisson_{msmgn,rigno}.json`,
+  `darcy_{mgn,msmgn,rigno}.json`, `examples/pde/verify_wp04.py`, `examples/pde/verify_rigno_upstream.py`.
+* Tests: `test_multiscale_meshgraphnet.py`, `test_rigno.py`, `test_poisson_mgn_train.py`,
+  `test_model_registry.py`.
+* Results: FP64 property checks (constant preservation, hierarchy indices, masking reproducibility,
+  input/query resolutions, batching) are at round-off on CPU and on Frontier MI250X.
+  RIGNO matches the JAX upstream (commit `3e4b307`) to 2.7e-15: identical graphs, same forward pass.
+  Held-out (n = 14) relative L2 on CPU:
+  * Poisson: MGN 0.188, MS-MGN 0.198, RIGNO 0.262.
+  * Darcy: MGN 0.248, MS-MGN 0.215, RIGNO 0.214.
+
+  All six presets train on MI250X at 1 and 8 GCDs. On Darcy at 8 GCDs the held-out relative L2 is
+  MGN 0.285, MS-MGN 0.222 and RIGNO 0.213.
+
+  At n = 128 on one MI250X GCD, forward + backward takes 36 ms for MGN, 28 ms for MS-MGN and 21 ms for RIGNO.
+  RIGNO reaches 0.215 on a held-out L-shaped domain. Details in `pde_wp04_design.md` §4.
+* Limitations: MS-MGN supports two nested triangle levels only, and its hierarchy point location is O(N·C).
+  RIGNO is 2D non-periodic only. Upstream parity requires LayerNorm epsilon 1e-5 and FP64 aggregation.

@@ -19,7 +19,16 @@ multiplied by the resolution n so it is O(1) at every resolution). f and q
 use the ``scale_only`` normalization fitted on the training split. After
 training, the relative L2 error of each output, in physical units, is reported
 on held-out samples at a finer, unseen resolution. ``batch_size`` in the config
-is the global batch, split evenly across MPI ranks.
+is the global batch, split evenly across MPI ranks. With
+``poisson_msmgn.json`` (MultiscaleMeshGraphNet) every sample is a two-level
+mesh hierarchy whose coarse level has half the resolution. With
+``poisson_rigno.json`` (RIGNO) every sample carries its regional graphs, with
+regional nodes drawn from a seeded generator.
+
+Configs whose inputs include ``kappa`` (``darcy_*.json``) switch to the Darcy
+problem ``-∇·(κ∇u) = f`` with the same ``u`` and a log-periodic coefficient
+``κ = exp(β cos(pπx) cos(qπy))``, ``β ∈ [-1, 1]`` (contrast up to e²), so
+``f = -κΔu - ∇κ·∇u``; κ is an extra node input and ``q`` uses ``-κ∇u·n A``.
 """
 
 import argparse
@@ -33,38 +42,84 @@ import torch.distributed as dist
 from torch_geometric.loader import DataLoader
 
 import hydragnn
-from hydragnn.data.meshes import unit_square_mesh
+from hydragnn.data.meshes import build_hierarchy, build_rigno_graph, unit_square_mesh
 from hydragnn.preprocess.load_data import SchemaPreparedDataset
 
 TRAIN_RESOLUTIONS = (6, 8, 10)
 HELDOUT_RESOLUTION = 14
 
 
-def manufactured_sample(n, generator, max_mode=2):
-    k, l = torch.randint(1, max_mode + 1, (2,), generator=generator).tolist()
-    amplitude = float(torch.empty(1).uniform_(0.5, 1.5, generator=generator))
-    mesh = unit_square_mesh(n, n, dtype=torch.float32)
-    x, y = mesh.pos[:, 0], mesh.pos[:, 1]
-    u = amplitude * torch.sin(k * math.pi * x) * torch.sin(l * math.pi * y)
-    f = (k * k + l * l) * math.pi**2 * u
-    mesh.f = f.unsqueeze(1)
-    mesh.boundary = mesh.boundary_node_mask.float().unsqueeze(1)
-    mesh.u = u.unsqueeze(1)
+GRAPH_MODES = {"MultiscaleMeshGraphNet": "hierarchy", "RIGNO": "rigno"}
 
-    mid = mesh.pos[mesh.face_nodes].mean(dim=0)
-    sx, sy = torch.sin(k * math.pi * mid[:, 0]), torch.sin(l * math.pi * mid[:, 1])
-    cx, cy = torch.cos(k * math.pi * mid[:, 0]), torch.cos(l * math.pi * mid[:, 1])
-    grad = amplitude * math.pi * torch.stack([k * cx * sy, l * sx * cy], dim=1)
-    q = -(grad * mesh.face_normal).sum(dim=1, keepdim=True) * mesh.face_area
-    # A_f ~ 1/n, so q * n has the same magnitude across resolutions.
-    mesh.q = q * n
+
+def _mesh(n, graph):
+    if graph != "hierarchy":
+        return unit_square_mesh(n, n, dtype=torch.float32)
+    # Build in float64 so the nested-volume check is exact, then cast.
+    mesh = build_hierarchy(
+        unit_square_mesh(n, n), unit_square_mesh(n // 2, n // 2), node_transfer=True
+    )
+    for key, value in mesh.items():
+        if value.is_floating_point():
+            mesh[key] = value.float()
     return mesh
 
 
-def make_dataset(num_samples, resolutions, seed):
+def _coefficient(pos, beta, p, q):
+    """κ = exp(β cos(pπx) cos(qπy)) and its gradient at ``pos``."""
+    cx, cy = torch.cos(p * math.pi * pos[:, 0]), torch.cos(q * math.pi * pos[:, 1])
+    sx, sy = torch.sin(p * math.pi * pos[:, 0]), torch.sin(q * math.pi * pos[:, 1])
+    kappa = torch.exp(beta * cx * cy)
+    grad = -beta * math.pi * torch.stack([p * sx * cy, q * cx * sy], dim=1)
+    return kappa, kappa.unsqueeze(1) * grad
+
+
+def _solution(pos, amplitude, k, l):
+    """u = a sin(kπx) sin(lπy) and its gradient at ``pos``."""
+    sx, sy = torch.sin(k * math.pi * pos[:, 0]), torch.sin(l * math.pi * pos[:, 1])
+    cx, cy = torch.cos(k * math.pi * pos[:, 0]), torch.cos(l * math.pi * pos[:, 1])
+    u = amplitude * sx * sy
+    grad = amplitude * math.pi * torch.stack([k * cx * sy, l * sx * cy], dim=1)
+    return u, grad
+
+
+def manufactured_sample(n, generator, max_mode=2, graph=None, darcy=False):
+    k, l = torch.randint(1, max_mode + 1, (2,), generator=generator).tolist()
+    amplitude = float(torch.empty(1).uniform_(0.5, 1.5, generator=generator))
+    if darcy:
+        kp, kq = torch.randint(1, 3, (2,), generator=generator).tolist()
+        beta = float(torch.empty(1).uniform_(-1.0, 1.0, generator=generator))
+    else:
+        kp, kq, beta = 1, 1, 0.0  # κ = 1
+    mesh = _mesh(n, graph)
+    u, grad_u = _solution(mesh.pos, amplitude, k, l)
+    kappa, grad_kappa = _coefficient(mesh.pos, beta, kp, kq)
+    # -∇·(κ∇u) = -κΔu - ∇κ·∇u, with -Δu = (k² + l²)π² u.
+    f = kappa * (k * k + l * l) * math.pi**2 * u - (grad_kappa * grad_u).sum(dim=1)
+    mesh.f = f.unsqueeze(1)
+    mesh.boundary = mesh.boundary_node_mask.float().unsqueeze(1)
+    mesh.u = u.unsqueeze(1)
+    if darcy:
+        mesh.kappa = kappa.unsqueeze(1)
+
+    mid = mesh.pos[mesh.face_nodes].mean(dim=0)
+    _, grad = _solution(mid, amplitude, k, l)
+    kappa_mid, _ = _coefficient(mid, beta, kp, kq)
+    q = -kappa_mid.unsqueeze(1) * (grad * mesh.face_normal).sum(dim=1, keepdim=True)
+    q = q * mesh.face_area
+    # A_f ~ 1/n, so q * n has the same magnitude across resolutions.
+    mesh.q = q * n
+    if graph == "rigno":
+        mesh = build_rigno_graph(mesh, generator=generator)
+    return mesh
+
+
+def make_dataset(num_samples, resolutions, seed, graph=None, darcy=False):
     g = torch.Generator().manual_seed(seed)
     return [
-        manufactured_sample(resolutions[i % len(resolutions)], g)
+        manufactured_sample(
+            resolutions[i % len(resolutions)], g, graph=graph, darcy=darcy
+        )
         for i in range(num_samples)
     ]
 
@@ -100,7 +155,11 @@ def main(num_samples=240, num_epoch=None, config_name="poisson_mgn.json"):
     log_name = os.path.splitext(config_name)[0]
     hydragnn.utils.print.print_utils.setup_log(log_name)
 
-    dataset = make_dataset(num_samples, TRAIN_RESOLUTIONS, seed=1)
+    graph = GRAPH_MODES.get(config["NeuralNetwork"]["Architecture"]["mpnn_type"])
+    darcy = any(v["name"] == "kappa" for v in config["Variables"]["inputs"])
+    dataset = make_dataset(
+        num_samples, TRAIN_RESOLUTIONS, seed=1, graph=graph, darcy=darcy
+    )
     # split_dataset shuffles with Python's random; every rank needs the same split.
     random.seed(0)
     train, val, test = hydragnn.preprocess.split_dataset(
@@ -163,7 +222,9 @@ def main(num_samples=240, num_epoch=None, config_name="poisson_mgn.json"):
     test_set = test_loader.dataset
     normalizer = test_set.normalizer
     heldout = SchemaPreparedDataset(
-        make_dataset(16, (HELDOUT_RESOLUTION,), seed=2), schema, normalizer
+        make_dataset(16, (HELDOUT_RESOLUTION,), seed=2, graph=graph, darcy=darcy),
+        schema,
+        normalizer,
     )
     device = next(model.parameters()).device
     names = [spec.name for spec in schema.outputs]
