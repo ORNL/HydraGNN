@@ -16,6 +16,8 @@ from typing import Dict, List, Union
 
 from hydragnn.model_settings import (
     AllScAIPSettings,
+    CompositeSettings,
+    DeepONetSettings,
     EquivariantAttentionSettings,
     FluxGNNSettings,
     FNOSettings,
@@ -126,6 +128,8 @@ def create_model_config(
         fno=FNOSettings.from_mapping(config["Architecture"]),
         gino=GINOSettings.from_mapping(config["Architecture"]),
         gsno=GSNOSettings.from_mapping(config["Architecture"]),
+        deeponet=DeepONetSettings.from_mapping(config["Architecture"]),
+        composite=CompositeSettings.from_mapping(config["Architecture"]),
         hetero_pooling_mode=config["Architecture"].get("hetero_pooling_mode", "sum"),
         node_target_type=config["Architecture"].get("node_target_type", None),
         share_relation_weights=config["Architecture"].get(
@@ -166,6 +170,8 @@ _SETTINGS_CLASSES = {
     "fno": FNOSettings,
     "gino": GINOSettings,
     "gsno": GSNOSettings,
+    "deeponet": DeepONetSettings,
+    "composite": CompositeSettings,
 }
 
 
@@ -250,6 +256,8 @@ def create_model(
     fno: FNOSettings | None = None,
     gino: GINOSettings | None = None,
     gsno: GSNOSettings | None = None,
+    deeponet: DeepONetSettings | None = None,
+    composite: CompositeSettings | None = None,
     **flat_settings,
 ):
     params = dict(locals())

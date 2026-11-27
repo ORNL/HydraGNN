@@ -127,7 +127,7 @@ def _graph_ids(data):
     return batch
 
 
-def _query_graph_ids(data):
+def _query_graph_ids(data, owner="GINO"):
     graph = getattr(data, "query_graph", None)
     if graph is not None:
         return graph
@@ -139,7 +139,7 @@ def _query_graph_ids(data):
         return torch.zeros(
             data.query_pos.shape[0], dtype=torch.long, device=data.pos.device
         )
-    raise ValueError("GINO query heads need query_cell or query_graph on batches")
+    raise ValueError(f"{owner} query heads need query_cell or query_graph on batches")
 
 
 class GINO(OperatorBase):

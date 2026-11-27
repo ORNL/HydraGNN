@@ -1,6 +1,6 @@
 # PDE extension: WP06 design (FNO, GINO, GSNO)
 
-Status: implemented, in review (PR #585). Base: `main` at `c32cae8c` (WP04, PR #584).
+Status: verified, merged (PR #585, `6ef13162`). Base: `main` at `c32cae8c` (WP04, PR #584).
 
 | Item | Spec acceptance criterion | Where |
 |---|---|---|

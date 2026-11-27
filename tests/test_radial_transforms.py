@@ -20,6 +20,7 @@ import shutil
 
 import hydragnn, tests
 from hydragnn.config.config_utils import merge_config
+from mpi4py import MPI
 from tests._prediction_workflow import load_checkpoint_and_test
 from tests._training_workflow import train_and_checkpoint
 
@@ -38,7 +39,7 @@ def unittest_train_model(
     use_deepspeed=False,
     overwrite_config=None,
 ):
-    world_size, rank = hydragnn.distributed.get_comm_size_and_rank()
+    world_size, rank = hydragnn.distributed.init_comm_size_and_rank()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
@@ -135,6 +136,7 @@ def unittest_train_model(
                         * 0.5
                     )
                 tests.ensure_deterministic_graph_data(data_path, num_samples)
+    MPI.COMM_WORLD.Barrier()
 
     # Run Training
     train_loader, val_loader, test_loader = (

@@ -221,3 +221,36 @@ class GSNOSettings(_PrefixedSettings):
     output_time_steps: int = 1
     projection_channels: int = 128
     tie_degenerate: bool = False
+
+
+@dataclass(frozen=True)
+class DeepONetSettings(_PrefixedSettings):
+    """DeepONet options (DeepXDE semantics); hidden widths default to
+    ``num_conv_layers`` layers of ``hidden_dim``. ``sensor_channels``
+    defaults to the input width."""
+
+    prefix: ClassVar[str] = "deeponet_"
+
+    num_sensors: Optional[int] = None
+    sensor_channels: Optional[int] = None
+    branch_layers: Optional[List[int]] = None
+    trunk_layers: Optional[List[int]] = None
+    basis_dim: int = 64
+    multi_output_strategy: Optional[str] = None
+    stacked: bool = False
+    coord_dim: int = 2
+
+
+@dataclass(frozen=True)
+class CompositeSettings(_PrefixedSettings):
+    """CompositeNeuralOperator pipeline (see hydragnn.models.composite);
+    the latent width and default depth come from ``hidden_dim`` and
+    ``num_conv_layers``."""
+
+    prefix: ClassVar[str] = "composite_"
+
+    encoder: Optional[dict] = None
+    processors: Optional[list] = None
+    decoders: Optional[dict] = None
+    mlp_layers: int = 2
+    spatial_dim: int = 2

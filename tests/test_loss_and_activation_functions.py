@@ -15,6 +15,7 @@ import pytest
 import shutil
 
 import hydragnn, tests
+from mpi4py import MPI
 from tests._training_workflow import train_and_checkpoint
 
 pytestmark = pytest.mark.mpi
@@ -25,7 +26,7 @@ pytestmark = pytest.mark.mpi
 def unittest_loss_and_activation_functions(
     activation_function_type, loss_function_type, ci_input, overwrite_data=False
 ):
-    world_size, rank = hydragnn.distributed.get_comm_size_and_rank()
+    world_size, rank = hydragnn.distributed.init_comm_size_and_rank()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
@@ -97,6 +98,7 @@ def unittest_loss_and_activation_functions(
                         * 0.5
                     )
                 tests.ensure_deterministic_graph_data(data_path, num_samples)
+    MPI.COMM_WORLD.Barrier()
 
     config["NeuralNetwork"]["Training"]["loss_function_type"] = loss_function_type
     config["NeuralNetwork"]["Training"]["num_epoch"] = 2
